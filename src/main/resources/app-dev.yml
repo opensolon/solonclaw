@@ -1,0 +1,38 @@
+solon:
+  port: 39876
+  env: dev
+  logging:
+    level:
+      root: INFO
+      com.jimuqu.solonclaw: DEBUG
+
+  # ==================== Solon AI 配置 ====================
+  ai:
+    chat:
+      openai:
+        apiUrl: "https://api.jimuqu.com/v1/chat/completions"
+        apiKey: "sk-nioMU8aKO7nD9khcOt3hQfQAyBTkRh011AII1kk3gRtQnKcf"
+        provider: "openai"
+        model: "glm-4.7"
+        temperature: 0.7
+        maxTokens: 4096
+
+nullclaw:
+  workspace: "./workspace-dev"
+
+  directories:
+    mcpConfig: "mcp.json"
+    skillsDir: "skills"
+    jobsFile: "jobs.json"
+    jobHistoryFile: "job-history.json"
+    database: "memory.db"
+    shellWorkspace: "workspace"
+    logsDir: "logs"
+
+  tools:
+    shell:
+      enabled: true
+      timeoutSeconds: 120
+
+  memory:
+    enabled: true
