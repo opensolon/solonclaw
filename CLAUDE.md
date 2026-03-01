@@ -65,6 +65,50 @@ mvn test surefire-report:report
 
 测试失败时，必须修复后才能标记任务为完成。
 
+### 🤝 团队模式规范（重要）
+
+**当使用 Agent 工具创建团队时，必须遵循以下规范：**
+
+#### Team Lead 的核心职责
+
+**作为 team lead，你的职责是协调和分配任务，而不是自己执行。请始终将工作分配给 teammates。**
+
+- ❌ **禁止行为**：team lead 直接使用工具（Read、Edit、Write、Bash 等）完成任务
+- ✅ **正确行为**：通过 `SendMessage` 将任务分配给合适的 teammates
+- ✅ **正确行为**：使用 `TaskCreate` 和 `TaskUpdate` 管理任务列表
+- ✅ **正确行为**：监控 teammates 的工作进度，协调依赖关系
+- ✅ **正确行为**：汇总 teammates 的结果，向用户汇报
+
+#### 团队协作流程
+
+1. **创建团队**：使用 `TeamCreate` 创建团队和任务列表
+2. **拆分任务**：分析用户需求，拆分为独立的任务，使用 `TaskCreate` 创建
+3. **分配任务**：通过 `TaskUpdate` 的 `owner` 参数将任务分配给 teammates
+4. **协调工作**：使用 `SendMessage` 通知 teammates 工作内容
+5. **跟踪进度**：定期使用 `TaskList` 检查任务状态
+6. **汇总结果**：收集所有 teammates 的完成结果，统一回复用户
+
+#### Teammates 工作方式
+
+- 自动检查 `TaskList`，认领未分配的任务（`status: pending`, `owner: 空`）
+- 完成任务后使用 `TaskUpdate` 标记为 `completed`
+- 遇到阻塞时，使用 `TaskUpdate` 设置 `addBlockedBy`
+- 向 team lead 汇报进展或寻求帮助
+
+#### 示例
+
+```javascript
+// ❌ 错误示例：team lead 直接干活
+TaskCreate({ subject: "实现新功能" })
+Read("some-file.js")  // team lead 不应该直接读取文件
+Edit(...)             // team lead 不应该直接编辑
+
+// ✅ 正确示例：team lead 分配任务
+TaskCreate({ subject: "实现新功能", description: "..." })
+TaskUpdate({ taskId: "1", owner: "researcher" })  // 分配给 researcher
+SendMessage({ type: "message", recipient: "researcher", content: "请调研相关技术方案" })
+```
+
 ## 核心架构
 
 ### 分层结构

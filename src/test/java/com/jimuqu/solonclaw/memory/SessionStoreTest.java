@@ -136,11 +136,13 @@ public class SessionStoreTest {
     @Test
     @Order(9)
     void testRecordHashCode() {
+        // 使用固定时间确保 hashCode 相同
+        java.time.LocalDateTime fixedTime = java.time.LocalDateTime.now();
         SessionStore.Message message1 = new SessionStore.Message(
-            1L, "test", "user", "content", java.time.LocalDateTime.now()
+            1L, "test", "user", "content", fixedTime
         );
         SessionStore.Message message2 = new SessionStore.Message(
-            1L, "test", "user", "content", java.time.LocalDateTime.now()
+            1L, "test", "user", "content", fixedTime
         );
 
         assertEquals(message1.hashCode(), message2.hashCode());

@@ -1,5 +1,8 @@
 package com.jimuqu.solonclaw.mcp;
 
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
@@ -14,412 +17,559 @@ import java.util.concurrent.ConcurrentHashMap;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * McpManager 测试
- * 使用纯单元测试，测试 MCP 服务器管理、工具发现等功能
+ * McpManager 完整测试
+ * <p>
+ * 测试 MCP 服务器管理的各个功能模块
  *
  * @author SolonClaw
  */
+@DisplayName("MCP 管理器测试")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class McpManagerTest {
 
-    private final Map<String, McpManager.McpServerInfo> servers = new ConcurrentHashMap<>();
-    private final Map<String, McpManager.McpToolInfo> tools = new ConcurrentHashMap<>();
+    // 模拟存储
+    private Map<String, McpManager.McpServerInfo> servers;
+    private Map<String, McpManager.McpToolInfo> tools;
 
-    @Test
-    @Order(1)
-    void testMcpManager_CanBeInstantiated() {
-        assertNotNull(true, "McpManager 存在");
+    @BeforeEach
+    void setUp() {
+        servers = new ConcurrentHashMap<>();
+        tools = new ConcurrentHashMap<>();
     }
 
-    @Test
-    @Order(2)
-    void testAddServer() {
-        String name = "test-server";
-        String command = "node";
-        List<String> args = List.of("server.js");
-        Map<String, String> env = Map.of("NODE_ENV", "production");
+    // ==================== 服务器配置测试 ====================
 
-        McpManager.McpServerInfo serverInfo = new McpManager.McpServerInfo(name, command, args, env);
-        servers.put(name, serverInfo);
+    @Nested
+    @DisplayName("服务器配置测试")
+    class ServerConfigTests {
 
-        assertEquals(1, servers.size());
-        assertTrue(servers.containsKey(name));
-        assertEquals(command, servers.get(name).command());
+        @Test
+        @Order(1)
+        @DisplayName("创建服务器配置 - 基本参数")
+        void testCreateServerInfo_Basic() {
+            String name = "test-server";
+            String command = "node";
+            List<String> args = List.of("server.js");
+            Map<String, String> env = Map.of("NODE_ENV", "production");
+
+            McpManager.McpServerInfo serverInfo = new McpManager.McpServerInfo(
+                    name, command, args, env, false
+            );
+
+            assertEquals(name, serverInfo.name());
+            assertEquals(command, serverInfo.command());
+            assertEquals(args, serverInfo.args());
+            assertEquals(env, serverInfo.env());
+            assertFalse(serverInfo.disabled());
+        }
+
+        @Test
+        @Order(2)
+        @DisplayName("创建服务器配置 - 禁用状态")
+        void testCreateServerInfo_Disabled() {
+            McpManager.McpServerInfo serverInfo = new McpManager.McpServerInfo(
+                    "disabled-server", "python", null, null, true
+            );
+
+            assertTrue(serverInfo.disabled());
+        }
+
+        @Test
+        @Order(3)
+        @DisplayName("创建服务器配置 - 空参数")
+        void testCreateServerInfo_NullArgs() {
+            McpManager.McpServerInfo serverInfo = new McpManager.McpServerInfo(
+                    "minimal-server", "echo", null, null, false
+            );
+
+            assertEquals("minimal-server", serverInfo.name());
+            assertEquals("echo", serverInfo.command());
+            assertNull(serverInfo.args());
+            assertNull(serverInfo.env());
+        }
+
+        @Test
+        @Order(4)
+        @DisplayName("添加服务器到列表")
+        void testAddServer() {
+            McpManager.McpServerInfo serverInfo = createTestServer("server1", "node");
+            servers.put("server1", serverInfo);
+
+            assertEquals(1, servers.size());
+            assertTrue(servers.containsKey("server1"));
+        }
+
+        @Test
+        @Order(5)
+        @DisplayName("添加重复服务器名称")
+        void testAddDuplicateServer() {
+            McpManager.McpServerInfo server1 = createTestServer("dup-server", "node");
+            servers.put("dup-server", server1);
+
+            // 模拟检查重复
+            assertTrue(servers.containsKey("dup-server"));
+        }
+
+        @Test
+        @Order(6)
+        @DisplayName("删除服务器")
+        void testRemoveServer() {
+            servers.put("to-remove", createTestServer("to-remove", "node"));
+            assertEquals(1, servers.size());
+
+            servers.remove("to-remove");
+            assertEquals(0, servers.size());
+            assertFalse(servers.containsKey("to-remove"));
+        }
+
+        @Test
+        @Order(7)
+        @DisplayName("更新服务器配置")
+        void testUpdateServer() {
+            String name = "update-test";
+            servers.put(name, createTestServer(name, "node"));
+
+            // 更新配置
+            McpManager.McpServerInfo updated = new McpManager.McpServerInfo(
+                    name, "python", List.of("new.py"), null, true
+            );
+            servers.put(name, updated);
+
+            McpManager.McpServerInfo retrieved = servers.get(name);
+            assertEquals("python", retrieved.command());
+            assertEquals(1, retrieved.args().size());
+            assertTrue(retrieved.disabled());
+        }
+
+        @Test
+        @Order(8)
+        @DisplayName("获取服务器列表")
+        void testGetServersList() {
+            servers.put("s1", createTestServer("s1", "node"));
+            servers.put("s2", createTestServer("s2", "python"));
+            servers.put("s3", createTestServer("s3", "npx"));
+
+            List<McpManager.McpServerInfo> serverList = new ArrayList<>(servers.values());
+            assertEquals(3, serverList.size());
+        }
+
+        @Test
+        @Order(9)
+        @DisplayName("获取不存在的服务器")
+        void testGetNonExistentServer() {
+            assertNull(servers.get("non-existent"));
+        }
     }
 
-    @Test
-    @Order(3)
-    void testAddServer_Duplicate() {
-        String name = "duplicate-server";
-        String command = "python";
+    // ==================== 工具配置测试 ====================
 
-        // 添加第一个服务器
-        McpManager.McpServerInfo serverInfo1 = new McpManager.McpServerInfo(name, command, null, null);
-        servers.put(name, serverInfo1);
+    @Nested
+    @DisplayName("工具配置测试")
+    class ToolConfigTests {
 
-        // 检查是否已存在
-        boolean alreadyExists = servers.containsKey(name);
-        assertTrue(alreadyExists, "服务器已存在");
+        @Test
+        @Order(10)
+        @DisplayName("创建工具信息")
+        void testCreateToolInfo() {
+            Map<String, McpManager.McpParameterInfo> params = new HashMap<>();
+            params.put("path", new McpManager.McpParameterInfo("string", "文件路径", true));
+
+            McpManager.McpToolInfo toolInfo = new McpManager.McpToolInfo(
+                    "read_file",
+                    "filesystem.read_file",
+                    "filesystem",
+                    "读取文件内容",
+                    params
+            );
+
+            assertEquals("read_file", toolInfo.name());
+            assertEquals("filesystem.read_file", toolInfo.fullName());
+            assertEquals("filesystem", toolInfo.serverName());
+            assertEquals("读取文件内容", toolInfo.description());
+            assertEquals(1, toolInfo.parameters().size());
+        }
+
+        @Test
+        @Order(11)
+        @DisplayName("添加工具到列表")
+        void testAddTool() {
+            McpManager.McpToolInfo tool = createTestTool("tool1", "server1");
+            tools.put(tool.fullName(), tool);
+
+            assertEquals(1, tools.size());
+            assertTrue(tools.containsKey("server1.tool1"));
+        }
+
+        @Test
+        @Order(12)
+        @DisplayName("按服务器获取工具")
+        void testGetToolsByServer() {
+            tools.put("server1.tool1", createTestTool("tool1", "server1"));
+            tools.put("server1.tool2", createTestTool("tool2", "server1"));
+            tools.put("server2.tool3", createTestTool("tool3", "server2"));
+
+            List<McpManager.McpToolInfo> server1Tools = tools.values().stream()
+                    .filter(t -> t.serverName().equals("server1"))
+                    .toList();
+
+            assertEquals(2, server1Tools.size());
+        }
+
+        @Test
+        @Order(13)
+        @DisplayName("删除服务器时清理工具")
+        void testRemoveToolsOnServerRemove() {
+            String serverName = "server-to-remove";
+
+            tools.put(serverName + ".tool1", createTestTool("tool1", serverName));
+            tools.put(serverName + ".tool2", createTestTool("tool2", serverName));
+            tools.put("other.tool3", createTestTool("tool3", "other"));
+
+            assertEquals(3, tools.size());
+
+            // 模拟删除服务器时清理工具
+            tools.entrySet().removeIf(entry -> entry.getValue().serverName().equals(serverName));
+
+            assertEquals(1, tools.size());
+            assertFalse(tools.containsKey(serverName + ".tool1"));
+            assertTrue(tools.containsKey("other.tool3"));
+        }
+
+        @Test
+        @Order(14)
+        @DisplayName("工具参数信息")
+        void testToolParameterInfo() {
+            McpManager.McpParameterInfo param = new McpManager.McpParameterInfo(
+                    "string", "文件路径参数", true
+            );
+
+            assertEquals("string", param.type());
+            assertEquals("文件路径参数", param.description());
+            assertTrue(param.required());
+        }
+
+        @Test
+        @Order(15)
+        @DisplayName("可选参数")
+        void testOptionalParameter() {
+            McpManager.McpParameterInfo param = new McpManager.McpParameterInfo(
+                    "number", "可选数量", false
+            );
+
+            assertFalse(param.required());
+        }
     }
 
-    @Test
-    @Order(4)
-    void testRemoveServer() {
-        String name = "server-to-remove";
+    // ==================== 服务器状态测试 ====================
 
-        McpManager.McpServerInfo serverInfo = new McpManager.McpServerInfo(name, "node", null, null);
-        servers.put(name, serverInfo);
+    @Nested
+    @DisplayName("服务器状态测试")
+    class ServerStatusTests {
 
-        assertEquals(1, servers.size());
+        @Test
+        @Order(20)
+        @DisplayName("状态枚举值")
+        void testStatusEnum() {
+            assertEquals("stopped", McpServerStatus.STOPPED.getCode());
+            assertEquals("starting", McpServerStatus.STARTING.getCode());
+            assertEquals("initialized", McpServerStatus.INITIALIZED.getCode());
+            assertEquals("running", McpServerStatus.RUNNING.getCode());
+            assertEquals("error", McpServerStatus.ERROR.getCode());
+        }
 
-        // 删除服务器
-        servers.remove(name);
-        assertEquals(0, servers.size());
-        assertFalse(servers.containsKey(name));
+        @Test
+        @Order(21)
+        @DisplayName("状态描述")
+        void testStatusDescription() {
+            assertEquals("已停止", McpServerStatus.STOPPED.getDescription());
+            assertEquals("启动中", McpServerStatus.STARTING.getDescription());
+            assertEquals("已初始化", McpServerStatus.INITIALIZED.getDescription());
+            assertEquals("运行中", McpServerStatus.RUNNING.getDescription());
+            assertEquals("错误", McpServerStatus.ERROR.getDescription());
+        }
     }
 
-    @Test
-    @Order(5)
-    void testGetServer() {
-        String name = "specific-server";
-        String command = "python";
-        List<String> args = List.of("server.py");
+    // ==================== MCP 协议测试 ====================
 
-        McpManager.McpServerInfo serverInfo = new McpManager.McpServerInfo(name, command, args, null);
-        servers.put(name, serverInfo);
+    @Nested
+    @DisplayName("MCP 协议测试")
+    class McpProtocolTests {
 
-        McpManager.McpServerInfo retrieved = servers.get(name);
-        assertNotNull(retrieved);
-        assertEquals(name, retrieved.name());
-        assertEquals(command, retrieved.command());
-        assertEquals(args, retrieved.args());
+        @Test
+        @Order(30)
+        @DisplayName("初始化请求格式")
+        void testInitializeRequest() {
+            long requestId = 1;
+            String expectedRequest = String.format(
+                    "{\"jsonrpc\":\"2.0\",\"id\":%d,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"SolonClaw\",\"version\":\"1.0.0\"}}}\n",
+                    requestId
+            );
+
+            assertTrue(expectedRequest.contains("\"method\":\"initialize\""));
+            assertTrue(expectedRequest.contains("\"jsonrpc\":\"2.0\""));
+            assertTrue(expectedRequest.contains("SolonClaw"));
+        }
+
+        @Test
+        @Order(31)
+        @DisplayName("工具列表请求格式")
+        void testToolsListRequest() {
+            long requestId = 2;
+            String expectedRequest = String.format(
+                    "{\"jsonrpc\":\"2.0\",\"id\":%d,\"method\":\"tools/list\",\"params\":{}}\n",
+                    requestId
+            );
+
+            assertTrue(expectedRequest.contains("\"method\":\"tools/list\""));
+            assertTrue(expectedRequest.contains("\"jsonrpc\":\"2.0\""));
+        }
+
+        @Test
+        @Order(32)
+        @DisplayName("工具调用请求格式")
+        void testToolCallRequest() {
+            long requestId = 3;
+            String toolName = "read_file";
+            String args = "{\"path\":\"/test/file.txt\"}";
+
+            String expectedRequest = String.format(
+                    "{\"jsonrpc\":\"2.0\",\"id\":%d,\"method\":\"tools/call\",\"params\":{\"name\":\"%s\",\"arguments\":%s}}\n",
+                    requestId, toolName, args
+            );
+
+            assertTrue(expectedRequest.contains("\"method\":\"tools/call\""));
+            assertTrue(expectedRequest.contains("\"name\":\"read_file\""));
+            assertTrue(expectedRequest.contains("\"path\":\"/test/file.txt\""));
+        }
+
+        @Test
+        @Order(33)
+        @DisplayName("解析工具列表响应")
+        void testParseToolsListResponse() {
+            String response = """
+                {"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"read_file","description":"读取文件"},{"name":"write_file","description":"写入文件"}]}}
+                """;
+
+            assertTrue(response.contains("\"tools\":["));
+            assertTrue(response.contains("\"name\":\"read_file\""));
+            assertTrue(response.contains("\"name\":\"write_file\""));
+        }
+
+        @Test
+        @Order(34)
+        @DisplayName("解析错误响应")
+        void testParseErrorResponse() {
+            String response = """
+                {"jsonrpc":"2.0","id":1,"error":{"code":-32600,"message":"Invalid Request"}}
+                """;
+
+            assertTrue(response.contains("\"error\""));
+            assertTrue(response.contains("\"Invalid Request\""));
+        }
     }
 
-    @Test
-    @Order(6)
-    void testGetServers() {
-        servers.put("server1", new McpManager.McpServerInfo("server1", "node", null, null));
-        servers.put("server2", new McpManager.McpServerInfo("server2", "python", null, null));
+    // ==================== 配置文件测试 ====================
 
-        List<McpManager.McpServerInfo> serverList = new ArrayList<>(servers.values());
-        assertEquals(2, serverList.size());
+    @Nested
+    @DisplayName("配置文件测试")
+    class ConfigFileTests {
+
+        @Test
+        @Order(40)
+        @DisplayName("默认配置格式")
+        void testDefaultConfigFormat() {
+            String defaultConfig = """
+                {
+                  "mcpServers": {
+                    "filesystem": {
+                      "command": "npx",
+                      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/allowed/dir"],
+                      "env": {},
+                      "disabled": true
+                    }
+                  }
+                }
+                """;
+
+            assertTrue(defaultConfig.contains("\"mcpServers\""));
+            assertTrue(defaultConfig.contains("\"filesystem\""));
+            assertTrue(defaultConfig.contains("\"command\": \"npx\""));
+            assertTrue(defaultConfig.contains("\"disabled\": true"));
+        }
+
+        @Test
+        @Order(41)
+        @DisplayName("多服务器配置")
+        void testMultipleServersConfig() {
+            String config = """
+                {
+                  "mcpServers": {
+                    "filesystem": {
+                      "command": "npx",
+                      "args": ["-y", "@modelcontextprotocol/server-filesystem"],
+                      "disabled": false
+                    },
+                    "brave-search": {
+                      "command": "npx",
+                      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+                      "env": {"BRAVE_API_KEY": "xxx"},
+                      "disabled": false
+                    }
+                  }
+                }
+                """;
+
+            assertTrue(config.contains("\"filesystem\""));
+            assertTrue(config.contains("\"brave-search\""));
+            assertTrue(config.contains("\"BRAVE_API_KEY\""));
+        }
+
+        @Test
+        @Order(42)
+        @DisplayName("环境变量配置")
+        void testEnvConfig() {
+            Map<String, String> env = new HashMap<>();
+            env.put("NODE_ENV", "production");
+            env.put("DEBUG", "false");
+            env.put("API_KEY", "secret123");
+
+            assertEquals(3, env.size());
+            assertEquals("production", env.get("NODE_ENV"));
+            assertEquals("secret123", env.get("API_KEY"));
+        }
     }
 
-    @Test
-    @Order(7)
-    void testGetNonExistentServer() {
-        McpManager.McpServerInfo server = servers.get("non-existent");
-        assertNull(server);
+    // ==================== 命令可用性测试 ====================
+
+    @Nested
+    @DisplayName("命令可用性测试")
+    class CommandAvailabilityTests {
+
+        @Test
+        @Order(50)
+        @DisplayName("常用命令列表")
+        void testCommonCommands() {
+            List<String> commonCommands = List.of("npx", "node", "python", "python3", "uvx");
+
+            assertEquals(5, commonCommands.size());
+            assertTrue(commonCommands.contains("npx"));
+            assertTrue(commonCommands.contains("node"));
+            assertTrue(commonCommands.contains("python"));
+        }
+
+        @Test
+        @Order(51)
+        @DisplayName("命令格式化")
+        void testCommandFormatting() {
+            String command = "npx";
+            List<String> args = List.of("-y", "@modelcontextprotocol/server-filesystem", "/path");
+
+            List<String> fullCommand = new ArrayList<>();
+            fullCommand.add(command);
+            fullCommand.addAll(args);
+
+            assertEquals(4, fullCommand.size());
+            assertEquals("npx", fullCommand.get(0));
+            assertEquals("-y", fullCommand.get(1));
+        }
     }
 
-    @Test
-    @Order(8)
-    void testEmptyServersList() {
-        assertTrue(servers.isEmpty());
-        assertEquals(0, servers.size());
+    // ==================== 边界条件测试 ====================
+
+    @Nested
+    @DisplayName("边界条件测试")
+    class EdgeCaseTests {
+
+        @Test
+        @Order(60)
+        @DisplayName("空服务器列表")
+        void testEmptyServersList() {
+            assertTrue(servers.isEmpty());
+            assertEquals(0, servers.size());
+        }
+
+        @Test
+        @Order(61)
+        @DisplayName("空工具列表")
+        void testEmptyToolsList() {
+            assertTrue(tools.isEmpty());
+            assertEquals(0, tools.size());
+        }
+
+        @Test
+        @Order(62)
+        @DisplayName("服务器名称特殊字符")
+        void testServerNameSpecialChars() {
+            String name = "my-mcp-server_v1.0";
+            McpManager.McpServerInfo serverInfo = createTestServer(name, "node");
+
+            assertEquals(name, serverInfo.name());
+        }
+
+        @Test
+        @Order(63)
+        @DisplayName("长命令参数列表")
+        void testLongArgsList() {
+            List<String> args = new ArrayList<>();
+            for (int i = 0; i < 100; i++) {
+                args.add("arg" + i);
+            }
+
+            McpManager.McpServerInfo serverInfo = new McpManager.McpServerInfo(
+                    "long-args-server", "cmd", args, null, false
+            );
+
+            assertEquals(100, serverInfo.args().size());
+        }
+
+        @Test
+        @Order(64)
+        @DisplayName("大量环境变量")
+        void testLargeEnvMap() {
+            Map<String, String> env = new HashMap<>();
+            for (int i = 0; i < 50; i++) {
+                env.put("ENV_VAR_" + i, "value_" + i);
+            }
+
+            McpManager.McpServerInfo serverInfo = new McpManager.McpServerInfo(
+                    "large-env-server", "cmd", null, env, false
+            );
+
+            assertEquals(50, serverInfo.env().size());
+        }
+
+        @Test
+        @Order(65)
+        @DisplayName("Unicode 字符处理")
+        void testUnicodeChars() {
+            String description = "读取文件内容 📁 并处理中文描述";
+
+            McpManager.McpToolInfo toolInfo = new McpManager.McpToolInfo(
+                    "unicode_tool",
+                    "server.unicode_tool",
+                    "server",
+                    description,
+                    new HashMap<>()
+            );
+
+            assertTrue(toolInfo.description().contains("📁"));
+            assertTrue(toolInfo.description().contains("中文"));
+        }
     }
 
-    @Test
-    @Order(9)
-    void testAddTool() {
-        String toolName = "test-tool";
-        String serverName = "test-server";
-        String description = "Test tool description";
-        Map<String, McpManager.McpParameterInfo> parameters = new HashMap<>();
+    // ==================== 辅助方法 ====================
 
-        McpManager.McpToolInfo toolInfo = new McpManager.McpToolInfo(
-            toolName,
-            serverName,
-            description,
-            parameters
+    private McpManager.McpServerInfo createTestServer(String name, String command) {
+        return new McpManager.McpServerInfo(name, command, null, null, false);
+    }
+
+    private McpManager.McpToolInfo createTestTool(String name, String serverName) {
+        return new McpManager.McpToolInfo(
+                name,
+                serverName + "." + name,
+                serverName,
+                "Test tool: " + name,
+                new HashMap<>()
         );
-        tools.put(toolName, toolInfo);
-
-        assertEquals(1, tools.size());
-        assertTrue(tools.containsKey(toolName));
-        assertEquals(serverName, tools.get(toolName).serverName());
-    }
-
-    @Test
-    @Order(10)
-    void testGetTool() {
-        String toolName = "specific-tool";
-        String serverName = "server1";
-
-        Map<String, McpManager.McpParameterInfo> params = new HashMap<>();
-        McpManager.McpToolInfo toolInfo = new McpManager.McpToolInfo(toolName, serverName, "desc", params);
-        tools.put(toolName, toolInfo);
-
-        McpManager.McpToolInfo retrieved = tools.get(toolName);
-        assertNotNull(retrieved);
-        assertEquals(toolName, retrieved.name());
-        assertEquals(serverName, retrieved.serverName());
-    }
-
-    @Test
-    @Order(11)
-    void testGetTools() {
-        Map<String, McpManager.McpParameterInfo> params = new HashMap<>();
-
-        tools.put("tool1", new McpManager.McpToolInfo("tool1", "server1", "desc1", params));
-        tools.put("tool2", new McpManager.McpToolInfo("tool2", "server1", "desc2", params));
-
-        List<McpManager.McpToolInfo> toolList = new ArrayList<>(tools.values());
-        assertEquals(2, toolList.size());
-    }
-
-    @Test
-    @Order(12)
-    void testRemoveToolsByServer() {
-        String serverName = "server-to-remove";
-
-        Map<String, McpManager.McpParameterInfo> params = new HashMap<>();
-        tools.put("tool1", new McpManager.McpToolInfo("tool1", serverName, "desc", params));
-        tools.put("tool2", new McpManager.McpToolInfo("tool2", serverName, "desc", params));
-        tools.put("tool3", new McpManager.McpToolInfo("tool3", "other-server", "desc", params));
-
-        assertEquals(3, tools.size());
-
-        // 移除特定服务器的工具
-        tools.entrySet().removeIf(entry -> entry.getValue().serverName().equals(serverName));
-        assertEquals(1, tools.size());
-        assertFalse(tools.containsKey("tool1"));
-        assertFalse(tools.containsKey("tool2"));
-        assertTrue(tools.containsKey("tool3"));
-    }
-
-    @Test
-    @Order(13)
-    void testMcpServerInfo_Record() {
-        String name = "server-name";
-        String command = "node";
-        List<String> args = List.of("arg1", "arg2");
-        Map<String, String> env = Map.of("KEY", "value");
-
-        McpManager.McpServerInfo serverInfo = new McpManager.McpServerInfo(name, command, args, env);
-
-        assertEquals(name, serverInfo.name());
-        assertEquals(command, serverInfo.command());
-        assertEquals(args, serverInfo.args());
-        assertEquals(env, serverInfo.env());
-    }
-
-    @Test
-    @Order(14)
-    void testMcpServerInfo_WithNullArgs() {
-        McpManager.McpServerInfo serverInfo = new McpManager.McpServerInfo(
-            "server-name",
-            "python",
-            null,
-            null
-        );
-
-        assertEquals("server-name", serverInfo.name());
-        assertEquals("python", serverInfo.command());
-        assertNull(serverInfo.args());
-        assertNull(serverInfo.env());
-    }
-
-    @Test
-    @Order(15)
-    void testMcpToolInfo_Record() {
-        String name = "tool-name";
-        String serverName = "server-name";
-        String description = "Tool description";
-        Map<String, McpManager.McpParameterInfo> parameters = new HashMap<>();
-
-        McpManager.McpToolInfo toolInfo = new McpManager.McpToolInfo(name, serverName, description, parameters);
-
-        assertEquals(name, toolInfo.name());
-        assertEquals(serverName, toolInfo.serverName());
-        assertEquals(description, toolInfo.description());
-        assertEquals(parameters, toolInfo.parameters());
-    }
-
-    @Test
-    @Order(16)
-    void testMcpParameterInfo_Record() {
-        String type = "string";
-        String description = "Parameter description";
-        boolean required = true;
-
-        McpManager.McpParameterInfo paramInfo = new McpManager.McpParameterInfo(type, description, required);
-
-        assertEquals(type, paramInfo.type());
-        assertEquals(description, paramInfo.description());
-        assertEquals(required, paramInfo.required());
-    }
-
-    @Test
-    @Order(17)
-    void testSerializeServersToJson() {
-        Map<String, Object> serverMap = new HashMap<>();
-        serverMap.put("name", "server1");
-        serverMap.put("command", "node");
-
-        String json = serializeMap(serverMap);
-        assertTrue(json.contains("\"name\":\"server1\""));
-        assertTrue(json.contains("\"command\":\"node\""));
-    }
-
-    @Test
-    @Order(18)
-    void testSerializeToolsToJson() {
-        Map<String, Object> toolMap = new HashMap<>();
-        toolMap.put("name", "tool1");
-        toolMap.put("description", "Tool description");
-
-        String json = serializeMap(toolMap);
-        assertTrue(json.contains("\"name\":\"tool1\""));
-        assertTrue(json.contains("\"description\":\"Tool description\""));
-    }
-
-    @Test
-    @Order(19)
-    void testSerializeList() {
-        List<String> list = List.of("arg1", "arg2", "arg3");
-        String json = serializeList(list);
-
-        assertEquals("[\"arg1\",\"arg2\",\"arg3\"]", json);
-    }
-
-    @Test
-    @Order(20)
-    void testSerializeMap() {
-        Map<String, String> map = Map.of("key1", "value1", "key2", "value2");
-        String json = serializeMap(map);
-
-        assertTrue(json.contains("\"key1\":\"value1\""));
-        assertTrue(json.contains("\"key2\":\"value2\""));
-    }
-
-    @Test
-    @Order(21)
-    void testSerializeValue_String() {
-        String value = "test string";
-        String serialized = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
-
-        assertTrue(serialized.contains("test string"));
-    }
-
-    @Test
-    @Order(22)
-    void testSerializeValue_Null() {
-        Object value = null;
-        String serialized = "null";
-
-        assertEquals("null", serialized);
-    }
-
-    @Test
-    @Order(23)
-    void testMcpMessage_Parsing() {
-        String message = "{\"jsonrpc\":\"2.0\",\"method\":\"tools/list\"}";
-
-        boolean containsMethod = message.contains("\"method\":\"tools/list\"");
-        assertTrue(containsMethod);
-    }
-
-    @Test
-    @Order(24)
-    void testMcpMessage_ToolCall() {
-        String message = "{\"jsonrpc\":\"2.0\",\"method\":\"tools/call\",\"params\":{\"name\":\"testTool\"}}";
-
-        boolean containsToolCall = message.contains("\"method\":\"tools/call\"");
-        boolean containsToolName = message.contains("\"name\":\"testTool\"");
-        assertTrue(containsToolCall);
-        assertTrue(containsToolName);
-    }
-
-    @Test
-    @Order(25)
-    void testMcpRequest_Build() {
-        String request = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\",\"params\":{}}";
-
-        assertTrue(request.contains("\"jsonrpc\":\"2.0\""));
-        assertTrue(request.contains("\"id\":1"));
-        assertTrue(request.contains("\"method\":\"tools/list\""));
-    }
-
-    @Test
-    @Order(26)
-    void testServerCommand_Validation() {
-        String command = "node";
-        assertNotNull(command);
-        assertFalse(command.isEmpty());
-    }
-
-    @Test
-    @Order(27)
-    void testServerArgs_Empty() {
-        List<String> args = new java.util.ArrayList<>();
-        assertTrue(args.isEmpty());
-    }
-
-    @Test
-    @Order(28)
-    void testServerEnv_Empty() {
-        Map<String, String> env = new HashMap<>();
-        assertTrue(env.isEmpty());
-    }
-
-    @Test
-    @Order(29)
-    void testToolParameterTypes() {
-        List<String> validTypes = List.of("string", "number", "boolean", "object", "array");
-
-        for (String type : validTypes) {
-            assertTrue(validTypes.contains(type));
-        }
-    }
-
-    @Test
-    @Order(30)
-    void testToolParameter_Required() {
-        Map<String, McpManager.McpParameterInfo> params = new HashMap<>();
-
-        params.put("requiredParam", new McpManager.McpParameterInfo("string", "Required param", true));
-        params.put("optionalParam", new McpManager.McpParameterInfo("string", "Optional param", false));
-
-        assertTrue(params.get("requiredParam").required());
-        assertFalse(params.get("optionalParam").required());
-    }
-
-    // 辅助方法
-    private String serializeMap(Map<?, ?> map) {
-        StringBuilder sb = new StringBuilder("{");
-        boolean first = true;
-        for (Map.Entry<?, ?> entry : map.entrySet()) {
-            if (!first) sb.append(",");
-            sb.append("\"").append(entry.getKey()).append("\":");
-            sb.append(serializeValue(entry.getValue()));
-            first = false;
-        }
-        sb.append("}");
-        return sb.toString();
-    }
-
-    private String serializeList(List<?> list) {
-        StringBuilder sb = new StringBuilder("[");
-        for (int i = 0; i < list.size(); i++) {
-            if (i > 0) sb.append(",");
-            sb.append(serializeValue(list.get(i)));
-        }
-        sb.append("]");
-        return sb.toString();
-    }
-
-    private String serializeValue(Object value) {
-        if (value instanceof Map) {
-            return serializeMap((Map<?, ?>) value);
-        } else if (value instanceof List) {
-            return serializeList((List<?>) value);
-        } else if (value instanceof String) {
-            return "\"" + ((String) value).replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
-        } else if (value == null) {
-            return "null";
-        } else {
-            return "\"" + value.toString() + "\"";
-        }
     }
 }

@@ -2,9 +2,11 @@ package com.jimuqu.solonclaw.gateway;
 
 import com.jimuqu.solonclaw.agent.AgentService;
 import org.noear.solon.annotation.*;
+import org.noear.solon.core.handle.Context;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.util.Map;
 
 /**
@@ -115,6 +117,77 @@ public class GatewayController {
             log.error("获取工具列表异常", e);
             return Result.error("获取失败: " + e.getMessage());
         }
+    }
+
+    /**
+     * 流式对话接口（SSE）
+     *
+     * 使用 Server-Sent Events 协议实时推送 AI 响应
+     */
+    @Post
+    @Mapping("/chat/stream")
+    public void chatStream(@Body ChatRequest request) {
+        Context ctx = Context.current();
+
+        log.info("收到流式对话请求: sessionId={}, message={}",
+                request.sessionId(), request.message());
+
+        // 处理 sessionId
+        String sessionId = request.sessionId();
+        if (sessionId == null || sessionId.isEmpty()) {
+            sessionId = generateSessionId();
+        }
+
+        // 设置 SSE 响应头
+        ctx.contentType("text/event-stream");
+        ctx.charset("utf-8");
+        ctx.status(200);
+
+        // 发送会话ID事件
+        sendSseEvent(ctx, "session", sessionId);
+
+        try {
+            // 调用流式对话
+            agentService.chatStream(request.message(), sessionId, event -> {
+                sendSseData(ctx, event.toJson());
+            });
+
+            // 发送完成事件
+            sendSseData(ctx, "{\"type\":\"done\"}");
+
+        } catch (Exception e) {
+            log.error("流式对话处理异常", e);
+            sendSseData(ctx, "{\"type\":\"error\",\"content\":\"" + escapeJson(e.getMessage()) + "\"}");
+        }
+    }
+
+    /**
+     * 发送 SSE 事件（带 event 名称）
+     */
+    private void sendSseEvent(Context ctx, String eventName, String data) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("event: ").append(eventName).append("\n");
+        sb.append("data: ").append(data).append("\n\n");
+        ctx.output(sb.toString());
+    }
+
+    /**
+     * 发送 SSE 数据（默认 message 事件）
+     */
+    private void sendSseData(Context ctx, String data) {
+        ctx.output("data: " + data + "\n\n");
+    }
+
+    /**
+     * 转义 JSON 字符串
+     */
+    private String escapeJson(String value) {
+        if (value == null) return "";
+        return value.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t");
     }
 
     /**

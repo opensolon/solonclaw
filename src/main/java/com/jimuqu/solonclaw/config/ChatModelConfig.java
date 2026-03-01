@@ -1,5 +1,6 @@
 package com.jimuqu.solonclaw.config;
 
+import okhttp3.OkHttpClient;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.annotation.Bean;

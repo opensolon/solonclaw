@@ -1,0 +1,62 @@
+solon:
+  app:
+    name: solonclaw-test
+  port: 41234
+  env: dev
+  ai:
+    chat:
+      openai:
+        apiUrl: "https://api.openai.com/v1/chat/completions"
+        apiKey: "sk-test-key-placeholder"
+        provider: "openai"
+        model: "gpt-4"
+
+  # 序列化配置
+  serialization:
+    json:
+      dateAsFormat: 'yyyy-MM-dd HH:mm:ss'
+      dateAsTimeZone: 'GMT+8'
+      nullAsWriteable: true
+
+nullclaw:
+  workspace: "./workspace-test"
+  directories:
+    mcpConfig: "mcp.json"
+    skillsDir: "skills"
+    jobsFile: "jobs.json"
+    jobHistoryFile: "job-history.json"
+    database: "memory-test.db"
+    shellWorkspace: "workspace"
+    logsDir: "logs"
+
+  # 默认参数配置
+  defaults:
+    temperature: 0.7
+    maxTokens: 4096
+    timeoutSeconds: 120
+
+  # Agent 配置
+  agent:
+    model:
+      primary: "openai/gpt-4"
+    maxHistoryMessages: 50
+    maxToolIterations: 25
+
+  tools:
+    shell:
+      enabled: true
+      timeoutSeconds: 60
+      maxOutputBytes: 1048576
+
+  memory:
+    enabled: true
+    session:
+      maxHistory: 50
+    store:
+      enabled: true
+
+  # 回调配置
+  callback:
+    enabled: true
+    url: "${CALLBACK_URL:}"
+    secret: "${CALLBACK_SECRET:}"

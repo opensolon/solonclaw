@@ -11,7 +11,7 @@ solon:
     chat:
       openai:
         apiUrl: "https://api.jimuqu.com/v1/chat/completions"
-        apiKey: "sk-nioMU8aKO7nD9khcOt3hQfQAyBTkRh011AII1kk3gRtQnKcf"
+        apiKey: "sk-cl9464521"
         provider: "openai"
         model: "glm-4.7"
         temperature: 0.7
@@ -28,6 +28,10 @@ nullclaw:
     database: "memory.db"
     shellWorkspace: "workspace"
     logsDir: "logs"
+
+  agent:
+    maxHistoryMessages: 10
+    maxToolIterations: 25
 
   tools:
     shell:

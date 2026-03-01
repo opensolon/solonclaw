@@ -1,5 +1,6 @@
 package com.jimuqu.solonclaw.gateway;
 
+import com.jimuqu.solonclaw.agent.AgentService;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
@@ -145,5 +146,157 @@ public class GatewayControllerTest {
         assertEquals(200, success.code());
         assertEquals(500, error.code());
         assertEquals(404, custom.code());
+    }
+
+    // ==================== 流式响应相关测试 ====================
+
+    @Test
+    @Order(12)
+    void testStreamEventType_EnumValues() {
+        // 验证所有事件类型存在
+        AgentService.StreamEventType[] types = AgentService.StreamEventType.values();
+
+        assertEquals(6, types.length);
+        assertEquals(AgentService.StreamEventType.START, types[0]);
+        assertEquals(AgentService.StreamEventType.CONTENT, types[1]);
+        assertEquals(AgentService.StreamEventType.TOOL_CALL, types[2]);
+        assertEquals(AgentService.StreamEventType.TOOL_DONE, types[3]);
+        assertEquals(AgentService.StreamEventType.END, types[4]);
+        assertEquals(AgentService.StreamEventType.ERROR, types[5]);
+    }
+
+    @Test
+    @Order(13)
+    void testStreamEvent_BasicConstruction() {
+        String content = "测试内容";
+        AgentService.StreamEvent event = new AgentService.StreamEvent(
+                AgentService.StreamEventType.CONTENT,
+                content
+        );
+
+        assertEquals(AgentService.StreamEventType.CONTENT, event.type());
+        assertEquals(content, event.content());
+        assertNull(event.error());
+    }
+
+    @Test
+    @Order(14)
+    void testStreamEvent_WithError() {
+        Throwable error = new RuntimeException("测试错误");
+        AgentService.StreamEvent event = new AgentService.StreamEvent(
+                AgentService.StreamEventType.ERROR,
+                "发生错误",
+                error
+        );
+
+        assertEquals(AgentService.StreamEventType.ERROR, event.type());
+        assertEquals("发生错误", event.content());
+        assertEquals(error, event.error());
+    }
+
+    @Test
+    @Order(15)
+    void testStreamEvent_ToJson_ContentType() {
+        AgentService.StreamEvent event = new AgentService.StreamEvent(
+                AgentService.StreamEventType.CONTENT,
+                "你好，世界！"
+        );
+
+        String json = event.toJson();
+
+        assertTrue(json.contains("\"type\":\"CONTENT\""));
+        assertTrue(json.contains("\"content\""));
+        assertTrue(json.contains("你好，世界！"));
+    }
+
+    @Test
+    @Order(16)
+    void testStreamEvent_ToJson_StartType() {
+        AgentService.StreamEvent event = new AgentService.StreamEvent(
+                AgentService.StreamEventType.START,
+                "开始处理"
+        );
+
+        String json = event.toJson();
+
+        assertTrue(json.contains("\"type\":\"START\""));
+        assertTrue(json.contains("\"content\":\"开始处理\""));
+    }
+
+    @Test
+    @Order(17)
+    void testStreamEvent_ToJson_EndType() {
+        AgentService.StreamEvent event = new AgentService.StreamEvent(
+                AgentService.StreamEventType.END,
+                "处理完成"
+        );
+
+        String json = event.toJson();
+
+        assertTrue(json.contains("\"type\":\"END\""));
+        assertTrue(json.contains("\"content\":\"处理完成\""));
+    }
+
+    @Test
+    @Order(18)
+    void testStreamEvent_ToJson_ErrorType() {
+        Throwable error = new RuntimeException("处理失败");
+        AgentService.StreamEvent event = new AgentService.StreamEvent(
+                AgentService.StreamEventType.ERROR,
+                "发生错误",
+                error
+        );
+
+        String json = event.toJson();
+
+        assertTrue(json.contains("\"type\":\"ERROR\""));
+        assertTrue(json.contains("\"content\":\"发生错误\""));
+        assertTrue(json.contains("\"error\":\"处理失败\""));
+    }
+
+    @Test
+    @Order(19)
+    void testStreamEvent_ToJson_NullContent() {
+        AgentService.StreamEvent event = new AgentService.StreamEvent(
+                AgentService.StreamEventType.START,
+                null
+        );
+
+        String json = event.toJson();
+
+        assertTrue(json.contains("\"type\":\"START\""));
+        assertFalse(json.contains("\"content\""));
+    }
+
+    @Test
+    @Order(20)
+    void testStreamEvent_ToJson_JsonEscaping() {
+        String content = "内容包含\"引号\"和\n换行符";
+        AgentService.StreamEvent event = new AgentService.StreamEvent(
+                AgentService.StreamEventType.CONTENT,
+                content
+        );
+
+        String json = event.toJson();
+
+        assertTrue(json.contains("\\\"引号\\\""));
+        assertTrue(json.contains("\\n"));
+        assertTrue(json.contains("换行符"));
+    }
+
+    @Test
+    @Order(21)
+    void testStreamEvent_ToJson_SpecialCharacters() {
+        String content = "测试\\r\\n制表符\t内容";
+        AgentService.StreamEvent event = new AgentService.StreamEvent(
+                AgentService.StreamEventType.CONTENT,
+                content
+        );
+
+        String json = event.toJson();
+
+        assertTrue(json.contains("\\\\r"));
+        assertTrue(json.contains("\\\\n"));
+        assertTrue(json.contains("\\t"));
     }
 }

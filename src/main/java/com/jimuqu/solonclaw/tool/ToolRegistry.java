@@ -2,7 +2,7 @@ package com.jimuqu.solonclaw.tool;
 
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.annotation.Component;
-import org.noear.solon.annotation.Init;
+import org.noear.solon.annotation.Inject;
 import org.noear.solon.core.AppContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,6 +25,9 @@ public class ToolRegistry {
 
     private static final Logger log = LoggerFactory.getLogger(ToolRegistry.class);
 
+    @Inject
+    private AppContext context;
+
     /**
      * 工具列表：key = 工具名称, value = 工具对象（包含方法信息）
      */
@@ -36,21 +39,40 @@ public class ToolRegistry {
     private final List<Object> toolObjects = new ArrayList<>();
 
     /**
-     * 初始化时扫描工具
+     * 是否已初始化
      */
-    @Init
-    public void scanTools(AppContext context) {
+    private boolean initialized = false;
+
+    /**
+     * 扫描所有工具
+     */
+    private synchronized void scanTools() {
+        if (initialized) {
+            log.debug("工具已经扫描过，跳过重复扫描");
+            return;
+        }
+
         log.info("开始扫描工具...");
+
+        if (context == null) {
+            log.warn("AppContext 未注入，延迟扫描");
+            return;
+        }
+
+        initialized = true;
 
         // 获取所有带有 @Component 注解的 Bean
         List<Object> beans = context.getBeansOfType(Object.class);
+        int scannedCount = 0;
+
         for (Object bean : beans) {
             Class<?> beanClass = bean.getClass();
             Component componentAnnotation = beanClass.getAnnotation(Component.class);
 
             // 只扫描带有 @Component 注解的类
             if (componentAnnotation != null) {
-                scanClassForTools(bean, beanClass);
+                int toolsFound = scanClassForTools(bean, beanClass);
+                scannedCount += toolsFound;
             }
         }
 
@@ -58,7 +80,7 @@ public class ToolRegistry {
         if (!tools.isEmpty()) {
             for (Map.Entry<String, ToolInfo> entry : tools.entrySet()) {
                 ToolInfo tool = entry.getValue();
-                log.debug("  - {}: {} (方法: {}.{})",
+                log.info("  - {}: {} (方法: {}.{})",
                     entry.getKey(), tool.description(),
                     tool.method().getDeclaringClass().getSimpleName(),
                     tool.method().getName()
@@ -70,15 +92,19 @@ public class ToolRegistry {
     /**
      * 扫描类中的工具方法
      */
-    private void scanClassForTools(Object bean, Class<?> clazz) {
+    private int scanClassForTools(Object bean, Class<?> clazz) {
+        int count = 0;
         Method[] methods = clazz.getMethods();
 
         for (Method method : methods) {
             ToolMapping toolMapping = method.getAnnotation(ToolMapping.class);
             if (toolMapping != null) {
                 registerTool(bean, method, toolMapping);
+                count++;
             }
         }
+
+        return count;
     }
 
     /**
@@ -111,18 +137,30 @@ public class ToolRegistry {
     }
 
     /**
-     * 获取所有工具信息
-     */
-    public Map<String, ToolInfo> getTools() {
-        return new HashMap<>(tools);
-    }
-
-    /**
      * 获取所有工具对象
      * 用于传递给 ReActAgent
      */
     public List<Object> getToolObjects() {
+        ensureInitialized();
         return new ArrayList<>(toolObjects);
+    }
+
+    /**
+     * 获取所有工具信息
+     */
+    public Map<String, ToolInfo> getTools() {
+        ensureInitialized();
+        return new HashMap<>(tools);
+    }
+
+    /**
+     * 确保已初始化（懒加载）
+     */
+    private synchronized void ensureInitialized() {
+        if (!initialized) {
+            log.info("首次访问工具，开始延迟扫描...");
+            scanTools();
+        }
     }
 
     /**

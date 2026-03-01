@@ -38,6 +38,18 @@
             <artifactId>solon-web</artifactId>
         </dependency>
 
+        <!-- Solon Web CORS (跨域支持) -->
+        <dependency>
+            <groupId>org.noear</groupId>
+            <artifactId>solon-web-cors</artifactId>
+        </dependency>
+
+        <!-- Solon Web Static Files (静态文件服务) -->
+        <dependency>
+            <groupId>org.noear</groupId>
+            <artifactId>solon-web-staticfiles</artifactId>
+        </dependency>
+
         <!-- Solon AI (Agent 框架) -->
         <dependency>
             <groupId>org.noear</groupId>
