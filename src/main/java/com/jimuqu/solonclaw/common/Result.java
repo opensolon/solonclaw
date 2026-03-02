@@ -32,6 +32,14 @@ public class Result {
         return new Result(200, message, data);
     }
 
+    public static Result success(Object data) {
+        return new Result(200, "Success", data);
+    }
+
+    public static Result failure(String message) {
+        return new Result(500, message, null);
+    }
+
     public static Result error(String message) {
         return new Result(500, message, null);
     }

@@ -69,10 +69,10 @@ java -jar target/solonclaw-1.0.0-SNAPSHOT-jar-with-dependencies.jar
 
 ```bash
 # 健康检查
-curl http://localhost:41234/health
+curl http://localhost:12345/health
 
 # 简单检查
-curl http://localhost:41234/health/simple
+curl http://localhost:12345/health/simple
 ```
 
 ---
@@ -98,7 +98,7 @@ services:
     image: solonclaw:latest
     container_name: solonclaw
     ports:
-      - "41234:41234"
+      - "12345:12345"
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - CALLBACK_URL=${CALLBACK_URL:-}
@@ -109,7 +109,7 @@ services:
       - ./logs:/app/logs
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:41234/health/live"]
+      test: ["CMD", "curl", "-f", "http://localhost:12345/health/live"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -155,7 +155,7 @@ docker exec -it solonclaw /bin/sh
 solon:
   app:
     name: solonclaw
-  port: 41234
+  port: 12345
   env: prod
 
   # AI 配置
@@ -347,7 +347,7 @@ spec:
       - name: solonclaw
         image: solonclaw:latest
         ports:
-        - containerPort: 41234
+        - containerPort: 12345
         envFrom:
         - configMapRef:
             name: solonclaw-config
@@ -363,13 +363,13 @@ spec:
         livenessProbe:
           httpGet:
             path: /health/live
-            port: 41234
+            port: 12345
           initialDelaySeconds: 30
           periodSeconds: 10
         readinessProbe:
           httpGet:
             path: /health/ready
-            port: 41234
+            port: 12345
           initialDelaySeconds: 10
           periodSeconds: 5
         volumeMounts:
@@ -393,7 +393,7 @@ spec:
     app: solonclaw
   ports:
   - port: 80
-    targetPort: 41234
+    targetPort: 12345
   type: ClusterIP
 ```
 
@@ -433,7 +433,7 @@ scrape_configs:
   - job_name: 'solonclaw'
     metrics_path: '/api/monitor/metrics'
     static_configs:
-      - targets: ['solonclaw:41234']
+      - targets: ['solonclaw:12345']
 ```
 
 ### Prometheus 告警规则
@@ -500,7 +500,7 @@ groups:
 tail -f logs/solonclaw.log
 
 # 检查端口占用
-netstat -tlnp | grep 41234
+netstat -tlnp | grep 12345
 
 # 检查 Java 版本
 java -version
@@ -508,7 +508,7 @@ java -version
 
 **解决方案**:
 - 确认 Java 版本 >= 17
-- 检查端口 41234 是否被占用
+- 检查端口 12345 是否被占用
 - 检查工作目录权限
 
 #### 2. API 调用失败
@@ -518,11 +518,11 @@ java -version
 **排查步骤**:
 ```bash
 # 检查健康状态
-curl http://localhost:41234/health
+curl http://localhost:12345/health
 
 # 检查组件状态
-curl http://localhost:41234/health/components/database
-curl http://localhost:41234/health/components/agentService
+curl http://localhost:12345/health/components/database
+curl http://localhost:12345/health/components/agentService
 
 # 查看错误日志
 tail -f logs/solonclaw-error.log
@@ -540,7 +540,7 @@ tail -f logs/solonclaw-error.log
 **排查步骤**:
 ```bash
 # 查看内存使用
-curl http://localhost:41234/api/monitor/resources | jq '.["heap.used"], .["heap.max"]'
+curl http://localhost:12345/api/monitor/resources | jq '.["heap.used"], .["heap.max"]'
 
 # 查看 JVM 内存
 jstat -gcutil <pid> 1000 10

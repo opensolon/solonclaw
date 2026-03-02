@@ -1,5 +1,7 @@
 package com.jimuqu.solonclaw.agent;
 
+import com.jimuqu.solonclaw.context.Context;
+import com.jimuqu.solonclaw.context.ContextBuilder;
 import com.jimuqu.solonclaw.memory.MemoryService;
 import com.jimuqu.solonclaw.tool.ToolRegistry;
 import com.jimuqu.solonclaw.util.FileService;
@@ -48,6 +50,15 @@ public class AgentService {
 
     @Inject
     private FileService fileService;
+
+    @Inject(required = false)
+    private com.jimuqu.solonclaw.learning.KnowledgeStore knowledgeStore;
+
+    @Inject(required = false)
+    private com.jimuqu.solonclaw.learning.LearningOrchestrator learningOrchestrator;
+
+    @Inject(required = false)
+    private ContextBuilder contextBuilder;
 
     /**
      * ReActAgent 实例（延迟初始化）
@@ -107,6 +118,8 @@ public class AgentService {
 
     /**
      * 构建 Agent 指令
+     * <p>
+     * 注意：详细的工具描述已由 ToolContext 组件提供
      */
     private String buildAgentInstruction() {
         return """
@@ -118,35 +131,17 @@ public class AgentService {
                 3. 综合分析工具执行结果，提供准确、有用的回答
                 4. 保持友好、专业的态度
 
-                ## 可用工具
+                ## 使用指南
 
-                ### Shell 命令工具 (ShellTool.exec)
-                - 执行 Shell 命令，如 ls, cat, grep 等
-                - 用于文件操作、系统查询等
+                当用户提出以下需求时，主动使用相应工具：
 
-                ### Python 包安装工具 (SkillInstallTool.installPythonPackage)
-                - 使用 pip 安装 Python 包
-                - 例如：安装 requests, pandas, numpy 等
-                - 使用场景：用户需要使用某个 Python 库时
-
-                ### NPM 包安装工具 (SkillInstallTool.installNpmPackage)
-                - 使用 npm 全局安装 Node.js 包
-                - 例如：安装 @anthropic-ai/sdk, typescript 等
-                - 使用场景：用户需要使用某个 Node.js 工具时
-
-                ### GitHub 克隆工具 (SkillInstallTool.cloneFromGitHub)
-                - 从 GitHub 克隆代码仓库
-                - 用于下载开源项目、示例代码等
-                - 使用场景：用户需要某个开源项目时
-
-                ### JSON 技能创建工具 (SkillInstallTool.createJsonSkill)
-                - 创建基于 JSON 配置的自定义技能
-                - 可以定义特定的专业领域技能
-                - 使用场景：为特定任务创建专门技能
+                1. **"安装 xxx 包"** → 判断是 Python 还是 Node.js，使用对应安装工具
+                2. **"下载 xxx 项目"** → 使用 GitHub 克隆工具
+                3. **"创建 xxx 技能"** → 使用 JSON 技能创建工具
+                4. **"截图" / "访问网站" / "生成图片"** → 使用 Shell 工具配合浏览器工具
 
                 ## 图片访问功能 ⭐ 重要
 
-                ### 临时访问链接
                 系统会自动为你生成的图片文件创建临时访问链接，用户可以直接在聊天界面查看图片。
 
                 **工作原理**：
@@ -158,22 +153,6 @@ public class AgentService {
                 **使用方法**：
                 - 只需要在响应中正常提供文件路径即可（如 `/tmp/screenshot.png`）
                 - 系统会自动处理，你无需手动生成链接
-                - 图片支持格式：PNG、JPG、GIF、WebP、SVG
-
-                **示例**：
-                - 用户："截个图给我"
-                - 你执行截图命令，保存为 `/tmp/shot.png`
-                - 在响应中提到："截图已保存到 /tmp/shot.png"
-                - 系统自动将其转换为临时访问链接，用户可直接查看
-
-                ## 使用指南
-
-                当用户提出以下需求时，主动使用相应工具：
-
-                1. **"安装 xxx 包"** → 判断是 Python 还是 Node.js，使用对应安装工具
-                2. **"下载 xxx 项目"** → 使用 GitHub 克隆工具
-                3. **"创建 xxx 技能"** → 使用 JSON 技能创建工具
-                4. **"截图" / "访问网站" / "生成图片"** → 使用 Shell 工具配合浏览器工具
 
                 ## 注意事项
 
@@ -181,7 +160,6 @@ public class AgentService {
                 - 安装包时，如果用户指定了版本号，请使用用户指定的版本
                 - 对于文件操作，请确认路径正确
                 - 如果工具执行失败，请尝试其他方法或告知用户
-                - 安装完成后，告知用户安装结果和下一步操作建议
                 - 图片文件路径会被自动转换为临时访问链接，无需手动处理
 
                 回答问题时请：
@@ -204,6 +182,32 @@ public class AgentService {
         try {
             // 保存用户消息
             memoryService.saveUserMessage(sessionId, message);
+
+            // ========== 使用上下文构建器构建完整的上下文 ==========
+            String enhancedMessage = message;
+            if (contextBuilder != null) {
+                try {
+                    Context context = contextBuilder.build(sessionId, message, null);
+                    enhancedMessage = context.buildPrompt(message);
+                    log.debug("已使用 ContextBuilder 构建上下文: sessionId={}", sessionId);
+                } catch (Exception e) {
+                    log.warn("使用 ContextBuilder 构建上下文失败，回退到原始消息", e);
+                    enhancedMessage = message;
+                }
+            } else {
+                // ========== 回退到旧逻辑：学习系统集成（知识检索） ==========
+                if (knowledgeStore != null) {
+                    try {
+                        String knowledgeContext = retrieveRelevantKnowledge(message, sessionId);
+                        if (knowledgeContext != null && !knowledgeContext.isEmpty()) {
+                            enhancedMessage = "[相关经验]\n" + knowledgeContext + "\n[用户问题]\n" + message;
+                            log.debug("已注入相关知识上下文: sessionId={}", sessionId);
+                        }
+                    } catch (Exception e) {
+                        log.warn("检索知识失败，继续正常对话", e);
+                    }
+                }
+            }
 
             // 获取历史记录
             List<Map<String, String>> history = memoryService.getSessionHistory(sessionId);
@@ -233,8 +237,8 @@ public class AgentService {
                 log.info("已将 {} 条历史消息添加到 session", historyMessages.size());
             }
 
-            // 调用 ReActAgent
-            String response = agent.prompt(message)
+            // 调用 ReActAgent（使用增强后的消息）
+            String response = agent.prompt(enhancedMessage)
                     .session(session)
                     .call()
                     .getContent();
@@ -246,10 +250,30 @@ public class AgentService {
             response = fileService.processImagesInContent(response);
 
             log.info("Agent 响应: sessionId={}, length={}", sessionId, response.length());
+
+            // ========== 学习系统集成：对话完成触发学习 ==========
+            if (learningOrchestrator != null) {
+                try {
+                    learningOrchestrator.onChatComplete(sessionId, response, null);
+                } catch (Exception e) {
+                    log.warn("触发学习流程失败", e);
+                }
+            }
+
             return response;
 
         } catch (Throwable e) {
             log.error("Agent 对话异常", e);
+
+            // ========== 学习系统集成：错误触发学习 ==========
+            if (learningOrchestrator != null) {
+                try {
+                    learningOrchestrator.onChatComplete(sessionId, null, e);
+                } catch (Exception learnException) {
+                    log.warn("错误学习流程失败", learnException);
+                }
+            }
+
             throw new RuntimeException("AI 对话失败: " + e.getMessage(), e);
         }
     }
@@ -435,6 +459,85 @@ public class AgentService {
         if (text == null) return null;
         if (text.length() <= maxLength) return text;
         return text.substring(0, maxLength) + "... (已截断，总长度: " + text.length() + ")";
+    }
+
+    /**
+     * 检索相关知识
+     * <p>
+     * 从知识库中检索与当前问题相关的经验
+     * <p>
+     * 注意：此方法已废弃，请使用 ContextBuilder 构建上下文
+     *
+     * @param message   用户消息
+     * @param sessionId 会话ID
+     * @return 相关知识内容，如果没有相关知识返回 null
+     * @deprecated 使用 ContextBuilder 代替
+     */
+    @Deprecated
+    private String retrieveRelevantKnowledge(String message, String sessionId) {
+        if (knowledgeStore == null) {
+            return null;
+        }
+
+        try {
+            // 提取关键词（简化实现，使用前50个字符）
+            String keyword = extractKeyword(message);
+
+            // 搜索相关经验
+            List<com.jimuqu.solonclaw.memory.SessionStore.Experience> experiences =
+                knowledgeStore.searchAllExperiences(keyword, 5);
+
+            if (experiences == null || experiences.isEmpty()) {
+                log.debug("未找到相关知识: sessionId={}, keyword={}", sessionId, keyword);
+                return null;
+            }
+
+            // 构建知识上下文
+            StringBuilder knowledgeContext = new StringBuilder();
+            knowledgeContext.append("基于历史经验，以下信息可能对你有帮助：\n\n");
+
+            for (com.jimuqu.solonclaw.memory.SessionStore.Experience exp : experiences) {
+                if (exp.success() && exp.confidence() >= 0.6) {
+                    String content = exp.content();
+                    int contentLength = content != null ? content.length() : 0;
+                    knowledgeContext.append(String.format("- **%s**: %s (置信度: %.1f%%)\n",
+                        exp.title(),
+                        content != null ? content.substring(0, Math.min(100, contentLength)) : "",
+                        exp.confidence() * 100
+                    ));
+                }
+            }
+
+            log.debug("检索到相关知识: sessionId={}, 经验数={}", sessionId, experiences.size());
+            return knowledgeContext.toString();
+
+        } catch (Exception e) {
+            log.warn("检索知识失败: sessionId={}", sessionId, e);
+            return null;
+        }
+    }
+
+    /**
+     * 提取关键词
+     * <p>
+     * 从消息中提取关键词用于知识检索
+     * <p>
+     * 注意：此方法已废弃
+     *
+     * @param message 用户消息
+     * @return 关键词
+     * @deprecated 使用 ContextBuilder 代替
+     */
+    @Deprecated
+    private String extractKeyword(String message) {
+        if (message == null || message.isEmpty()) {
+            return "";
+        }
+
+        // 简化实现：使用前20个字符作为关键词
+        // 实际项目中可以使用更复杂的 NLP 技术
+        int maxLength = Math.min(20, message.length());
+        return message.substring(0, maxLength).trim();
     }
 
     /**

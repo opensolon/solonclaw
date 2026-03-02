@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SolonClaw - 自主任务管理</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 自定义滚动条样式 */
+        .custom-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scroll::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 3px;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 3px;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb:hover {
+            background: #a1a1a1;
+        }
+
+        /* 进度条动画 */
+        .progress-bar {
+            transition: width 0.5s ease-in-out;
+        }
+
+        /* 卡片悬停效果 */
+        .card-hover {
+            transition: all 0.2s ease-in-out;
+        }
+        .card-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+        }
+
+        /* 状态指示器动画 */
+        .pulse-dot {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* 加载动画 */
+        .spin {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <!-- 头部导航 -->
+    <header class="bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg">
+        <div class="max-w-6xl mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <a href="index.html" class="flex items-center space-x-3">
+                        <div class="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <h1 class="text-xl font-bold">SolonClaw</h1>
+                            <p class="text-purple-100 text-sm">自主任务管理系统</p>
+                        </div>
+                    </a>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div id="systemStatus" class="flex items-center space-x-2 bg-white/10 px-3 py-1.5 rounded-lg">
+                        <span class="w-2 h-2 bg-gray-400 rounded-full"></span>
+                        <span class="text-sm">检查中...</span>
+                    </div>
+                    <div class="text-right text-sm">
+                        <div id="lastUpdateTime" class="text-purple-100">最后更新: --:--:--</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主内容区域 -->
+    <main class="max-w-6xl mx-auto px-4 py-6">
+        <!-- 控制区域 -->
+        <div class="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- 运行控制 -->
+            <div class="bg-white rounded-xl shadow-md p-4 card-hover">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-lg font-semibold text-gray-800">运行控制</h2>
+                    <span id="runStatus" class="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-600">
+                        未知
+                    </span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <button id="startBtn" onclick="startAutonomous()" class="flex-1 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center space-x-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span>启动</span>
+                    </button>
+                    <button id="stopBtn" onclick="stopAutonomous()" class="flex-1 bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center space-x-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"></path>
+                        </svg>
+                        <span>停止</span>
+                    </button>
+                    <button id="refreshBtn" onclick="refreshData()" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded-lg transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9.582m0 0A8.003 8.003 0 013.825 0m0 0a8.003 8.003 0 01-4.582 4.581m0 0A8.003 8.003 0 00-3.825 0M5 12a8 8 0 1116 8 8 8 0 01-16 0z"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 统计信息 -->
+            <div class="bg-white rounded-xl shadow-md p-4 card-hover">
+                <h2 class="text-lg font-semibold text-gray-800 mb-3">统计信息</h2>
+                <div id="statsContent" class="grid grid-cols-2 gap-3 text-sm">
+                    <div class="bg-gray-50 rounded-lg p-2">
+                        <div class="text-gray-500">总任务数</div>
+                        <div id="statTotalTasks" class="text-xl font-bold text-gray-800">-</div>
+                    </div>
+                    <div class="bg-gray-50 rounded-lg p-2">
+                        <div class="text-gray-500">已完成任务</div>
+                        <div id="statCompletedTasks" class="text-xl font-bold text-green-600">-</div>
+                    </div>
+                    <div class="bg-gray-50 rounded-lg p-2">
+                        <div class="text-gray-500">总目标数</div>
+                        <div id="statTotalGoals" class="text-xl font-bold text-gray-800">-</div>
+                    </div>
+                    <div class="bg-gray-50 rounded-lg p-2">
+                        <div class="text-gray-500">已完成目标</div>
+                        <div id="statCompletedGoals" class="text-xl font-bold text-green-600">-</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 任务管理 -->
+        <div class="mb-6 bg-white rounded-xl shadow-md">
+            <div class="border-b">
+                <div class="flex space-x-8 px-4">
+                    <button onclick="showTaskTab('pending')" id="tab-pending" class="tab-btn py-3 px-2 border-b-2 border-blue-500 text-blue-600 font-medium">
+                        待执行任务
+                        <span id="count-pending" class="ml-1 text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">0</span>
+                    </button>
+                    <button onclick="showTaskTab('executing')" id="tab-executing" class="tab-btn py-3 px-2 border-b-2 border-transparent text-gray-500 hover:text-gray-700 font-medium">
+                        执行中
+                        <span id="count-executing" class="ml-1 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">0</span>
+                    </button>
+                    <button onclick="showTaskTab('completed')" id="tab-completed" class="tab-btn py-3 px-2 border-b-2 border-transparent text-gray-500 hover:text-gray-700 font-medium">
+                        已完成
+                        <span id="count-completed" class="ml-1 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">0</span>
+                    </button>
+                </div>
+            </div>
+            <div id="taskContent" class="p-4">
+                <div class="flex items-center justify-center h-32 text-gray-400">
+                    <span>加载中...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 目标管理 -->
+        <div class="mb-6 bg-white rounded-xl shadow-md">
+            <div class="border-b flex items-center justify-between px-4">
+                <div class="flex space-x-8">
+                    <button onclick="showGoalTab('active')" id="goal-tab-active" class="goal-tab-btn py-3 px-2 border-b-2 border-green-500 text-green-600 font-medium">
+                        活跃目标
+                        <span id="goal-count-active" class="ml-1 text-xs bg-green-100 text-green-600 px-2 py-0.5 rounded-full">0</span>
+                    </button>
+                    <button onclick="showGoalTab('completed')" id="goal-tab-completed" class="goal-tab-btn py-3 px-2 border-b-2 border-transparent text-gray-500 hover:text-gray-700 font-medium">
+                        已完成目标
+                        <span id="goal-count-completed" class="ml-1 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">0</span>
+                    </button>
+                </div>
+                <button onclick="openCreateGoalModal()" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm flex items-center space-x-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                    </svg>
+                    <span>创建目标</span>
+                </button>
+            </div>
+            <div id="goalContent" class="p-4">
+                <div class="flex items-center justify-center h-32 text-gray-400">
+                    <span>加载中...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 资源状态 -->
+        <div class="mb-6 bg-white rounded-xl shadow-md p-4">
+            <h2 class="text-lg font-semibold text-gray-800 mb-3 flex items-center">
+                <svg class="w-5 h-5 mr-2 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                </svg>
+                资源状态
+            </h2>
+            <div id="resourcesContent" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div class="flex items-center justify-center h-24 text-gray-400 col-span-2">
+                    <span>加载中...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 决策引擎状态 -->
+        <div class="bg-white rounded-xl shadow-md p-4">
+            <h2 class="text-lg font-semibold text-gray-800 mb-3 flex items-center">
+                <svg class="w-5 h-5 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                </svg>
+                决策引擎状态
+            </h2>
+            <div id="decisionContent" class="flex items-center justify-center h-24 text-gray-400">
+                <span>加载中...</span>
+            </div>
+        </div>
+    </main>
+
+    <!-- 创建目标模态框 -->
+    <div id="createGoalModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-md mx-4">
+            <h3 class="text-xl font-semibold text-gray-800 mb-4">创建新目标</h3>
+            <form id="createGoalForm" onsubmit="createGoal(event)">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">目标标题</label>
+                    <input type="text" id="goalTitle" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="输入目标标题">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">目标描述</label>
+                    <textarea id="goalDescription" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="输入目标描述"></textarea>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">优先级 (1-10)</label>
+                    <input type="number" id="goalPriority" min="1" max="10" value="5" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div class="flex space-x-3">
+                    <button type="button" onclick="closeCreateGoalModal()" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg transition-colors">
+                        取消
+                    </button>
+                    <button type="submit" class="flex-1 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors">
+                        创建
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 提示消息 -->
+    <div id="toast" class="hidden fixed top-4 right-4 px-4 py-3 rounded-lg shadow-lg z-50 transition-all duration-300"></div>
+
+    <script src="autonomous.js?v=1.0"></script>
+</body>
+</html>

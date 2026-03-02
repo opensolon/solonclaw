@@ -64,6 +64,28 @@ solonclaw:
     url: "${CALLBACK_URL:}"
     secret: "${CALLBACK_SECRET:}"
 
+  # ==================== 上下文构建器配置 ====================
+  context:
+    builder:
+      # 组件启用状态
+      system:
+        enabled: true
+        includeTools: true                # 是否将工具描述包含在系统上下文中
+
+      tools:
+        enabled: false                    # 如果系统上下文已包含工具，这里可以禁用
+        includeParameters: true
+
+      knowledge:
+        enabled: true
+        maxSearchResults: 5               # 最大搜索结果数
+        minConfidenceThreshold: 0.6       # 最小置信度阈值
+
+      session:
+        enabled: true
+        maxHistoryMessages: 10            # 最大历史消息数
+        maxSummaryLength: 500             # 会话摘要长度限制（字符数）
+
   # ==================== 学习系统配置 ====================
   learning:
     enabled: true

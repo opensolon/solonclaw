@@ -6,7 +6,7 @@
 
 - **技术栈**: Java 17 + Solon 3.9.4 + solon-ai-core
 - **主入口**: `com.jimuqu.solonclaw.SolonClawApp`
-- **默认端口**: 41234
+- **默认端口**: 12345
 - **包名**: `com.jimuqu.solonclaw`
 - **版本**: 1.0.0-SNAPSHOT
 
@@ -172,7 +172,7 @@ workspace/
 solon:
   app:
     name: solonclaw
-  port: 41234
+  port: 12345
   ai:
     chat:
       openai:
@@ -286,7 +286,7 @@ java -jar target/solonclaw-1.0.0-SNAPSHOT-jar-with-dependencies.jar
 ### 3. 测试对话
 
 ```bash
-curl -X POST http://localhost:41234/api/chat \
+curl -X POST http://localhost:12345/api/chat \
   -H "Content-Type: application/json" \
   -d '{"message": "你好"}'
 ```
@@ -294,7 +294,7 @@ curl -X POST http://localhost:41234/api/chat \
 ### 4. 健康检查
 
 ```bash
-curl http://localhost:41234/api/health
+curl http://localhost:12345/api/health
 ```
 
 ---
@@ -459,10 +459,10 @@ src/main/resources/frontend/
 
 ```bash
 # 访问前端界面
-open http://localhost:41234/frontend/index.html
+open http://localhost:12345/frontend/index.html
 
 # 或通过浏览器访问
-http://localhost:41234/frontend/index.html
+http://localhost:12345/frontend/index.html
 ```
 
 ---

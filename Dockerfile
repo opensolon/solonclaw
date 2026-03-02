@@ -37,11 +37,11 @@ RUN mkdir -p /app/workspace && chown -R solonclaw:solonclaw /app
 USER solonclaw
 
 # Expose port
-EXPOSE 41234
+EXPOSE 12345
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:41234/health/live || exit 1
+    CMD curl -f http://localhost:12345/health/live || exit 1
 
 # JVM options
 ENV JAVA_OPTS="-Xms256m -Xmx512m -XX:+UseG1GC -Dfile.encoding=UTF-8"
