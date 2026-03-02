@@ -23,7 +23,7 @@ solon:
       nullAsWriteable: true
 
 # ==================== SolonClaw 配置 ====================
-nullclaw:
+solonclaw:
   workspace: "./workspace"
 
   directories:

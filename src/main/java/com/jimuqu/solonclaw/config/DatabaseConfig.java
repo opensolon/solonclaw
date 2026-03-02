@@ -37,7 +37,7 @@ public class DatabaseConfig {
             // 创建 HikariCP 数据源
             HikariDataSource dataSource = new HikariDataSource();
             dataSource.setJdbcUrl("jdbc:h2:" + dbPath.toString().replace(".mv.db", "") +
-                ";MODE=MySQL;AUTO_SERVER=TRUE");
+                ";MODE=MySQL");
             dataSource.setUsername("sa");
             dataSource.setPassword("");
             dataSource.setMaximumPoolSize(10);

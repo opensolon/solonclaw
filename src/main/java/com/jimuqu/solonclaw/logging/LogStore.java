@@ -1,5 +1,6 @@
 package com.jimuqu.solonclaw.logging;
 
+import org.noear.solon.annotation.Component;
 import org.noear.solon.Solon;
 import org.noear.snack4.ONode;
 
@@ -18,6 +19,7 @@ import java.util.stream.Stream;
 /**
  * 日志存储类 - 使用文件系统存储日志
  */
+@Component
 public class LogStore {
     private static final String LOG_DIR = "workspace/logs";
     private static final String LOG_FILE_PREFIX = "solonclaw-";
@@ -246,6 +248,15 @@ public class LogStore {
         }
 
         return stats;
+    }
+
+    /**
+     * 执行日志维护
+     * 清理超过 30 天的日志文件
+     */
+    public void performMaintenance() {
+        LocalDateTime cutoffDate = LocalDateTime.now().minusDays(30);
+        clearLogs(cutoffDate);
     }
 
     /**

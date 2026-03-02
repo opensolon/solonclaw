@@ -24,7 +24,7 @@ public class MemoryService {
     @Inject
     private SessionStore sessionStore;
 
-    @Inject("${nullclaw.memory.session.maxHistory}")
+    @Inject("${solonclaw.memory.session.maxHistory}")
     private int maxHistory;
 
     /**

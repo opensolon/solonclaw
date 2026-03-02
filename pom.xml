@@ -118,6 +118,34 @@
             <version>1.5.12</version>
         </dependency>
 
+        <!-- JWT (for auth) -->
+        <dependency>
+            <groupId>com.auth0</groupId>
+            <artifactId>java-jwt</artifactId>
+            <version>4.4.0</version>
+        </dependency>
+
+        <!-- Caffeine Cache -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+            <version>3.1.8</version>
+        </dependency>
+
+        <!-- Swagger/Solon Docs -->
+        <dependency>
+            <groupId>org.noear</groupId>
+            <artifactId>solon-docs</artifactId>
+            <version>${solon.version}</version>
+        </dependency>
+
+        <!-- Swagger Annotations (for compatibility) -->
+        <dependency>
+            <groupId>io.swagger</groupId>
+            <artifactId>swagger-annotations</artifactId>
+            <version>1.6.12</version>
+        </dependency>
+
         <!-- Testing -->
         <dependency>
             <groupId>org.noear</groupId>

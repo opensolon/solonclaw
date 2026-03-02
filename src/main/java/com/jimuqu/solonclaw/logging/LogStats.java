@@ -8,6 +8,7 @@ import java.util.Map;
  */
 public class LogStats {
     private int totalFiles;
+    private int archiveFiles;
     private long totalSize;
     private Map<String, Long> levelCounts;
 
@@ -21,6 +22,14 @@ public class LogStats {
 
     public void setTotalFiles(int totalFiles) {
         this.totalFiles = totalFiles;
+    }
+
+    public int getArchiveFiles() {
+        return archiveFiles;
+    }
+
+    public void setArchiveFiles(int archiveFiles) {
+        this.archiveFiles = archiveFiles;
     }
 
     public long getTotalSize() {

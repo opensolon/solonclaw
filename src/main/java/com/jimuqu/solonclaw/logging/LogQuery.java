@@ -9,8 +9,10 @@ import java.util.*;
 public class LogQuery {
     private Set<LogLevel> levels;
     private Set<String> sources;
+    private Set<String> categories;
     private String sessionId;
     private String keyword;
+    private String traceId;
     private LocalDateTime startTime;
     private LocalDateTime endTime;
     private Integer page;
@@ -20,6 +22,7 @@ public class LogQuery {
     public LogQuery() {
         this.levels = new HashSet<>();
         this.sources = new HashSet<>();
+        this.categories = new HashSet<>();
         this.page = 1;
         this.pageSize = 100;
         this.maxFiles = 30;
@@ -59,6 +62,23 @@ public class LogQuery {
         return this;
     }
 
+    public Set<String> getCategories() {
+        return categories;
+    }
+
+    public LogQuery setCategories(Set<String> categories) {
+        this.categories = categories;
+        return this;
+    }
+
+    public LogQuery addCategory(String category) {
+        if (this.categories == null) {
+            this.categories = new HashSet<>();
+        }
+        this.categories.add(category);
+        return this;
+    }
+
     public String getSessionId() {
         return sessionId;
     }
@@ -74,6 +94,15 @@ public class LogQuery {
 
     public LogQuery setKeyword(String keyword) {
         this.keyword = keyword;
+        return this;
+    }
+
+    public String getTraceId() {
+        return traceId;
+    }
+
+    public LogQuery setTraceId(String traceId) {
+        this.traceId = traceId;
         return this;
     }
 

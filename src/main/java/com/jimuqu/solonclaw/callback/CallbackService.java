@@ -28,13 +28,13 @@ public class CallbackService {
     @Inject
     private OkHttpClient httpClient;
 
-    @Inject("${nullclaw.callback.enabled}")
+    @Inject("${solonclaw.callback.enabled}")
     private boolean enabled;
 
-    @Inject("${nullclaw.callback.url}")
+    @Inject("${solonclaw.callback.url}")
     private String callbackUrl;
 
-    @Inject("${nullclaw.callback.secret}")
+    @Inject("${solonclaw.callback.secret}")
     private String callbackSecret;
 
     /**

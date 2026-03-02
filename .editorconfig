@@ -1,0 +1,79 @@
+# EditorConfig - https://editorconfig.org
+# SolonClaw 项目代码格式化配置
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.java]
+indent_style = space
+indent_size = 4
+continuation_indent_size = 8
+max_line_length = 150
+
+# 大括号风格：放在同一行
+ij_java_block_brace_style = end_of_line
+ij_java_class_brace_style = end_of_line
+ij_java_method_brace_style = end_of_line
+ij_java_lambda_brace_style = end_of_line
+
+# import 排序
+ij_java_imports_layout = *,|,javax.**,java.**,|,$*
+ij_java_package_prefix_to_ignore = javax,java
+
+# 空格设置
+ij_java_space_after_comma = true
+ij_java_space_before_comma = false
+ij_java_space_after_semicolon = true
+ij_java_space_before_semicolon = false
+ij_java_space_after_colon = true
+ij_java_space_before_colon = false
+ij_java_space_before_if_parentheses = true
+ij_java_space_before_for_parentheses = true
+ij_java_space_before_while_parentheses = true
+ij_java_space_before_switch_parentheses = true
+ij_java_space_before_catch_parentheses = true
+
+# 注释格式
+ij_java_line_comment_at_first_column = false
+ij_java_line_comment_add_space = true
+ij_java_block_comment_at_first_column = false
+
+[*.xml]
+indent_size = 4
+indent_style = space
+
+[*.yml]
+indent_size = 2
+indent_style = space
+
+[*.yaml]
+indent_size = 2
+indent_style = space
+
+[*.json]
+indent_size = 2
+indent_style = space
+
+[*.properties]
+indent_size = 4
+indent_style = space
+
+[*.md]
+indent_size = 4
+indent_style = space
+max_line_length = off
+trim_trailing_whitespace = false
+
+[Makefile]
+indent_style = tab
+
+[{CHANGELOG.md,README.md,LICENSE}]
+trim_trailing_whitespace = false
+max_line_length = off

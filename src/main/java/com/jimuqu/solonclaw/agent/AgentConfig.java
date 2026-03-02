@@ -13,13 +13,13 @@ import org.noear.solon.annotation.Configuration;
 @Configuration
 public class AgentConfig {
 
-    @Inject("${nullclaw.agent.model.primary}")
+    @Inject("${solonclaw.agent.model.primary}")
     private String primaryModel;
 
-    @Inject("${nullclaw.agent.maxHistoryMessages}")
+    @Inject("${solonclaw.agent.maxHistoryMessages}")
     private int maxHistoryMessages;
 
-    @Inject("${nullclaw.agent.maxToolIterations}")
+    @Inject("${solonclaw.agent.maxToolIterations}")
     private int maxToolIterations;
 
     public String getPrimaryModel() {

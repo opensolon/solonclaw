@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter
+        xmlns="https://github.com/spotbugs/filter/3.0.0"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="https://github.com/spotbugs/filter/3.0.0 https://raw.githubusercontent.com/spotbugs/spotbugs/3.1.0/spotbugs/etc/findbugsfilter.xsd">
+
+    <!--
+        SpotBugs Exclusion Filter for SolonClaw
+        Exclude certain false positives and acceptable patterns
+    -->
+
+    <!-- Exclude test classes from all checks -->
+    <Match>
+        <Class name="~.*Test"/>
+    </Match>
+    <Match>
+        <Class name="~.*Test\$.*"/>
+    </Match>
+
+    <!-- Exclude generated classes -->
+    <Match>
+        <Class name="~.*\.generated\..*"/>
+    </Match>
+
+    <!-- Exclude record classes from some checks -->
+    <Match>
+        <Or>
+            <Bug pattern="EI_EXPOSE_REP2"/>
+            <Bug pattern="EI_EXPOSE_REP"/>
+        </Or>
+        <Class name="~.*record.*"/>
+    </Match>
+
+    <!-- Allow certain patterns in controller classes -->
+    <Match>
+        <Or>
+            <Bug pattern="EI_EXPOSE_REP2"/>
+            <Bug pattern="EI_EXPOSE_REP"/>
+        </Or>
+        <Or>
+            <Class name="~.*Controller"/>
+            <Class name="~.*Service"/>
+        </Or>
+    </Match>
+
+    <!-- Exclude builders and config classes from some checks -->
+    <Match>
+        <Or>
+            <Bug pattern="RV_RETURN_VALUE_IGNORED_NO_SIDE_EFFECT"/>
+            <Bug pattern="DM_DEFAULT_ENCODING"/>
+        </Or>
+        <Or>
+            <Class name="~.*Builder"/>
+            <Class name="~.*Config"/>
+        </Or>
+    </Match>
+
+    <!-- Allow certain logging patterns -->
+    <Match>
+        <Bug pattern="SLF4J_FORMAT_SHOULD_BE_CONST"/>
+    </Match>
+
+    <!-- Exclude specific bug patterns that are acceptable in this project -->
+    <Match>
+        <!-- Allow use of System.out in certain cases -->
+        <Bug pattern="SYSTEM_OUT_STREAM"/>
+    </Match>
+
+    <Match>
+        <!-- Allow certain SQL patterns - H2 embedded database -->
+        <Bug pattern="SQL_NONCONSTANT_STRING_PASSED_TO_EXECUTE"/>
+        <Class name="~.*MemoryService"/>
+    </Match>
+
+    <Match>
+        <!-- Ignore return value in fluent API patterns -->
+        <Bug pattern="RV_RETURN_VALUE_IGNORED"/>
+        <Or>
+            <Class name="~.*Builder"/>
+            <Method name="~builder|with.*|set.*"/>
+        </Or>
+    </Match>
+
+    <!-- Exclude internal implementation classes -->
+    <Match>
+        <Package name="~com\.jimuqu\.solonclaw\.internal\..*"/>
+    </Match>
+
+</FindBugsFilter>

@@ -22,28 +22,28 @@ public class WorkspaceConfig {
 
     private static final Logger log = LoggerFactory.getLogger(WorkspaceConfig.class);
 
-    @Inject("${nullclaw.workspace}")
+    @Inject("${solonclaw.workspace}")
     private String workspacePath;
 
-    @Inject("${nullclaw.directories.mcpConfig}")
+    @Inject("${solonclaw.directories.mcpConfig}")
     private String mcpConfigFile;
 
-    @Inject("${nullclaw.directories.skillsDir}")
+    @Inject("${solonclaw.directories.skillsDir}")
     private String skillsDir;
 
-    @Inject("${nullclaw.directories.jobsFile}")
+    @Inject("${solonclaw.directories.jobsFile}")
     private String jobsFile;
 
-    @Inject("${nullclaw.directories.jobHistoryFile}")
+    @Inject("${solonclaw.directories.jobHistoryFile}")
     private String jobHistoryFile;
 
-    @Inject("${nullclaw.directories.database}")
+    @Inject("${solonclaw.directories.database}")
     private String databaseFile;
 
-    @Inject("${nullclaw.directories.shellWorkspace}")
+    @Inject("${solonclaw.directories.shellWorkspace}")
     private String shellWorkspace;
 
-    @Inject("${nullclaw.directories.logsDir}")
+    @Inject("${solonclaw.directories.logsDir}")
     private String logsDir;
 
     @Bean
