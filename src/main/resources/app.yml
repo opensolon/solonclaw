@@ -4,6 +4,9 @@ solon:
   port: 12345
   env: dev
 
+server:
+  port: 12345
+
   # ==================== Solon AI 配置 ====================
   ai:
     chat:
