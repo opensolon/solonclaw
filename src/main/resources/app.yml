@@ -30,7 +30,6 @@ solonclaw:
   workspace: "./workspace"
 
   directories:
-    mcpConfig: "mcp.json"
     skillsDir: "skills"
     jobsFile: "jobs.json"
     jobHistoryFile: "job-history.json"

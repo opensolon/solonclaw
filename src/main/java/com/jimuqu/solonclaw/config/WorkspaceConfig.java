@@ -25,9 +25,6 @@ public class WorkspaceConfig {
     @Inject("${solonclaw.workspace}")
     private String workspacePath;
 
-    @Inject("${solonclaw.directories.mcpConfig}")
-    private String mcpConfigFile;
-
     @Inject("${solonclaw.directories.skillsDir}")
     private String skillsDir;
 
@@ -55,7 +52,6 @@ public class WorkspaceConfig {
 
         WorkspaceInfo info = new WorkspaceInfo(
                 workspace,
-                workspace.resolve(mcpConfigFile),
                 workspace.resolve(skillsDir),
                 workspace.resolve(jobsFile),
                 workspace.resolve(jobHistoryFile),
@@ -68,7 +64,6 @@ public class WorkspaceConfig {
         info.mkdirs();
 
         log.info("SolonClaw 工作目录: {}", workspace);
-        log.info("  - MCP 配置: {}", info.mcpConfigFile());
         log.info("  - Skills 目录: {}", info.skillsDir());
         log.info("  - 数据库: {}", info.databaseFile());
 
@@ -79,7 +74,6 @@ public class WorkspaceConfig {
      * 工作目录信息
      *
      * @param workspace       工作目录根路径
-     * @param mcpConfigFile   MCP 配置文件
      * @param skillsDir       Skills 目录
      * @param jobsFile        任务配置文件
      * @param jobHistoryFile  任务历史文件
@@ -89,7 +83,6 @@ public class WorkspaceConfig {
      */
     public record WorkspaceInfo(
             Path workspace,
-            Path mcpConfigFile,
             Path skillsDir,
             Path jobsFile,
             Path jobHistoryFile,
