@@ -6,56 +6,227 @@
     <title>SolonClaw - MCP 管理</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        .custom-scroll::-webkit-scrollbar { width: 6px; }
-        .custom-scroll::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 3px; }
-        .custom-scroll::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 3px; }
-        .card-hover { transition: all 0.2s ease-in-out; }
-        .card-hover:hover { transform: translateY(-4px); box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15); }
-        *:focus-visible { outline: 2px solid #3B82F6; outline-offset: 2px; }
+        /* ==================== 设计系统变量 ==================== */
+        :root {
+            --primary-color: #2563eb;
+            --primary-hover: #1d4ed8;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --neutral-50: #f9fafb;
+            --neutral-100: #f3f4f6;
+            --neutral-200: #e5e7eb;
+            --neutral-300: #d1d5db;
+            --neutral-400: #9ca3af;
+            --neutral-500: #6b7280;
+            --neutral-600: #4b5563;
+            --neutral-700: #374151;
+            --neutral-800: #1f2937;
+            --neutral-900: #111827;
+
+            --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06);
+            --card-hover-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+
+            --transition-fast: 150ms ease-in-out;
+            --transition-normal: 200ms ease-in-out;
+            --transition-slow: 300ms ease-in-out;
+
+            --radius-sm: 6px;
+            --radius-md: 10px;
+            --radius-lg: 14px;
+            --radius-xl: 18px;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--neutral-100);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* ==================== 滚动条 ==================== */
+        .custom-scroll::-webkit-scrollbar {
+            width: 7px;
+        }
+        .custom-scroll::-webkit-scrollbar-track {
+            background: var(--neutral-100);
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: var(--neutral-300);
+            border-radius: 4px;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb:hover {
+            background: var(--neutral-400);
+        }
+
+        /* ==================== MCP 服务器卡片 ==================== */
+        .server-card {
+            background: white;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--neutral-200);
+            padding: 20px;
+            box-shadow: var(--card-shadow);
+            transition: all var(--transition-normal);
+            margin-bottom: 12px;
+        }
+        .server-card:hover {
+            box-shadow: var(--card-hover-shadow);
+            transform: translateY(-1px);
+        }
+
+        /* ==================== 状态标签 ==================== */
+        .status-badge {
+            padding: 6px 12px;
+            border-radius: var(--radius-md);
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .status-badge.running {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success-color);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+        .status-badge.stopped {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--danger-color);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        /* ==================== 按钮 ==================== */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px 16px;
+            border-radius: var(--radius-md);
+            font-weight: 500;
+            font-size: 14px;
+            border: none;
+            cursor: pointer;
+            transition: all var(--transition-normal);
+        }
+        .btn-primary {
+            background: var(--primary-color);
+            color: white;
+        }
+        .btn-primary:hover {
+            background: var(--primary-hover);
+        }
+        .btn-secondary {
+            background: white;
+            color: var(--neutral-700);
+            border: 1px solid var(--neutral-200);
+        }
+        .btn-secondary:hover {
+            background: var(--neutral-50);
+            border-color: var(--neutral-300);
+        }
+        .btn-success {
+            background: var(--success-color);
+            color: white;
+        }
+        .btn-success:hover {
+            background: #059669;
+        }
+        .btn-danger {
+            background: var(--danger-color);
+            color: white;
+        }
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+        .btn-sm {
+            padding: 8px 12px;
+            font-size: 13px;
+        }
+
+        /* ==================== 模态框 ==================== */
+        .modal-backdrop {
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+        }
+        .modal-content {
+            background: white;
+            border-radius: var(--radius-xl);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+
+        /* ==================== 表单 ==================== */
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--neutral-700);
+            margin-bottom: 8px;
+        }
+        .form-input {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid var(--neutral-200);
+            border-radius: var(--radius-md);
+            font-size: 14px;
+            transition: all var(--transition-fast);
+        }
+        .form-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        /* ==================== 焦点可见性 ==================== */
+        *:focus-visible {
+            outline: 2px solid var(--primary-color);
+            outline-offset: 2px;
+        }
+        button:focus-visible {
+            outline-offset: 3px;
+        }
     </style>
 </head>
-<body class="bg-gray-100 h-full overflow-y-auto custom-scroll p-4">
-    <div class="bg-white rounded-xl shadow-md">
-        <div class="border-b flex items-center justify-between px-4 py-3">
-            <h2 class="text-lg font-semibold text-gray-800">MCP 服务器管理</h2>
+<body class="h-full overflow-y-auto custom-scroll p-5">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="border-b border-gray-200 flex items-center justify-between px-5 py-4">
+            <h2 class="text-lg font-bold text-gray-900 tracking-tight">MCP 服务器管理</h2>
             <div class="flex space-x-2">
-                <button onclick="startAllServers()" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg text-sm">全部启动</button>
-                <button onclick="stopAllServers()" class="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg text-sm">全部停止</button>
-                <button onclick="openAddServerModal()" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm flex items-center space-x-1">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <button onclick="startAllServers()" class="btn btn-success btn-sm">全部启动</button>
+                <button onclick="stopAllServers()" class="btn btn-danger btn-sm">全部停止</button>
+                <button onclick="openAddServerModal()" class="btn btn-primary btn-sm">
+                    <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
                     </svg>
-                    <span>添加服务器</span>
+                    添加服务器
                 </button>
             </div>
         </div>
-        <div id="mcpContent" class="p-4">
-            <div class="flex items-center justify-center h-32 text-gray-400">
-                <span>加载中...</span>
+        <div id="mcpContent" class="p-5">
+            <div class="flex items-center justify-center h-40 text-gray-400">
+                <span class="font-medium">加载中...</span>
             </div>
         </div>
     </div>
 
     <!-- 添加服务器模态框 -->
-    <div id="addServerModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div class="bg-white rounded-2xl p-6 w-full max-w-md mx-4">
-            <h3 class="text-xl font-semibold text-gray-800 mb-4">添加 MCP 服务器</h3>
+    <div id="addServerModal" class="hidden fixed inset-0 modal-backdrop flex items-center justify-center z-50">
+        <div class="modal-content p-6 w-full max-w-md mx-4">
+            <h3 class="text-xl font-bold text-gray-900 mb-5 tracking-tight">添加 MCP 服务器</h3>
             <form id="addServerForm" onsubmit="addServer(event)">
                 <div class="mb-4">
-                    <label class="block text-sm font-medium text-gray-700 mb-1">服务器名称</label>
-                    <input type="text" id="serverName" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <label class="form-label">服务器名称</label>
+                    <input type="text" id="serverName" required class="form-input">
                 </div>
                 <div class="mb-4">
-                    <label class="block text-sm font-medium text-gray-700 mb-1">命令</label>
-                    <input type="text" id="serverCommand" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="例如: npx, uvx">
+                    <label class="form-label">命令</label>
+                    <input type="text" id="serverCommand" required class="form-input" placeholder="例如: npx, uvx">
                 </div>
-                <div class="mb-4">
-                    <label class="block text-sm font-medium text-gray-700 mb-1">参数</label>
-                    <input type="text" id="serverArgs" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="例如: @modelcontextprotocol/server-github">
+                <div class="mb-5">
+                    <label class="form-label">参数</label>
+                    <input type="text" id="serverArgs" class="form-input" placeholder="例如: @modelcontextprotocol/server-github">
                 </div>
                 <div class="flex space-x-3">
-                    <button type="button" onclick="closeAddServerModal()" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg">取消</button>
-                    <button type="submit" class="flex-1 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg">添加</button>
+                    <button type="button" onclick="closeAddServerModal()" class="btn btn-secondary flex-1">取消</button>
+                    <button type="submit" class="btn btn-primary flex-1">添加</button>
                 </div>
             </form>
         </div>

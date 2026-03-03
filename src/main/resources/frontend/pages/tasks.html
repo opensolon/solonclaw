@@ -6,51 +6,251 @@
     <title>SolonClaw - 任务管理</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        .custom-scroll::-webkit-scrollbar { width: 6px; }
-        .custom-scroll::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 3px; }
-        .custom-scroll::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 3px; }
-        .card-hover { transition: all 0.2s ease-in-out; }
-        .card-hover:hover { transform: translateY(-4px); box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15); }
-        *:focus-visible { outline: 2px solid #3B82F6; outline-offset: 2px; }
+        /* ==================== 设计系统变量 ==================== */
+        :root {
+            --primary-color: #2563eb;
+            --primary-hover: #1d4ed8;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --neutral-50: #f9fafb;
+            --neutral-100: #f3f4f6;
+            --neutral-200: #e5e7eb;
+            --neutral-300: #d1d5db;
+            --neutral-400: #9ca3af;
+            --neutral-500: #6b7280;
+            --neutral-600: #4b5563;
+            --neutral-700: #374151;
+            --neutral-800: #1f2937;
+            --neutral-900: #111827;
+
+            --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06);
+            --card-hover-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+
+            --transition-fast: 150ms ease-in-out;
+            --transition-normal: 200ms ease-in-out;
+            --transition-slow: 300ms ease-in-out;
+
+            --radius-sm: 6px;
+            --radius-md: 10px;
+            --radius-lg: 14px;
+            --radius-xl: 18px;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--neutral-100);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* ==================== 滚动条 ==================== */
+        .custom-scroll::-webkit-scrollbar {
+            width: 7px;
+        }
+        .custom-scroll::-webkit-scrollbar-track {
+            background: var(--neutral-100);
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: var(--neutral-300);
+            border-radius: 4px;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb:hover {
+            background: var(--neutral-400);
+        }
+
+        /* ==================== 统计卡片 ==================== */
+        .stat-card {
+            background: white;
+            padding: 24px;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--neutral-200);
+            box-shadow: var(--card-shadow);
+            transition: all var(--transition-normal);
+        }
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--card-hover-shadow);
+        }
+        .stat-label {
+            font-size: 13px;
+            color: var(--neutral-500);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--neutral-800);
+            margin-top: 10px;
+            line-height: 1;
+        }
+        .stat-value.success { color: var(--success-color); }
+        .stat-value.warning { color: var(--warning-color); }
+        .stat-value.danger { color: var(--danger-color); }
+        .stat-value.primary { color: var(--primary-color); }
+
+        /* ==================== Tab 按钮 ==================== */
+        .tab-btn {
+            padding: 14px 18px;
+            border-bottom: 2px solid transparent;
+            font-weight: 500;
+            font-size: 14px;
+            color: var(--neutral-500);
+            transition: all var(--transition-fast);
+            position: relative;
+        }
+        .tab-btn:hover {
+            color: var(--neutral-700);
+        }
+        .tab-btn.active {
+            color: var(--primary-color);
+            border-bottom-color: var(--primary-color);
+        }
+        .tab-badge {
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+        .tab-badge.active {
+            background: rgba(37, 99, 235, 0.1);
+            color: var(--primary-color);
+        }
+        .tab-badge.inactive {
+            background: var(--neutral-100);
+            color: var(--neutral-500);
+        }
+
+        /* ==================== 任务卡片 ==================== */
+        .task-card {
+            background: white;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--neutral-200);
+            padding: 20px;
+            box-shadow: var(--card-shadow);
+            transition: all var(--transition-normal);
+            margin-bottom: 12px;
+        }
+        .task-card:hover {
+            box-shadow: var(--card-hover-shadow);
+            transform: translateY(-1px);
+        }
+
+        /* ==================== 状态标签 ==================== */
+        .status-badge {
+            padding: 6px 12px;
+            border-radius: var(--radius-md);
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .status-badge.pending {
+            background: rgba(245, 158, 11, 0.1);
+            color: var(--warning-color);
+            border: 1px solid rgba(245, 158, 11, 0.2);
+        }
+        .status-badge.executing {
+            background: rgba(37, 99, 235, 0.1);
+            color: var(--primary-color);
+            border: 1px solid rgba(37, 99, 235, 0.2);
+        }
+        .status-badge.completed {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success-color);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+
+        /* ==================== 优先级标签 ==================== */
+        .priority-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+        .priority-high { background: var(--danger-color); }
+        .priority-medium { background: var(--warning-color); }
+        .priority-low { background: var(--success-color); }
+
+        /* ==================== 按钮 ==================== */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px 16px;
+            border-radius: var(--radius-md);
+            font-weight: 500;
+            font-size: 14px;
+            border: none;
+            cursor: pointer;
+            transition: all var(--transition-normal);
+        }
+        .btn-primary {
+            background: var(--primary-color);
+            color: white;
+        }
+        .btn-primary:hover {
+            background: var(--primary-hover);
+        }
+        .btn-secondary {
+            background: white;
+            color: var(--neutral-700);
+            border: 1px solid var(--neutral-200);
+        }
+        .btn-secondary:hover {
+            background: var(--neutral-50);
+            border-color: var(--neutral-300);
+        }
+
+        /* ==================== 焦点可见性 ==================== */
+        *:focus-visible {
+            outline: 2px solid var(--primary-color);
+            outline-offset: 2px;
+        }
+        button:focus-visible {
+            outline-offset: 3px;
+        }
     </style>
 </head>
-<body class="bg-gray-100 h-full overflow-y-auto custom-scroll p-4">
+<body class="h-full overflow-y-auto custom-scroll p-5">
     <!-- 统计信息 -->
-    <div class="mb-4 bg-white rounded-xl shadow-md p-4">
-        <h2 class="text-lg font-semibold text-gray-800 mb-3">统计信息</h2>
-        <div class="grid grid-cols-2 gap-3 text-sm">
-            <div class="bg-gray-50 rounded-lg p-2">
-                <div class="text-gray-500">总任务数</div>
-                <div id="statTotalTasks" class="text-xl font-bold text-gray-800">0</div>
+    <div class="mb-5">
+        <h2 class="text-lg font-bold text-gray-900 mb-4 tracking-tight">统计信息</h2>
+        <div class="grid grid-cols-2 gap-4">
+            <div class="stat-card">
+                <div class="stat-label">总任务数</div>
+                <div id="statTotalTasks" class="stat-value primary">0</div>
             </div>
-            <div class="bg-gray-50 rounded-lg p-2">
-                <div class="text-gray-500">已完成任务</div>
-                <div id="statCompletedTasks" class="text-xl font-bold text-green-600">0</div>
+            <div class="stat-card">
+                <div class="stat-label">已完成任务</div>
+                <div id="statCompletedTasks" class="stat-value success">0</div>
             </div>
         </div>
     </div>
 
     <!-- 任务管理 -->
-    <div class="bg-white rounded-xl shadow-md">
-        <div class="border-b">
-            <div class="flex space-x-8 px-4">
-                <button onclick="showTaskTab('pending')" id="tab-pending" class="tab-btn py-3 px-2 border-b-2 border-blue-500 text-blue-600 font-medium">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="border-b border-gray-200">
+            <div class="flex space-x-1">
+                <button onclick="showTaskTab('pending')" id="tab-pending" class="tab-btn active">
                     待执行任务
-                    <span id="count-pending" class="ml-1 text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">0</span>
+                    <span id="count-pending" class="tab-badge active">0</span>
                 </button>
-                <button onclick="showTaskTab('executing')" id="tab-executing" class="tab-btn py-3 px-2 border-b-2 border-transparent text-gray-500 hover:text-gray-700 font-medium">
+                <button onclick="showTaskTab('executing')" id="tab-executing" class="tab-btn">
                     执行中
-                    <span id="count-executing" class="ml-1 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">0</span>
+                    <span id="count-executing" class="tab-badge inactive">0</span>
                 </button>
-                <button onclick="showTaskTab('completed')" id="tab-completed" class="tab-btn py-3 px-2 border-b-2 border-transparent text-gray-500 hover:text-gray-700 font-medium">
+                <button onclick="showTaskTab('completed')" id="tab-completed" class="tab-btn">
                     已完成
-                    <span id="count-completed" class="ml-1 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">0</span>
+                    <span id="count-completed" class="tab-badge inactive">0</span>
                 </button>
             </div>
         </div>
-        <div id="taskContent" class="p-4">
-            <div class="flex items-center justify-center h-32 text-gray-400">
-                <span>加载中...</span>
+        <div id="taskContent" class="p-5">
+            <div class="flex items-center justify-center h-40 text-gray-400">
+                <span class="font-medium">加载中...</span>
             </div>
         </div>
     </div>

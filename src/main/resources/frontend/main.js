@@ -96,20 +96,20 @@ async function checkHealth() {
 
         if (data.code === 200) {
             statusIndicator.innerHTML = `
-                <span class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
-                <span class="text-sm">已连接</span>
+                <span class="status-dot online pulse"></span>
+                <span class="text-sm font-medium text-gray-600">已连接</span>
             `;
         } else {
             statusIndicator.innerHTML = `
-                <span class="w-2 h-2 bg-red-400 rounded-full"></span>
-                <span class="text-sm">未连接</span>
+                <span class="status-dot offline"></span>
+                <span class="text-sm font-medium text-gray-600">未连接</span>
             `;
         }
     } catch (error) {
         const statusIndicator = document.getElementById('statusIndicator');
         statusIndicator.innerHTML = `
-            <span class="w-2 h-2 bg-red-400 rounded-full"></span>
-            <span class="text-sm">未连接</span>
+            <span class="status-dot offline"></span>
+            <span class="text-sm font-medium text-gray-600">未连接</span>
         `;
     }
 }
