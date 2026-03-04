@@ -10,7 +10,8 @@ import org.slf4j.LoggerFactory;
 /**
  * 学习编排服务
  * <p>
- * 负责协调和编排学习系统的各个组件，注册定时任务
+ * 负责协调和编排学习系统的各个组件
+ * 采用事件驱动机制，实时响应技能需求
  *
  * @author SolonClaw
  */
@@ -41,30 +42,30 @@ public class LearningOrchestrator {
             return;
         }
 
-        log.info("初始化 SolonClaw 学习系统");
+        log.info("初始化 SolonClaw 学习系统（事件驱动模式）");
 
         // 打印配置信息
         LearningConfig.ReflectionConfig reflectionConfig = learningConfig.getReflectionConfig();
         LearningConfig.AutoSkillConfig autoSkillConfig = learningConfig.getAutoSkillConfig();
         LearningConfig.KnowledgeConfig knowledgeConfig = learningConfig.getKnowledgeConfig();
 
-        log.info("反思配置: cron={}, 时间窗口={}小时, 最大消息数={}",
+        log.info("反思配置：cron={}, 时间窗口={}小时，最大消息数={}",
             reflectionConfig.cron(), reflectionConfig.timeWindowHours(), reflectionConfig.maxMessagesPerReflection());
 
-        log.info("自动技能配置: 处理cron={}, 置信度阈值={}, 实时分析={}",
-            autoSkillConfig.processCron(), autoSkillConfig.minConfidenceThreshold(),
-            autoSkillConfig.realtimeAnalysisEnabled());
+        log.info("自动技能配置：置信度阈值={}, 实时分析={}",
+            autoSkillConfig.minConfidenceThreshold(), autoSkillConfig.realtimeAnalysisEnabled());
 
-        log.info("知识库配置: 最大搜索结果={}, 最小置信度={}",
+        log.info("知识库配置：最大搜索结果={}, 最小置信度={}",
             knowledgeConfig.maxSearchResults(), knowledgeConfig.minConfidenceThreshold());
 
-        log.info("学习系统初始化完成");
+        log.info("学习系统初始化完成 - 技能创建采用事件驱动模式，不再使用定时任务");
     }
 
     /**
      * 定时执行反思任务
      * <p>
      * 每小时执行一次，分析最近的日志和经验
+     * 反思完成后会立即处理产生的技能需求
      */
     @Scheduled(cron = "${solonclaw.learning.reflection.cron:0 0 * * * ?}")
     public void scheduledReflectionTask() {
@@ -78,9 +79,11 @@ public class LearningOrchestrator {
             long reflectionId = reflectionService.performScheduledReflection(null);
 
             if (reflectionId > 0) {
-                log.info("定时反思任务完成: reflectionId={}", reflectionId);
+                log.info("定时反思任务完成：reflectionId={}", reflectionId);
+                // 反思完成后，立即处理可能产生的技能需求
+                processSkillRequestsForReflection(reflectionId);
             } else {
-                log.debug("定时反思任务完成: 没有需要反思的内容");
+                log.debug("定时反思任务完成：没有需要反思的内容");
             }
 
         } catch (Exception e) {
@@ -89,35 +92,11 @@ public class LearningOrchestrator {
     }
 
     /**
-     * 定时处理技能请求
-     * <p>
-     * 每15分钟执行一次，处理待安装的技能请求
-     */
-    @Scheduled(cron = "${solonclaw.learning.autoSkill.processCron:0 */15 * * * ?}")
-    public void processSkillRequestsTask() {
-        if (!learningConfig.isEnabled()) {
-            return;
-        }
-
-        log.info("开始处理待安装的技能请求");
-
-        try {
-            AutoSkillService.ProcessResult result = autoSkillService.processPendingSkillRequests();
-
-            log.info("技能请求处理完成: 总计={}, 批准={}, 等待确认={}",
-                result.totalProcessed(), result.approved(), result.waitingConfirmation());
-
-        } catch (Exception e) {
-            log.error("处理技能请求任务执行失败", e);
-        }
-    }
-
-    /**
      * 对话完成后的回调
      * <p>
      * 在每次对话完成后触发，用于实时分析和学习
      *
-     * @param sessionId 会话ID
+     * @param sessionId 会话 ID
      * @param response  Agent 响应
      * @param error     发生的错误（如果有）
      */
@@ -126,28 +105,25 @@ public class LearningOrchestrator {
             return;
         }
 
-        log.debug("对话完成回调: sessionId={}, hasError={}", sessionId, error != null);
+        log.debug("对话完成回调：sessionId={}, hasError={}", sessionId, error != null);
 
         try {
-            // 如果发生了错误，触发错误反思
+            // 如果发生了错误，触发错误反思并实时处理技能需求
             if (error != null) {
-                log.warn("检测到错误，触发错误反省: sessionId={}, error={}",
+                log.warn("检测到错误，触发错误反省：sessionId={}, error={}",
                     sessionId, error.getMessage());
 
-                reflectionService.triggerErrorReflection(
+                long reflectionId = reflectionService.triggerErrorReflection(
                     sessionId,
                     error.getClass().getSimpleName(),
                     error.getMessage(),
                     "对话执行过程中发生错误"
                 );
-            }
 
-            // 如果启用了实时分析，分析技能需求
-            LearningConfig.AutoSkillConfig autoSkillConfig = learningConfig.getAutoSkillConfig();
-            if (autoSkillConfig.realtimeAnalysisEnabled()) {
-                // TODO: 实现 analyzeSkillNeeds 方法
-                // autoSkillService.analyzeSkillNeeds(sessionId, response, error);
-                log.debug("实时分析技能需求功能待实现");
+                // 错误反思完成后，立即处理可能产生的技能需求
+                if (reflectionId > 0) {
+                    processSkillRequestsForReflection(reflectionId);
+                }
             }
 
             // 记录学习经验（如果有重要发现）
@@ -171,12 +147,57 @@ public class LearningOrchestrator {
                     sessionId,
                     "完成对话任务",
                     true,
-                    "成功完成用户请求: " + response.substring(0, Math.min(100, response.length()))
+                    "成功完成用户请求：" + response.substring(0, Math.min(100, response.length()))
                 );
             }
 
         } catch (Exception e) {
             log.debug("记录会话学习经验失败", e);
+        }
+    }
+
+    /**
+     * 处理指定反思产生的技能需求
+     * <p>
+     * 事件驱动的核心方法，在反思完成后立即调用
+     *
+     * @param reflectionId 反思记录 ID
+     */
+    private void processSkillRequestsForReflection(long reflectionId) {
+        try {
+            log.info("开始处理反思产生的技能需求：reflectionId={}", reflectionId);
+
+            // 获取该反思产生的所有待处理技能请求
+            var requests = knowledgeStore.getSkillRequests(reflectionId, 10);
+
+            if (requests.isEmpty()) {
+                log.debug("反思 {} 没有产生技能需求", reflectionId);
+                return;
+            }
+
+            int processedCount = 0;
+            int createdCount = 0;
+
+            for (var request : requests) {
+                if ("pending".equals(request.status())) {
+                    processedCount++;
+                    boolean success = autoSkillService.analyzeAndCreateSkill(request.id());
+                    if (success) {
+                        createdCount++;
+                        log.info("技能创建成功：reflectionId={}, skillName={}",
+                            reflectionId, request.skillName());
+                    } else {
+                        log.warn("技能创建失败：reflectionId={}, skillName={}, status={}",
+                            reflectionId, request.skillName(), request.status());
+                    }
+                }
+            }
+
+            log.info("反思 {} 的技能需求处理完成：总计={}, 成功创建={}",
+                reflectionId, processedCount, createdCount);
+
+        } catch (Exception e) {
+            log.error("处理反思技能需求失败：reflectionId={}", reflectionId, e);
         }
     }
 
@@ -208,19 +229,15 @@ public class LearningOrchestrator {
     }
 
     /**
-     * 手动触发反思
+     * 手动触发反思（用于 API 接口）
      */
     public long triggerReflection() {
         log.info("手动触发反思");
-        return reflectionService.performScheduledReflection(null);
-    }
-
-    /**
-     * 手动处理技能请求
-     */
-    public AutoSkillService.ProcessResult processSkillRequests() {
-        log.info("手动处理技能请求");
-        return autoSkillService.processPendingSkillRequests();
+        long reflectionId = reflectionService.performScheduledReflection(null);
+        if (reflectionId > 0) {
+            processSkillRequestsForReflection(reflectionId);
+        }
+        return reflectionId;
     }
 
     /**

@@ -2,6 +2,7 @@ package com.jimuqu.solonclaw.memory;
 
 import org.noear.solon.annotation.Component;
 import org.noear.solon.annotation.Inject;
+import org.noear.solon.scheduling.annotation.Scheduled;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,7 +34,7 @@ public class MemoryService {
     public void saveUserMessage(String sessionId, String message) {
         sessionStore.createOrGetSession(sessionId);
         sessionStore.saveMessage(sessionId, "user", message);
-        log.debug("保存用户消息: sessionId={}, length={}", sessionId, message.length());
+        log.debug("保存用户消息：sessionId={}, length={}", sessionId, message.length());
     }
 
     /**
@@ -42,7 +43,7 @@ public class MemoryService {
     public void saveAssistantMessage(String sessionId, String response) {
         sessionStore.createOrGetSession(sessionId);
         sessionStore.saveMessage(sessionId, "assistant", response);
-        log.debug("保存 AI 响应: sessionId={}, length={}", sessionId, response.length());
+        log.debug("保存 AI 响应：sessionId={}, length={}", sessionId, response.length());
     }
 
     /**
@@ -52,7 +53,7 @@ public class MemoryService {
         sessionStore.createOrGetSession(sessionId);
         String content = String.format("[工具调用 %s]: %s", toolName, result);
         sessionStore.saveMessage(sessionId, "tool", content);
-        log.debug("保存工具调用: sessionId={}, tool={}", sessionId, toolName);
+        log.debug("保存工具调用：sessionId={}, tool={}", sessionId, toolName);
     }
 
     /**
@@ -71,7 +72,7 @@ public class MemoryService {
             history.add(message);
         }
 
-        log.debug("获取会话历史: sessionId={}, count={}", sessionId, history.size());
+        log.debug("获取会话历史：sessionId={}, count={}", sessionId, history.size());
         return history;
     }
 
@@ -94,14 +95,38 @@ public class MemoryService {
      */
     public void deleteSession(String sessionId) {
         sessionStore.deleteSession(sessionId);
-        log.info("删除会话: {}", sessionId);
+        log.info("删除会话：{}", sessionId);
     }
 
     /**
-     * 清理旧会话（可选功能）
+     * 清理旧会话
      */
-    public void cleanupOldSessions(int days) {
-        // TODO: 实现旧会话清理逻辑
-        log.debug("清理旧会话: days={}", days);
+    public CleanupStats cleanupOldSessions(int days) {
+        log.info("开始清理旧会话：保留{}天", days);
+        SessionStore.CleanupResult result = sessionStore.cleanupOldSessions(days);
+        return new CleanupStats(result.deletedSessions(), result.deletedMessages());
+    }
+
+    /**
+     * 定时清理旧会话（每天凌晨 2 点执行）
+     */
+    @Scheduled(cron = "0 0 2 * * ?")
+    public void scheduledCleanup() {
+        try {
+            int retentionDays = 10; // 保留 10 天
+            CleanupStats stats = cleanupOldSessions(retentionDays);
+            log.info("定时清理完成：删除 {} 个会话，{} 条消息", stats.deletedSessions(), stats.deletedMessages());
+        } catch (Exception e) {
+            log.error("定时清理失败", e);
+        }
+    }
+
+    /**
+     * 清理统计
+     */
+    public record CleanupStats(
+            int deletedSessions,
+            int deletedMessages
+    ) {
     }
 }

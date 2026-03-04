@@ -6,6 +6,130 @@ const API_BASE = 'http://localhost:12345/api';
 let sessionId = null;
 let sessions = [];
 
+// ==================== Markdown 渲染配置 ====================
+
+// 注册 Highlight.js 语言
+if (typeof hljs !== 'undefined') {
+    hljs.registerLanguage('javascript', hljs.languages.javascript);
+    hljs.registerLanguage('python', hljs.languages.python);
+    hljs.registerLanguage('java', hljs.languages.java);
+    hljs.registerLanguage('bash', hljs.languages.bash);
+    hljs.registerLanguage('json', hljs.languages.json);
+    hljs.registerLanguage('shell', hljs.languages.bash);
+    hljs.registerLanguage('typescript', hljs.languages.javascript);
+}
+
+// 配置 marked
+if (typeof marked !== 'undefined') {
+    const renderer = new marked.Renderer();
+
+    // 自定义代码块渲染（带语法高亮和复制按钮）
+    renderer.code = function(code, language) {
+        const validLang = language && hljs && hljs.getLanguage(language);
+        let highlighted = code;
+
+        if (validLang) {
+            try {
+                highlighted = hljs.highlight(code, { language: language || 'text' }).value;
+            } catch (e) {
+                console.warn('代码高亮失败:', e);
+            }
+        }
+
+        const langDisplay = language || 'text';
+
+        return `
+            <div class="code-block-wrapper relative group">
+                <div class="code-header flex items-center justify-between bg-gray-800 text-gray-300 px-4 py-2 text-xs rounded-t-md">
+                    <span class="language-badge font-mono">${langDisplay}</span>
+                    <button class="copy-code-btn hover:text-white transition-colors" onclick="copyCode(this)" title="复制代码">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                        </svg>
+                        <span class="ml-1">复制</span>
+                    </button>
+                </div>
+                <pre class="bg-gray-900 rounded-b-md overflow-x-auto"><code class="hljs language-${langDisplay.toLowerCase()}">${highlighted}</code></pre>
+            </div>
+        `;
+    };
+
+    // 自定义表格渲染（带滚动）
+    renderer.table = function(header, body) {
+        return `
+            <div class="table-wrapper overflow-x-auto my-4">
+                <table class="min-w-full border-collapse">
+                    <thead>
+                        <tr class="bg-gray-50">${header}</tr>
+                    </thead>
+                    <tbody>${body}</tbody>
+                </table>
+            </div>
+        `;
+    };
+
+    // 数学公式支持（KaTeX）
+    renderer.html = function(html) {
+        // 处理行内公式 $...$
+        html = html.replace(/\$([^\n$]+?)\$/g, (match, formula) => {
+            try {
+                return katex.renderToString(formula.trim(), {
+                    displayMode: false,
+                    throwOnError: false
+                });
+            } catch (e) {
+                return match;
+            }
+        });
+
+        // 处理块级公式 $$...$$
+        html = html.replace(/\$\$([\s\S]+?)\$\$/g, (match, formula) => {
+            try {
+                return katex.renderToString(formula.trim(), {
+                    displayMode: true,
+                    throwOnError: false
+                });
+            } catch (e) {
+                return match;
+            }
+        });
+
+        return html;
+    };
+
+    marked.setOptions({
+        renderer: renderer,
+        gfm: true,
+        breaks: true,
+        headerIds: true,
+        mangle: false
+    });
+}
+
+/**
+ * 复制代码
+ */
+function copyCode(button) {
+    const codeBlock = button.closest('.code-block-wrapper').querySelector('code');
+    const code = codeBlock.textContent;
+
+    navigator.clipboard.writeText(code).then(() => {
+        const originalText = button.innerHTML;
+        button.innerHTML = `
+            <svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+            </svg>
+            <span class="ml-1 text-green-400">已复制</span>
+        `;
+        setTimeout(() => {
+            button.innerHTML = originalText;
+        }, 2000);
+    }).catch(err => {
+        console.error('复制失败:', err);
+        showToast('复制失败', 'error');
+    });
+}
+
 /**
  * 初始化
  */

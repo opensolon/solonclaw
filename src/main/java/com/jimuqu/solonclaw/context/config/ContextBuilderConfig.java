@@ -25,7 +25,7 @@ public class ContextBuilderConfig {
     private boolean includeToolsInSystem = true;
 
     // 工具上下文配置
-    private boolean toolsEnabled = false;
+    private boolean toolsEnabled = true;
 
     private boolean includeParameters = true;
 

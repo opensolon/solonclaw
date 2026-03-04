@@ -38,15 +38,32 @@ public class SessionStore {
         try (Connection conn = dataSource.getConnection();
              Statement stmt = conn.createStatement()) {
 
+            // 检查并升级 sessions 表结构（兼容旧版本）
+            if (tableExists(conn, "sessions")) {
+                // 检查是否有 last_active_time 列
+                if (!columnExists(conn, "sessions", "last_active_time")) {
+                    log.info("检测到旧版本 sessions 表，正在添加 last_active_time 列...");
+                    stmt.execute("ALTER TABLE sessions ADD COLUMN last_active_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+                    log.info("sessions 表升级完成");
+                }
+            }
+
             // 创建 sessions 表
             String createSessionsTable = """
                 CREATE TABLE IF NOT EXISTS sessions (
                     id VARCHAR PRIMARY KEY,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_active_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
                 """;
             stmt.execute(createSessionsTable);
+
+            // 创建 last_active_time 索引（仅在列存在时）
+            if (columnExists(conn, "sessions", "last_active_time")) {
+                String createLastActiveTimeIndex = "CREATE INDEX IF NOT EXISTS idx_sessions_last_active ON sessions(last_active_time)";
+                stmt.execute(createLastActiveTimeIndex);
+            }
 
             // 创建 messages 表
             String createMessagesTable = """
@@ -202,7 +219,7 @@ public class SessionStore {
      * 更新会话时间戳
      */
     private void updateSessionTimestamp(Connection conn, String sessionId) throws SQLException {
-        String sql = "UPDATE sessions SET updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+        String sql = "UPDATE sessions SET updated_at = CURRENT_TIMESTAMP, last_active_time = CURRENT_TIMESTAMP WHERE id = ?";
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setString(1, sessionId);
             stmt.executeUpdate();
@@ -723,6 +740,64 @@ public class SessionStore {
     }
 
     /**
+     * 获取指定反思的技能需求列表
+     *
+     * @param reflectionId 反思记录 ID
+     * @param limit        返回数量限制
+     * @return 技能需求列表
+     */
+    public List<SkillRequest> getSkillRequestsByReflectionId(Long reflectionId, int limit) {
+        List<SkillRequest> requests = new ArrayList<>();
+
+        if (reflectionId == null || reflectionId < 0) {
+            return requests;
+        }
+
+        try (Connection conn = dataSource.getConnection()) {
+            String sql = """
+                SELECT id, reflection_id, skill_name, skill_description,
+                       priority, status, metadata, created_at, updated_at
+                FROM skill_requests
+                WHERE reflection_id = ?
+                ORDER BY priority ASC, created_at DESC
+                LIMIT ?
+                """;
+
+            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                stmt.setLong(1, reflectionId);
+                stmt.setInt(2, limit);
+
+                ResultSet rs = stmt.executeQuery();
+
+                while (rs.next()) {
+                    requests.add(new SkillRequest(
+                        rs.getLong("id"),
+                        rs.getLong("reflection_id"),
+                        rs.getString("skill_name"),
+                        rs.getString("skill_description"),
+                        rs.getInt("priority"),
+                        rs.getString("status"),
+                        rs.getString("metadata"),
+                        rs.getTimestamp("created_at").toInstant()
+                            .atZone(ZoneId.systemDefault())
+                            .toLocalDateTime(),
+                        rs.getTimestamp("updated_at").toInstant()
+                            .atZone(ZoneId.systemDefault())
+                            .toLocalDateTime()
+                    ));
+                }
+
+                log.debug("获取反思的技能需求：reflectionId={}, count={}", reflectionId, requests.size());
+            }
+        } catch (SQLException e) {
+            log.error("获取反思的技能需求失败", e);
+            throw new RuntimeException("获取反思的技能需求失败", e);
+        }
+
+        return requests;
+    }
+
+    /**
      * 更新技能需求状态
      */
     public void updateSkillRequestStatus(long requestId, String status) {
@@ -789,5 +864,85 @@ public class SessionStore {
             LocalDateTime createdAt,
             LocalDateTime updatedAt
     ) {
+    }
+
+    /**
+     * 清理旧会话
+     *
+     * @param days 保留的天数
+     * @return 清理统计
+     */
+    public CleanupResult cleanupOldSessions(int days) {
+        int deletedSessions = 0;
+        int deletedMessages = 0;
+
+        try (Connection conn = dataSource.getConnection()) {
+            // 先统计要删除的消息数
+            String countMessagesSql = """
+                SELECT COUNT(*) FROM messages
+                WHERE session_id IN (
+                    SELECT id FROM sessions
+                    WHERE last_active_time < ?
+                )
+                """;
+            try (PreparedStatement countStmt = conn.prepareStatement(countMessagesSql)) {
+                LocalDateTime cutoff = LocalDateTime.now().minusDays(days);
+                countStmt.setObject(1, cutoff);
+                ResultSet rs = countStmt.executeQuery();
+                if (rs.next()) {
+                    deletedMessages = rs.getInt(1);
+                }
+            }
+
+            // 删除旧会话（级联删除 messages）
+            String deleteSql = """
+                DELETE FROM sessions
+                WHERE last_active_time < ?
+                """;
+            try (PreparedStatement stmt = conn.prepareStatement(deleteSql)) {
+                LocalDateTime cutoff = LocalDateTime.now().minusDays(days);
+                stmt.setObject(1, cutoff);
+                deletedSessions = stmt.executeUpdate();
+            }
+
+            log.info("清理旧会话完成：删除 {} 个会话，{} 条消息 (保留{}天)", deletedSessions, deletedMessages, days);
+
+        } catch (SQLException e) {
+            log.error("清理旧会话失败", e);
+            throw new RuntimeException("清理旧会话失败", e);
+        }
+
+        return new CleanupResult(deletedSessions, deletedMessages);
+    }
+
+    /**
+     * 清理统计结果
+     */
+    public record CleanupResult(
+            int deletedSessions,
+            int deletedMessages
+    ) {
+    }
+
+    // ==================== 辅助方法 ====================
+
+    /**
+     * 检查表是否存在
+     */
+    private boolean tableExists(Connection conn, String tableName) throws SQLException {
+        DatabaseMetaData meta = conn.getMetaData();
+        try (ResultSet rs = meta.getTables(null, null, tableName, new String[]{"TABLE"})) {
+            return rs.next();
+        }
+    }
+
+    /**
+     * 检查列是否存在
+     */
+    private boolean columnExists(Connection conn, String tableName, String columnName) throws SQLException {
+        DatabaseMetaData meta = conn.getMetaData();
+        try (ResultSet rs = meta.getColumns(null, null, tableName, columnName)) {
+            return rs.next();
+        }
     }
 }

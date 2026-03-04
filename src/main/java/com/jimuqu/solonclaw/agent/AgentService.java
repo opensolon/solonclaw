@@ -1,5 +1,8 @@
 package com.jimuqu.solonclaw.agent;
 
+import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.ObjUtil;
+import cn.hutool.core.util.StrUtil;
 import com.jimuqu.solonclaw.context.Context;
 import com.jimuqu.solonclaw.context.ContextBuilder;
 import com.jimuqu.solonclaw.memory.MemoryService;
@@ -11,16 +14,19 @@ import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.annotation.Component;
+import org.noear.solon.annotation.Init;
 import org.noear.solon.annotation.Inject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Flux;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 /**
@@ -66,12 +72,36 @@ public class AgentService {
     private volatile ReActAgent reactAgent;
 
     /**
-     * 获取或创建 ReActAgent 实例
+     * 预热完成标志
      */
+    private volatile boolean warmedUp = false;
+
+    /**
+     * 预热 ReActAgent
+     */
+    @Init
+    public void warmup() {
+        log.info("开始 ReActAgent 预热...");
+        long startTime = System.currentTimeMillis();
+
+        try {
+            getOrCreateAgent();
+            warmedUp = true;
+            long elapsed = System.currentTimeMillis() - startTime;
+            log.info("ReActAgent 预热完成，耗时：{} ms", elapsed);
+        } catch (Exception e) {
+            log.error("ReActAgent 预热失败", e);
+        }
+    }
+
+    public boolean isWarmedUp() {
+        return warmedUp;
+    }
+
     private ReActAgent getOrCreateAgent() {
-        if (reactAgent == null) {
+        if (ObjUtil.isNull(reactAgent)) {
             synchronized (this) {
-                if (reactAgent == null) {
+                if (ObjUtil.isNull(reactAgent)) {
                     reactAgent = buildReActAgent();
                 }
             }
@@ -79,17 +109,11 @@ public class AgentService {
         return reactAgent;
     }
 
-    /**
-     * 构建 ReActAgent
-     */
     private ReActAgent buildReActAgent() {
         log.info("开始构建 ReActAgent...");
 
-        // 获取所有工具对象
         List<Object> toolObjects = toolRegistry.getToolObjects();
-        log.debug("准备注册 {} 个工具", toolObjects.size());
 
-        // 使用链式构建器构建 ReActAgent
         var builder = ReActAgent.of(chatModel)
                 .name("solonclaw_agent")
                 .role("SolonClaw 智能助手，能够理解用户需求、执行工具命令并提供专业回答")
@@ -99,28 +123,17 @@ public class AgentService {
                 .retryConfig(3, 1000L)
                 .modelOptions(options -> options.temperature(0.7));
 
-        // 注册所有工具（在 build 之前链式调用）
         for (Object tool : toolObjects) {
             builder.defaultToolAdd(tool);
-            log.debug("注册工具: {}", tool.getClass().getSimpleName());
         }
 
-        // 添加日志拦截器（在 build 之前链式调用）
         builder.defaultInterceptorAdd(new LoggingInterceptor());
 
-        // 构建 Agent
         ReActAgent agent = builder.build();
-
         log.info("ReActAgent 构建完成，已注册 {} 个工具", toolObjects.size());
-
         return agent;
     }
 
-    /**
-     * 构建 Agent 指令
-     * <p>
-     * 注意：详细的工具描述已由 ToolContext 组件提供
-     */
     private String buildAgentInstruction() {
         return """
                 你是 SolonClaw 智能助手，一个具备工具调用能力的 AI Agent。
@@ -166,93 +179,63 @@ public class AgentService {
                 - 使用中文回复
                 - 结构化输出，便于阅读
                 - 如果使用了工具，请说明执行了什么操作和结果
+
+                注意：详细的工具列表和参数说明已在系统上下文中提供，请参考使用。
                 """;
     }
 
     /**
      * 智能对话
-     *
-     * @param message   用户消息
-     * @param sessionId 会话ID
-     * @return AI 响应
      */
     public String chat(String message, String sessionId) {
         log.info("Agent chat: sessionId={}, message={}", sessionId, message);
 
         try {
-            // 保存用户消息
             memoryService.saveUserMessage(sessionId, message);
 
-            // ========== 使用上下文构建器构建完整的上下文 ==========
             String enhancedMessage = message;
-            if (contextBuilder != null) {
+            if (ObjUtil.isNotNull(contextBuilder)) {
                 try {
                     Context context = contextBuilder.build(sessionId, message, null);
                     enhancedMessage = context.buildPrompt(message);
-                    log.debug("已使用 ContextBuilder 构建上下文: sessionId={}", sessionId);
+                    log.debug("已使用 ContextBuilder 构建上下文：sessionId={}", sessionId);
                 } catch (Exception e) {
                     log.warn("使用 ContextBuilder 构建上下文失败，回退到原始消息", e);
                     enhancedMessage = message;
                 }
-            } else {
-                // ========== 回退到旧逻辑：学习系统集成（知识检索） ==========
-                if (knowledgeStore != null) {
-                    try {
-                        String knowledgeContext = retrieveRelevantKnowledge(message, sessionId);
-                        if (knowledgeContext != null && !knowledgeContext.isEmpty()) {
-                            enhancedMessage = "[相关经验]\n" + knowledgeContext + "\n[用户问题]\n" + message;
-                            log.debug("已注入相关知识上下文: sessionId={}", sessionId);
-                        }
-                    } catch (Exception e) {
-                        log.warn("检索知识失败，继续正常对话", e);
-                    }
-                }
             }
 
-            // 获取历史记录
             List<Map<String, String>> history = memoryService.getSessionHistory(sessionId);
-            log.info("加载历史记录: sessionId={}, 历史消息数={}", sessionId, history.size());
+            log.info("加载历史记录：sessionId={}, 历史消息数={}", sessionId, history.size());
 
-            // 获取 ReActAgent
             ReActAgent agent = getOrCreateAgent();
-
-            // 创建会话并添加历史消息
             AgentSession session = InMemoryAgentSession.of(sessionId);
 
-            // 将历史消息转换为 ChatMessage 并添加到 session 中
-            if (!history.isEmpty()) {
+            if (CollUtil.isNotEmpty(history)) {
                 List<ChatMessage> historyMessages = new ArrayList<>();
                 for (Map<String, String> msg : history) {
                     String role = msg.get("role");
                     String content = msg.get("content");
-                    if ("user".equals(role)) {
+                    if (StrUtil.equals("user", role)) {
                         historyMessages.add(ChatMessage.ofUser(content));
-                        log.debug("历史用户消息: {}", truncate(content, 50));
-                    } else if ("assistant".equals(role)) {
+                    } else if (StrUtil.equals("assistant", role)) {
                         historyMessages.add(ChatMessage.ofAssistant(content));
-                        log.debug("历史助手消息: {}", truncate(content, 50));
                     }
                 }
                 session.addMessage(historyMessages);
-                log.info("已将 {} 条历史消息添加到 session", historyMessages.size());
             }
 
-            // 调用 ReActAgent（使用增强后的消息）
             String response = agent.prompt(enhancedMessage)
                     .session(session)
                     .call()
                     .getContent();
 
-            // 保存原始 AI 响应（不包含 Base64）
             memoryService.saveAssistantMessage(sessionId, response);
-
-            // 处理响应中的图片文件（转换为 Base64）- 只在返回时处理
             response = fileService.processImagesInContent(response);
 
-            log.info("Agent 响应: sessionId={}, length={}", sessionId, response.length());
+            log.info("Agent 响应：sessionId={}, length={}", sessionId, response.length());
 
-            // ========== 学习系统集成：对话完成触发学习 ==========
-            if (learningOrchestrator != null) {
+            if (ObjUtil.isNotNull(learningOrchestrator)) {
                 try {
                     learningOrchestrator.onChatComplete(sessionId, response, null);
                 } catch (Exception e) {
@@ -265,8 +248,7 @@ public class AgentService {
         } catch (Throwable e) {
             log.error("Agent 对话异常", e);
 
-            // ========== 学习系统集成：错误触发学习 ==========
-            if (learningOrchestrator != null) {
+            if (ObjUtil.isNotNull(learningOrchestrator)) {
                 try {
                     learningOrchestrator.onChatComplete(sessionId, null, e);
                 } catch (Exception learnException) {
@@ -274,123 +256,85 @@ public class AgentService {
                 }
             }
 
-            throw new RuntimeException("AI 对话失败: " + e.getMessage(), e);
+            throw new RuntimeException("AI 对话失败：" + e.getMessage(), e);
         }
     }
 
-    /**
-     * 获取会话历史
-     */
     public List<Map<String, String>> getHistory(String sessionId) {
         return memoryService.getSessionHistory(sessionId);
     }
 
-    /**
-     * 清空会话历史
-     */
     public void clearHistory(String sessionId) {
         memoryService.deleteSession(sessionId);
-        log.info("清空会话历史: sessionId={}", sessionId);
+        log.info("清空会话历史：sessionId={}", sessionId);
     }
 
-    /**
-     * 获取可用工具列表
-     */
     public Map<String, ToolRegistry.ToolInfo> getAvailableTools() {
         return toolRegistry.getTools();
     }
 
     /**
      * 流式对话
-     *
-     * @param message   用户消息
-     * @param sessionId 会话ID
-     * @param eventConsumer 事件消费者，接收流式事件
+     * <p>
+     * 使用 ChatModel.stream() 实现真正的逐 token 流式输出
+     * 注意：此实现不使用 ReActAgent，因为 ReActAgent 需要推理和工具调用，不支持流式
      */
     public void chatStream(String message, String sessionId, Consumer<StreamEvent> eventConsumer) {
         log.info("Agent chatStream: sessionId={}, message={}", sessionId, message);
 
-        // 保存用户消息
         memoryService.saveUserMessage(sessionId, message);
-
-        // 发送开始事件
         eventConsumer.accept(new StreamEvent(StreamEventType.START, "开始处理", null));
 
         try {
-            // 获取历史记录
             List<Map<String, String>> history = memoryService.getSessionHistory(sessionId);
-            log.info("加载历史记录: sessionId={}, 历史消息数={}", sessionId, history.size());
+            log.info("加载历史记录：sessionId={}, 历史消息数={}", sessionId, history.size());
 
-            // 获取 ReActAgent
-            ReActAgent agent = getOrCreateAgent();
-
-            // 创建会话并添加历史消息
-            AgentSession session = InMemoryAgentSession.of(sessionId);
-
-            // 将历史消息转换为 ChatMessage 并添加到 session 中
-            if (!history.isEmpty()) {
-                List<ChatMessage> historyMessages = new ArrayList<>();
-                for (Map<String, String> msg : history) {
-                    String role = msg.get("role");
-                    String content = msg.get("content");
-                    if ("user".equals(role)) {
-                        historyMessages.add(ChatMessage.ofUser(content));
-                        log.debug("历史用户消息: {}", truncate(content, 50));
-                    } else if ("assistant".equals(role)) {
-                        historyMessages.add(ChatMessage.ofAssistant(content));
-                        log.debug("历史助手消息: {}", truncate(content, 50));
-                    }
+            List<ChatMessage> historyMessages = new ArrayList<>();
+            for (Map<String, String> msg : history) {
+                String role = msg.get("role");
+                String content = msg.get("content");
+                if (StrUtil.equals("user", role)) {
+                    historyMessages.add(ChatMessage.ofUser(content));
+                } else if (StrUtil.equals("assistant", role)) {
+                    historyMessages.add(ChatMessage.ofAssistant(content));
                 }
-                session.addMessage(historyMessages);
-                log.info("已将 {} 条历史消息添加到 session", historyMessages.size());
             }
 
-            // 调用 ReActAgent 并获取响应
-            String response = agent.prompt(message)
-                    .session(session)
-                    .call()
-                    .getContent();
+            // 添加用户消息到历史
+            historyMessages.add(ChatMessage.ofUser(message));
 
-            // 保存原始 AI 响应（不包含 Base64）
-            memoryService.saveAssistantMessage(sessionId, response);
+            // 使用 ChatModel.stream() 实现真正的流式输出
+            Flux<ChatResponse> flux = chatModel.prompt(historyMessages)
+                    .stream();
 
-            // 处理响应中的图片文件（转换为 Base64）- 只在返回时处理
-            response = fileService.processImagesInContent(response);
+            CompletableFuture<String> fullResponseFuture = new CompletableFuture<>();
+            StringBuilder fullResponse = new StringBuilder();
 
-            // 发送内容事件（模拟流式输出，将响应分段发送）
-            sendContentInChunks(response, eventConsumer);
+            flux.doOnNext(response -> {
+                        String content = response.getMessage().getContent();
+                        if (StrUtil.isNotEmpty(content)) {
+                            eventConsumer.accept(new StreamEvent(StreamEventType.CONTENT, content));
+                            fullResponse.append(content);
+                        }
+                    })
+                    .doOnComplete(() -> {
+                        String responseText = fullResponse.toString();
+                        memoryService.saveAssistantMessage(sessionId, responseText);
+                        eventConsumer.accept(new StreamEvent(StreamEventType.END, "处理完成", null));
+                        fullResponseFuture.complete(responseText);
+                    })
+                    .doOnError(error -> {
+                        log.error("流式对话异常", error);
+                        eventConsumer.accept(new StreamEvent(StreamEventType.ERROR, "处理失败：" + error.getMessage(), error));
+                        fullResponseFuture.completeExceptionally(error);
+                    })
+                    .subscribe();
 
-            // 发送结束事件
-            eventConsumer.accept(new StreamEvent(StreamEventType.END, "处理完成", null));
+            fullResponseFuture.join();
 
         } catch (Throwable e) {
             log.error("Agent 对话异常", e);
-            eventConsumer.accept(new StreamEvent(StreamEventType.ERROR, "处理失败: " + e.getMessage(), e));
-        }
-    }
-
-    /**
-     * 将内容分块发送，模拟流式输出效果
-     */
-    private void sendContentInChunks(String content, Consumer<StreamEvent> eventConsumer) {
-        if (content == null || content.isEmpty()) {
-            return;
-        }
-
-        // 按句子分割内容
-        String[] sentences = content.split("(?<=[。！？\\.!?])\\s*");
-
-        for (String sentence : sentences) {
-            if (!sentence.isEmpty()) {
-                eventConsumer.accept(new StreamEvent(StreamEventType.CONTENT, sentence));
-                // 添加短暂延迟，模拟打字效果
-                try {
-                    Thread.sleep(50);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    break;
-                }
-            }
+            eventConsumer.accept(new StreamEvent(StreamEventType.ERROR, "处理失败：" + e.getMessage(), e));
         }
     }
 
@@ -398,26 +342,16 @@ public class AgentService {
      * 流式事件类型
      */
     public enum StreamEventType {
-        /** 开始处理 */
         START,
-        /** 文本内容 */
         CONTENT,
-        /** 工具调用 */
         TOOL_CALL,
-        /** 工具调用完成 */
         TOOL_DONE,
-        /** 处理完成 */
         END,
-        /** 错误 */
         ERROR
     }
 
     /**
      * 流式事件
-     *
-     * @param type 事件类型
-     * @param content 事件内容
-     * @param error 错误信息（仅 ERROR 类型）
      */
     public record StreamEvent(
             StreamEventType type,
@@ -443,8 +377,8 @@ public class AgentService {
         }
 
         private String escapeJson(String value) {
-            if (value == null) return "null";
-            return "\"" + value.replace("\\", "\\\\")
+            if (StrUtil.isBlank(value)) return "null";
+            return "\"" + StrUtil.replace(value, "\\", "\\\\")
                     .replace("\"", "\\\"")
                     .replace("\n", "\\n")
                     .replace("\r", "\\r")
@@ -452,47 +386,27 @@ public class AgentService {
         }
     }
 
-    /**
-     * 截断文本（用于日志）
-     */
     private String truncate(String text, int maxLength) {
-        if (text == null) return null;
+        if (StrUtil.isBlank(text)) return null;
         if (text.length() <= maxLength) return text;
-        return text.substring(0, maxLength) + "... (已截断，总长度: " + text.length() + ")";
+        return StrUtil.sub(text, 0, maxLength) + "...";
     }
 
-    /**
-     * 检索相关知识
-     * <p>
-     * 从知识库中检索与当前问题相关的经验
-     * <p>
-     * 注意：此方法已废弃，请使用 ContextBuilder 构建上下文
-     *
-     * @param message   用户消息
-     * @param sessionId 会话ID
-     * @return 相关知识内容，如果没有相关知识返回 null
-     * @deprecated 使用 ContextBuilder 代替
-     */
     @Deprecated
     private String retrieveRelevantKnowledge(String message, String sessionId) {
-        if (knowledgeStore == null) {
+        if (ObjUtil.isNull(knowledgeStore)) {
             return null;
         }
 
         try {
-            // 提取关键词（简化实现，使用前50个字符）
             String keyword = extractKeyword(message);
-
-            // 搜索相关经验
             List<com.jimuqu.solonclaw.memory.SessionStore.Experience> experiences =
                 knowledgeStore.searchAllExperiences(keyword, 5);
 
-            if (experiences == null || experiences.isEmpty()) {
-                log.debug("未找到相关知识: sessionId={}, keyword={}", sessionId, keyword);
+            if (CollUtil.isEmpty(experiences)) {
                 return null;
             }
 
-            // 构建知识上下文
             StringBuilder knowledgeContext = new StringBuilder();
             knowledgeContext.append("基于历史经验，以下信息可能对你有帮助：\n\n");
 
@@ -500,7 +414,7 @@ public class AgentService {
                 if (exp.success() && exp.confidence() >= 0.6) {
                     String content = exp.content();
                     int contentLength = content != null ? content.length() : 0;
-                    knowledgeContext.append(String.format("- **%s**: %s (置信度: %.1f%%)\n",
+                    knowledgeContext.append(String.format("- **%s**: %s (置信度：%.1f%%)\n",
                         exp.title(),
                         content != null ? content.substring(0, Math.min(100, contentLength)) : "",
                         exp.confidence() * 100
@@ -508,36 +422,21 @@ public class AgentService {
                 }
             }
 
-            log.debug("检索到相关知识: sessionId={}, 经验数={}", sessionId, experiences.size());
             return knowledgeContext.toString();
 
         } catch (Exception e) {
-            log.warn("检索知识失败: sessionId={}", sessionId, e);
+            log.warn("检索知识失败：sessionId={}", sessionId, e);
             return null;
         }
     }
 
-    /**
-     * 提取关键词
-     * <p>
-     * 从消息中提取关键词用于知识检索
-     * <p>
-     * 注意：此方法已废弃
-     *
-     * @param message 用户消息
-     * @return 关键词
-     * @deprecated 使用 ContextBuilder 代替
-     */
     @Deprecated
     private String extractKeyword(String message) {
-        if (message == null || message.isEmpty()) {
+        if (StrUtil.isBlank(message)) {
             return "";
         }
-
-        // 简化实现：使用前20个字符作为关键词
-        // 实际项目中可以使用更复杂的 NLP 技术
         int maxLength = Math.min(20, message.length());
-        return message.substring(0, maxLength).trim();
+        return StrUtil.sub(message, 0, maxLength).trim();
     }
 
     /**
@@ -546,59 +445,84 @@ public class AgentService {
     private static class LoggingInterceptor implements ReActInterceptor {
 
         private static final Logger log = LoggerFactory.getLogger(LoggingInterceptor.class);
-
-        /**
-         * 记录内容的最大长度（避免日志过大）
-         */
         private static final int MAX_LOG_LENGTH = 2000;
 
         @Override
         public void onAgentStart(ReActTrace trace) {
-            log.debug("Agent 开始执行");
+            String traceId = ObjUtil.isNotNull(trace) ? extractTraceId(trace) : null;
+            if (StrUtil.isBlank(traceId)) {
+                traceId = com.jimuqu.solonclaw.trace.TraceContext.generateTraceId();
+            }
+            com.jimuqu.solonclaw.trace.TraceContext.setTraceId(traceId);
+            log.info("[TraceID: {}] Agent 开始执行", traceId);
         }
 
         @Override
         public void onThought(ReActTrace trace, String thought) {
-            // 记录 Agent 的思考过程
+            String traceId = com.jimuqu.solonclaw.trace.TraceContext.getTraceId();
             String truncatedThought = truncate(thought, MAX_LOG_LENGTH);
-            log.debug("Agent 思考: {}", truncatedThought);
-
-            // 如果思考内容过长，额外记录完整内容到 DEBUG 级别
-            if (thought.length() > MAX_LOG_LENGTH) {
-                log.debug("Agent 思考（完整）: {}", thought);
+            if (StrUtil.isNotEmpty(traceId)) {
+                log.debug("[TraceID: {}] Agent 思考：{}", traceId, truncatedThought);
+                if (thought.length() > MAX_LOG_LENGTH) {
+                    log.debug("[TraceID: {}] Agent 思考（完整）: {}", traceId, thought);
+                }
+            } else {
+                log.debug("Agent 思考：{}", truncatedThought);
             }
         }
 
         @Override
         public void onAction(ReActTrace trace, String toolName, Map<String, Object> args) {
-            // 记录工具调用
-            log.info("Agent 执行工具: {} 参数: {}", toolName, args);
-
-            // 如果参数包含大段内容（如代码），额外记录详情
-            if (args != null && args.values().stream().anyMatch(v -> v != null && v.toString().length() > 500)) {
-                log.debug("Agent 执行工具参数详情: {} 参数: {}", toolName, formatDetailedArgs(args));
+            String traceId = com.jimuqu.solonclaw.trace.TraceContext.getTraceId();
+            if (StrUtil.isNotEmpty(traceId)) {
+                log.info("[TraceID: {}] Agent 执行工具：{} 参数：{}", traceId, toolName, args);
+                if (ObjUtil.isNotNull(args) && args.values().stream().anyMatch(v -> ObjUtil.isNotNull(v) && v.toString().length() > 500)) {
+                    log.debug("[TraceID: {}] Agent 执行工具参数详情：{} 参数：{}", traceId, toolName, formatDetailedArgs(args));
+                }
+            } else {
+                log.info("Agent 执行工具：{} 参数：{}", toolName, args);
             }
         }
 
         @Override
         public void onAgentEnd(ReActTrace trace) {
-            log.debug("Agent 执行结束");
+            String traceId = com.jimuqu.solonclaw.trace.TraceContext.getTraceId();
+            if (StrUtil.isNotEmpty(traceId)) {
+                log.debug("[TraceID: {}] Agent 执行结束", traceId);
+                com.jimuqu.solonclaw.trace.TraceContext.clear();
+            } else {
+                log.debug("Agent 执行结束");
+            }
         }
 
         /**
-         * 截断长文本
+         * 从 ReActTrace 中提取 Trace ID（如果存在）
          */
+        private String extractTraceId(ReActTrace trace) {
+            // 尝试从 trace 的 sessionId 或其他属性中提取
+            // 这里使用 sessionId 作为 Trace ID 的基础
+            try {
+                java.lang.reflect.Method sessionIdMethod = trace.getClass().getMethod("sessionId");
+                if (ObjUtil.isNotNull(sessionIdMethod)) {
+                    Object sessionId = sessionIdMethod.invoke(trace);
+                    if (ObjUtil.isNotNull(sessionId)) {
+                        return sessionId.toString().hashCode() + "-" + System.currentTimeMillis();
+                    }
+                }
+            } catch (Exception e) {
+                // 忽略反射异常
+            }
+            return null;
+        }
+
         private String truncate(String text, int maxLength) {
-            if (text == null) return null;
+            if (StrUtil.isBlank(text)) return null;
             if (text.length() <= maxLength) return text;
-            return text.substring(0, maxLength) + "... (截断，总长度: " + text.length() + ")";
+            return StrUtil.sub(text, 0, maxLength) + "... (截断，总长度：" + text.length() + ")";
         }
 
-        /**
-         * 格式化详细参数（用于 DEBUG 日志）
-         */
         private String formatDetailedArgs(Map<String, Object> args) {
-            if (args == null || args.isEmpty()) return "{}";
+            if (ObjUtil.isNull(args) || CollUtil.isEmpty(args)) return "{}";
 
             StringBuilder sb = new StringBuilder("{");
             boolean first = true;
@@ -608,7 +532,7 @@ public class AgentService {
 
                 String valueStr = String.valueOf(entry.getValue());
                 if (valueStr.length() > 200) {
-                    valueStr = valueStr.substring(0, 200) + "... (长度: " + valueStr.length() + ")";
+                    valueStr = StrUtil.sub(valueStr, 0, 200) + "... (长度：" + valueStr.length() + ")";
                 }
                 sb.append(entry.getKey()).append("=").append(valueStr);
             }

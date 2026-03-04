@@ -142,4 +142,38 @@ public class LogController {
             return Result.error("写入测试日志失败: " + e.getMessage());
         }
     }
+    /**
+     * 按 Trace ID 查询日志
+     */
+    @Get
+    @Mapping("/trace/{traceId}")
+    public Result getLogsByTraceId(String traceId) {
+        try {
+            if (traceId == null || traceId.isEmpty()) {
+                return Result.error("Trace ID 不能为空");
+            }
+
+            LogQuery query = new LogQuery();
+            query.setKeyword(traceId);
+            query.setPageSize(100);
+
+            java.util.List<LogEntry> logs = unifiedLogger.getLogStore().queryLogs(query);
+
+            // 过滤包含 Trace ID 的日志
+            java.util.List<LogEntry> filteredLogs = new java.util.ArrayList<>();
+            for (LogEntry log : logs) {
+                if (log.getMessage() != null && log.getMessage().contains(traceId)) {
+                    filteredLogs.add(log);
+                }
+            }
+
+            return Result.success("获取 Trace ID 日志成功", java.util.Map.of(
+                "traceId", traceId,
+                "logs", filteredLogs,
+                "count", filteredLogs.size()
+            ));
+        } catch (Exception e) {
+            return Result.error("获取 Trace ID 日志失败：" + e.getMessage());
+        }
+    }
 }

@@ -250,6 +250,64 @@
             }
         }
 
+        /* ==================== 代码块增强 ==================== */
+        .code-block-wrapper {
+            margin: 12px 0;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .code-header {
+            font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+        }
+        .copy-code-btn {
+            display: flex;
+            align-items: center;
+            padding: 4px 8px;
+            border-radius: 4px;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .copy-code-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        .markdown-content pre {
+            margin: 0;
+            padding: 0;
+            background: transparent;
+        }
+        .markdown-content pre code {
+            display: block;
+            padding: 16px;
+            overflow-x: auto;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        /* ==================== 表格增强 ==================== */
+        .table-wrapper {
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .markdown-content table {
+            font-size: 14px;
+        }
+        .markdown-content th,
+        .markdown-content td {
+            padding: 10px 12px;
+        }
+
+        /* ==================== 数学公式 ==================== */
+        .katex {
+            font-size: 1.1em;
+        }
+        .katex-display {
+            overflow-x: auto;
+            overflow-y: hidden;
+            padding: 8px 0;
+        }
+
         /* ==================== 焦点可见性 ==================== */
         *:focus-visible {
             outline: 2px solid var(--primary-color);
@@ -356,8 +414,21 @@
     <!-- 提示消息 -->
     <div id="toast" class="hidden fixed top-5 right-5 px-5 py-3 rounded-lg shadow-xl z-50 transition-all duration-300 font-medium text-sm"></div>
 
+    <!-- 引入 marked (Markdown 渲染) -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- 引入 KaTeX (数学公式渲染) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <!-- 引入 Highlight.js (代码高亮) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/core.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/javascript.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/python.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/java.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/bash.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/json.min.js"></script>
+
     <script src="../RequestUtil.js?v=1.0"></script>
-    <script src="chat.js?v=1.0"></script>
+    <script src="chat.js?v=1.1"></script>
 </body>
 </html>

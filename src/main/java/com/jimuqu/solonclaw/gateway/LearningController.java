@@ -18,6 +18,7 @@ import java.util.Map;
  * 学习系统控制器
  * <p>
  * 提供 SolonClaw 学习系统的管理和查询接口
+ * 技能创建采用事件驱动模式，实时响应反思产生的技能需求
  *
  * @author SolonClaw
  */
@@ -37,9 +38,6 @@ public class LearningController {
     private ReflectionService reflectionService;
 
     @Inject
-    private AutoSkillService autoSkillService;
-
-    @Inject
     private LearningConfig learningConfig;
 
     /**
@@ -53,12 +51,14 @@ public class LearningController {
             return Result.success("学习系统状态", stats);
         } catch (Exception e) {
             log.error("获取学习系统状态失败", e);
-            return Result.failure("获取状态失败: " + e.getMessage());
+            return Result.failure("获取状态失败：" + e.getMessage());
         }
     }
 
     /**
      * 手动触发反思
+     * <p>
+     * 反思完成后会自动处理产生的技能需求
      */
     @Post
     @Mapping("/reflection/trigger")
@@ -66,13 +66,13 @@ public class LearningController {
         try {
             long reflectionId = learningOrchestrator.triggerReflection();
             if (reflectionId > 0) {
-                return Result.success("反思任务已触发", new ReflectionTriggerResult(reflectionId, true));
+                return Result.success("反思任务已触发，技能需求将实时处理", new ReflectionTriggerResult(reflectionId, true));
             } else {
                 return Result.success("没有需要反思的内容", new ReflectionTriggerResult(-1, false));
             }
         } catch (Exception e) {
             log.error("触发反思失败", e);
-            return Result.failure("触发反思失败: " + e.getMessage());
+            return Result.failure("触发反思失败：" + e.getMessage());
         }
     }
 
@@ -91,7 +91,7 @@ public class LearningController {
             return Result.success("获取反思记录成功", reflections);
         } catch (Exception e) {
             log.error("获取反思记录失败", e);
-            return Result.failure("获取反思记录失败: " + e.getMessage());
+            return Result.failure("获取反思记录失败：" + e.getMessage());
         }
     }
 
@@ -107,7 +107,7 @@ public class LearningController {
             return Result.success("获取最近反思记录成功", reflections);
         } catch (Exception e) {
             log.error("获取最近反思记录失败", e);
-            return Result.failure("获取最近反思记录失败: " + e.getMessage());
+            return Result.failure("获取最近反思记录失败：" + e.getMessage());
         }
     }
 
@@ -125,7 +125,7 @@ public class LearningController {
             return Result.success("获取反思记录成功", reflections);
         } catch (Exception e) {
             log.error("获取反思记录失败", e);
-            return Result.failure("获取反思记录失败: " + e.getMessage());
+            return Result.failure("获取反思记录失败：" + e.getMessage());
         }
     }
 
@@ -153,75 +153,34 @@ public class LearningController {
             return Result.success("搜索经验成功", experiences);
         } catch (Exception e) {
             log.error("搜索经验失败", e);
-            return Result.failure("搜索经验失败: " + e.getMessage());
+            return Result.failure("搜索经验失败：" + e.getMessage());
         }
     }
 
     /**
-     * 获取待处理的技能请求
+     * 获取技能请求列表
      */
     @Get
-    @Mapping("/skills/pending")
-    public Result getPendingSkillRequests(
+    @Mapping("/skills/requests")
+    public Result getSkillRequests(
+            @Param(value = "reflectionId", required = false) Long reflectionId,
+            @Param(value = "status", required = false) String status,
             @Param(value = "limit", defaultValue = "20") int limit) {
         try {
-            // TODO: 实现 getPendingRequests 方法
-            // List<com.jimuqu.solonclaw.memory.SessionStore.SkillRequest> requests =
-            //     autoSkillService.getPendingRequests();
-            List<com.jimuqu.solonclaw.memory.SessionStore.SkillRequest> requests = knowledgeStore.getPendingSkillRequests(limit);
-            return Result.success("获取待处理技能请求成功", requests);
-        } catch (Exception e) {
-            log.error("获取待处理技能请求失败", e);
-            return Result.failure("获取待处理技能请求失败: " + e.getMessage());
-        }
-    }
+            List<com.jimuqu.solonclaw.memory.SessionStore.SkillRequest> requests;
 
-    /**
-     * 批准技能请求
-     */
-    @Post
-    @Mapping("/skills/{id}/approve")
-    public Result approveSkillRequest(long id) {
-        try {
-            // TODO: 实现 approveRequest 方法
-            // autoSkillService.approveRequest(id);
-            knowledgeStore.updateSkillRequestStatus(id, "approved");
-            return Result.success("已批准技能请求", Map.of("requestId", id));
-        } catch (Exception e) {
-            log.error("批准技能请求失败: id={}", id, e);
-            return Result.failure("批准技能请求失败: " + e.getMessage());
-        }
-    }
+            // 如果指定了 reflectionId，使用新方法查询
+            if (reflectionId != null && reflectionId > 0) {
+                requests = knowledgeStore.getSkillRequests(reflectionId, Math.min(limit, 100));
+            } else {
+                // 否则按状态查询
+                requests = knowledgeStore.getSkillRequests(status, Math.min(limit, 100));
+            }
 
-    /**
-     * 拒绝技能请求
-     */
-    @Post
-    @Mapping("/skills/{id}/reject")
-    public Result rejectSkillRequest(long id) {
-        try {
-            // TODO: 实现 rejectRequest 方法
-            // autoSkillService.rejectRequest(id);
-            knowledgeStore.updateSkillRequestStatus(id, "rejected");
-            return Result.success("已拒绝技能请求", Map.of("requestId", id));
+            return Result.success("获取技能请求成功", requests);
         } catch (Exception e) {
-            log.error("拒绝技能请求失败: id={}", id, e);
-            return Result.failure("拒绝技能请求失败: " + e.getMessage());
-        }
-    }
-
-    /**
-     * 处理待安装的技能请求
-     */
-    @Post
-    @Mapping("/skills/process")
-    public Result processSkillRequests() {
-        try {
-            AutoSkillService.ProcessResult result = learningOrchestrator.processSkillRequests();
-            return Result.success("技能请求处理完成", result);
-        } catch (Exception e) {
-            log.error("处理技能请求失败", e);
-            return Result.failure("处理技能请求失败: " + e.getMessage());
+            log.error("获取技能请求失败", e);
+            return Result.failure("获取技能请求失败：" + e.getMessage());
         }
     }
 
@@ -240,7 +199,7 @@ public class LearningController {
             ));
         } catch (Exception e) {
             log.error("获取配置失败", e);
-            return Result.failure("获取配置失败: " + e.getMessage());
+            return Result.failure("获取配置失败：" + e.getMessage());
         }
     }
 
@@ -255,7 +214,7 @@ public class LearningController {
             return Result.success("学习系统已启用");
         } catch (Exception e) {
             log.error("启用学习系统失败", e);
-            return Result.failure("启用学习系统失败: " + e.getMessage());
+            return Result.failure("启用学习系统失败：" + e.getMessage());
         }
     }
 
@@ -270,7 +229,7 @@ public class LearningController {
             return Result.success("学习系统已禁用");
         } catch (Exception e) {
             log.error("禁用学习系统失败", e);
-            return Result.failure("禁用学习系统失败: " + e.getMessage());
+            return Result.failure("禁用学习系统失败：" + e.getMessage());
         }
     }
 

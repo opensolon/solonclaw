@@ -1,13 +1,19 @@
 package com.jimuqu.solonclaw.learning;
 
+import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
 import org.noear.solon.annotation.Component;
 import org.noear.solon.annotation.Inject;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.snack4.ONode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -106,7 +112,7 @@ public class ReflectionService {
             //     logStore.getRecentLogs(sessionId, 50);
             List<com.jimuqu.solonclaw.logging.LogEntry> recentLogs = List.of();
 
-            if (recentLogs.isEmpty()) {
+            if (CollUtil.isEmpty(recentLogs)) {
                 log.debug("没有找到最近的日志，跳过反省");
                 return -1;
             }
@@ -146,7 +152,7 @@ public class ReflectionService {
             List<Map<String, Object>> neededSkills =
                 (List<Map<String, Object>>) reflectionData.get("neededSkills");
 
-            if (neededSkills != null && !neededSkills.isEmpty()) {
+            if (CollUtil.isNotEmpty(neededSkills)) {
                 for (Map<String, Object> skill : neededSkills) {
                     String name = (String) skill.get("name");
                     String description = (String) skill.get("description");
@@ -157,7 +163,7 @@ public class ReflectionService {
             }
 
             log.info("定时反省完成: reflectionId={}, 发现 {} 个需要学习的技能",
-                reflectionId, neededSkills != null ? neededSkills.size() : 0);
+                reflectionId, CollUtil.isNotEmpty(neededSkills) ? neededSkills.size() : 0);
 
             return reflectionId;
 
@@ -185,7 +191,7 @@ public class ReflectionService {
         try {
             // 1. 构建反省提示词
             String prompt = String.format(ERROR_REFLECTION_PROMPT,
-                errorType, errorMessage, context != null ? context : "无上下文");
+                errorType, errorMessage, StrUtil.blankToDefault(context, "无上下文"));
 
             // 2. 使用 AI 分析
             String fullPrompt = "你是 SolonClaw AI Agent 的错误分析专家。\n\n" + prompt;
@@ -242,7 +248,7 @@ public class ReflectionService {
             Map<String, Object> neededSkill =
                 (Map<String, Object>) reflectionData.get("neededSkill");
 
-            if (neededSkill != null) {
+            if (cn.hutool.core.util.ObjUtil.isNotNull(neededSkill)) {
                 String name = (String) neededSkill.get("name");
                 String description = (String) neededSkill.get("description");
                 int priority = (int) neededSkill.getOrDefault("priority", 5);
@@ -348,7 +354,7 @@ public class ReflectionService {
         StringBuilder sb = new StringBuilder();
         sb.append("## 总体总结\n").append(summary).append("\n\n");
 
-        if (successes != null && !successes.isEmpty()) {
+        if (CollUtil.isNotEmpty(successes)) {
             sb.append("## 成功经验\n");
             for (String success : successes) {
                 sb.append("- ").append(success).append("\n");
@@ -356,7 +362,7 @@ public class ReflectionService {
             sb.append("\n");
         }
 
-        if (improvements != null && !improvements.isEmpty()) {
+        if (CollUtil.isNotEmpty(improvements)) {
             sb.append("## 改进建议\n");
             for (String improvement : improvements) {
                 sb.append("- ").append(improvement).append("\n");
@@ -426,30 +432,153 @@ public class ReflectionService {
     /**
      * 解析 JSON 响应
      * <p>
-     * 简化实现，实际应该使用 JSON 库
+     * 使用 Solon 内置的 ONode 工具解析 JSON
      */
     @SuppressWarnings("unchecked")
     private Map<String, Object> parseJsonResponse(String jsonResponse) {
         try {
-            // 简化实现：返回默认值，实际项目中应该使用 proper JSON parser
-            // TODO: 使用合适的 JSON 库解析
-            log.debug("JSON 响应: {}", jsonResponse);
-            return Map.of(
-                "summary", "分析完成",
-                "successes", List.of("临时处理"),
-                "failures", List.of(),
-                "improvements", List.of(),
-                "neededSkills", List.of()
-            );
+            if (StrUtil.isBlank(jsonResponse)) {
+                log.warn("JSON 响应为空");
+                return new HashMap<>();
+            }
+
+            log.debug("解析 JSON 响应: {}", jsonResponse);
+
+
+            // 使用 ONode 解析 JSON
+            ONode node = ONode.ofJson(jsonResponse);
+
+            // 手动提取各个字段
+            Map<String, Object> result = new HashMap<>();
+
+            // 尝试提取各个字段，如果不存在则忽略
+            try {
+                result.put("summary", node.get("summary").getString());
+            } catch (Exception ignored) {}
+
+            try {
+                result.put("successes", extractStringList(node.get("successes")));
+            } catch (Exception ignored) {}
+
+            try {
+                result.put("failures", extractStringList(node.get("failures")));
+            } catch (Exception ignored) {}
+
+            try {
+                result.put("improvements", extractStringList(node.get("improvements")));
+            } catch (Exception ignored) {}
+
+            try {
+                result.put("neededSkills", extractObjectList(node.get("neededSkills")));
+            } catch (Exception ignored) {}
+
+            try {
+                result.put("rootCause", node.get("rootCause").getString());
+            } catch (Exception ignored) {}
+
+            try {
+                result.put("solution", node.get("solution").getString());
+            } catch (Exception ignored) {}
+
+            try {
+                result.put("prevention", node.get("prevention").getString());
+            } catch (Exception ignored) {}
+
+            try {
+                result.put("neededSkill", extractMap(node.get("neededSkill")));
+            } catch (Exception ignored) {}
+
+            return result;
+
         } catch (Exception e) {
-            log.warn("解析 AI 响应失败，返回空结果", e);
-            return Map.of(
-                "summary", "解析失败",
-                "successes", List.of(),
-                "failures", List.of(),
-                "improvements", List.of(),
-                "neededSkills", List.of()
-            );
+            log.warn("解析 AI 响应失败，返回空结果: {}", e.getMessage());
+            log.debug("失败的 JSON 内容: {}", jsonResponse, e);
+
+            // 返回空的 Map 而不是硬编码默认值
+            return new HashMap<>();
         }
+    }
+
+    /**
+     * 提取字符串列表
+     */
+    private List<String> extractStringList(ONode node) {
+        List<String> result = new ArrayList<>();
+        if (cn.hutool.core.util.ObjUtil.isNull(node) || !node.isArray()) {
+            return result;
+        }
+
+        for (int i = 0; i < node.size(); i++) {
+            try {
+                result.add(node.get(i).getString());
+            } catch (Exception ignored) {}
+        }
+        return result;
+    }
+
+    /**
+     * 提取对象列表
+     */
+    private List<Map<String, Object>> extractObjectList(ONode node) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        if (cn.hutool.core.util.ObjUtil.isNull(node) || !node.isArray()) {
+            return result;
+        }
+
+        for (int i = 0; i < node.size(); i++) {
+            result.add(extractMap(node.get(i)));
+        }
+        return result;
+    }
+
+    /**
+     * 提取 Map（简化实现，只处理字符串和整数）
+     */
+    private Map<String, Object> extractMap(ONode node) {
+        Map<String, Object> result = new HashMap<>();
+        if (cn.hutool.core.util.ObjUtil.isNull(node) || !node.isObject()) {
+            return result;
+        }
+
+        // 遍历对象的所有属性
+        try {
+            // 将对象转换为字符串然后解析
+            String jsonStr = node.toString();
+            ONode objNode = ONode.ofJson(jsonStr);
+
+            // 手动提取已知字段
+            try {
+                result.put("name", objNode.get("name").getString());
+            } catch (Exception ignored) {}
+
+            try {
+                result.put("description", objNode.get("description").getString());
+            } catch (Exception ignored) {}
+
+            try {
+                result.put("priority", objNode.get("priority").getInt());
+            } catch (Exception ignored) {}
+
+            try {
+                result.put("instruction", objNode.get("instruction").getString());
+            } catch (Exception ignored) {}
+
+            try {
+                result.put("condition", objNode.get("condition").getString());
+            } catch (Exception ignored) {}
+
+            try {
+                result.put("enabled", objNode.get("enabled").getBoolean());
+            } catch (Exception ignored) {}
+
+            try {
+                result.put("tools", extractStringList(objNode.get("tools")));
+            } catch (Exception ignored) {}
+
+        } catch (Exception e) {
+            log.debug("提取 Map 失败: {}", e.getMessage());
+        }
+
+        return result;
     }
 }
