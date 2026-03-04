@@ -1,5 +1,7 @@
 package com.jimuqu.solonclaw.callback;
 
+import cn.hutool.core.util.ObjUtil;
+import cn.hutool.core.util.StrUtil;
 import okhttp3.*;
 import org.noear.solon.annotation.Component;
 import org.noear.solon.annotation.Inject;
@@ -44,7 +46,7 @@ public class CallbackService {
      * @param data  数据
      */
     public void sendCallback(String event, Map<String, Object> data) {
-        if (!enabled || callbackUrl == null || callbackUrl.isEmpty()) {
+        if (!enabled || StrUtil.isBlank(callbackUrl)) {
             log.debug("回调未启用或 URL 未配置");
             return;
         }
@@ -75,7 +77,7 @@ public class CallbackService {
                 if (response.isSuccessful()) {
                     log.info("回调发送成功: event={}, status={}", event, response.code());
                 } else {
-                    String errorBody = response.body() != null ? response.body().string() : "无响应";
+                    String errorBody = ObjUtil.isNotNull(response.body()) ? response.body().string() : "无响应";
                     log.warn("回调发送失败: event={}, status={}, body={}",
                         event, response.code(), errorBody);
                 }
@@ -139,7 +141,7 @@ public class CallbackService {
      * @return 签名
      */
     private String generateSignature(Map<String, Object> payload) {
-        if (callbackSecret == null || callbackSecret.isEmpty()) {
+        if (StrUtil.isBlank(callbackSecret)) {
             return "";
         }
 
@@ -181,13 +183,13 @@ public class CallbackService {
      * @return 是否有效
      */
     public boolean verifySignature(Map<String, Object> payload, String signature) {
-        if (callbackSecret == null || callbackSecret.isEmpty()) {
+        if (StrUtil.isBlank(callbackSecret)) {
             // 如果没有配置 secret，不验证签名
             return true;
         }
 
         String expectedSignature = generateSignature(payload);
-        return expectedSignature.equals(signature);
+        return StrUtil.equals(expectedSignature, signature);
     }
 
     /**

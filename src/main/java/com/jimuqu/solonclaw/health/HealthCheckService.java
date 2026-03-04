@@ -1,5 +1,7 @@
 package com.jimuqu.solonclaw.health;
 
+import cn.hutool.core.util.ObjUtil;
+import cn.hutool.core.util.StrUtil;
 import org.noear.solon.annotation.Component;
 import org.noear.solon.annotation.Inject;
 import org.slf4j.Logger;
@@ -163,7 +165,7 @@ public class HealthCheckService {
      * 检查数据库连接
      */
     private ComponentHealth checkDatabase() {
-        if (dataSource == null) {
+        if (ObjUtil.isNull(dataSource)) {
             return new ComponentHealth("database", HealthStatus.DOWN, "数据源未配置");
         }
 
@@ -183,7 +185,7 @@ public class HealthCheckService {
      * 检查 Agent 服务
      */
     private ComponentHealth checkAgentService() {
-        if (agentService == null) {
+        if (ObjUtil.isNull(agentService)) {
             return new ComponentHealth("agentService", HealthStatus.DOWN, "Agent 服务未初始化");
         }
 
@@ -201,7 +203,7 @@ public class HealthCheckService {
      * 检查工具注册表
      */
     private ComponentHealth checkToolRegistry() {
-        if (toolRegistry == null) {
+        if (ObjUtil.isNull(toolRegistry)) {
             return new ComponentHealth("toolRegistry", HealthStatus.DOWN, "工具注册表未初始化");
         }
 
@@ -295,7 +297,7 @@ public class HealthCheckService {
         try {
             Package pkg = HealthCheckService.class.getPackage();
             String version = pkg.getImplementationVersion();
-            if (version == null || version.isEmpty()) {
+            if (StrUtil.isBlank(version)) {
                 return "1.0.0-SNAPSHOT";
             }
             return version;

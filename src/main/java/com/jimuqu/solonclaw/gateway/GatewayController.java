@@ -1,5 +1,6 @@
 package com.jimuqu.solonclaw.gateway;
 
+import cn.hutool.core.util.StrUtil;
 import com.jimuqu.solonclaw.agent.AgentService;
 import org.noear.solon.annotation.*;
 import org.noear.solon.core.handle.Context;
@@ -49,7 +50,7 @@ public class GatewayController {
         try {
             // 处理 sessionId
             String sessionId = request.sessionId();
-            if (sessionId == null || sessionId.isEmpty()) {
+            if (StrUtil.isBlank(sessionId)) {
                 sessionId = generateSessionId();
             }
 
@@ -134,7 +135,7 @@ public class GatewayController {
 
         // 处理 sessionId
         String sessionId = request.sessionId();
-        if (sessionId == null || sessionId.isEmpty()) {
+        if (StrUtil.isBlank(sessionId)) {
             sessionId = generateSessionId();
         }
 
@@ -182,8 +183,8 @@ public class GatewayController {
      * 转义 JSON 字符串
      */
     private String escapeJson(String value) {
-        if (value == null) return "";
-        return value.replace("\\", "\\\\")
+        if (StrUtil.isBlank(value)) return "";
+        return StrUtil.replace(value, "\\", "\\\\")
                 .replace("\"", "\\\"")
                 .replace("\n", "\\n")
                 .replace("\r", "\\r")

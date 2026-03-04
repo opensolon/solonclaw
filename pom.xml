@@ -146,6 +146,13 @@
             <version>1.6.12</version>
         </dependency>
 
+        <!-- Hutool (Java 工具类库) -->
+        <dependency>
+            <groupId>cn.hutool</groupId>
+            <artifactId>hutool-all</artifactId>
+            <version>5.8.38</version>
+        </dependency>
+
         <!-- Testing -->
         <dependency>
             <groupId>org.noear</groupId>
