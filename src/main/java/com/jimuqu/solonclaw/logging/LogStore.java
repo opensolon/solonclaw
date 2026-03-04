@@ -284,4 +284,48 @@ public class LogStore {
             throw new RuntimeException("Failed to clear logs", e);
         }
     }
+
+    /**
+     * 获取最近的日志
+     * <p>
+     * 用于 ReflectionService 的定时反省分析
+     *
+     * @param sessionId 会话ID（可选，null 表示所有会话）
+     * @param limit     最多返回的日志条数
+     * @return 最近的日志列表
+     */
+    public List<LogEntry> getRecentLogs(String sessionId, int limit) {
+        LogQuery query = new LogQuery();
+        query.setSessionId(sessionId);
+        query.setPageSize(limit);
+
+        List<LogEntry> logs = queryLogs(query);
+
+        // 限制返回数量
+        if (logs.size() > limit) {
+            return logs.subList(0, limit);
+        }
+
+        return logs;
+    }
+
+    /**
+     * 获取指定时间范围内的日志
+     * <p>
+     * 用于 ReflectionService 的深度反省分析
+     *
+     * @param sessionId 会话ID（可选，null 表示所有会话）
+     * @param startTime 开始时间
+     * @param endTime   结束时间
+     * @return 时间范围内的日志列表
+     */
+    public List<LogEntry> getLogsByTimeRange(String sessionId, LocalDateTime startTime, LocalDateTime endTime) {
+        LogQuery query = new LogQuery();
+        query.setSessionId(sessionId);
+        query.setStartTime(startTime);
+        query.setEndTime(endTime);
+        query.setPageSize(1000); // 深度反省可以返回更多日志
+
+        return queryLogs(query);
+    }
 }

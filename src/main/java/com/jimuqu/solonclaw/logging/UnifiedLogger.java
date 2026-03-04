@@ -4,6 +4,8 @@ import org.noear.solon.annotation.Component;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 统一日志记录器
@@ -11,6 +13,15 @@ import java.util.Map;
 @Component
 public class UnifiedLogger {
     private final LogStore logStore;
+
+    // 错误分类统计：按异常类名分类
+    private final Map<String, AtomicLong> errorTypeCounts = new ConcurrentHashMap<>();
+
+    // 错误分类统计：按来源分类
+    private final Map<String, AtomicLong> errorSourceCounts = new ConcurrentHashMap<>();
+
+    // 总错误计数
+    private final AtomicLong totalErrorCount = new AtomicLong(0);
 
     public UnifiedLogger(LogStore logStore) {
         this.logStore = logStore;
@@ -84,8 +95,64 @@ public class UnifiedLogger {
         if (throwable != null) {
             metadata.put("exception", throwable.getClass().getName());
             metadata.put("message", throwable.getMessage());
+
+            // 按异常类型统计
+            String exceptionType = throwable.getClass().getName();
+            errorTypeCounts.computeIfAbsent(exceptionType, k -> new AtomicLong(0)).incrementAndGet();
         }
+
+        // 按来源统计
+        errorSourceCounts.computeIfAbsent(source, k -> new AtomicLong(0)).incrementAndGet();
+
+        // 总错误计数
+        totalErrorCount.incrementAndGet();
+
         log(LogLevel.ERROR, source, sessionId, error, metadata);
+    }
+
+    /**
+     * 获取错误分类统计（按异常类型）
+     */
+    public Map<String, Long> getErrorTypeStats() {
+        Map<String, Long> result = new HashMap<>();
+        errorTypeCounts.forEach((k, v) -> result.put(k, v.get()));
+        return result;
+    }
+
+    /**
+     * 获取错误分类统计（按来源）
+     */
+    public Map<String, Long> getErrorSourceStats() {
+        Map<String, Long> result = new HashMap<>();
+        errorSourceCounts.forEach((k, v) -> result.put(k, v.get()));
+        return result;
+    }
+
+    /**
+     * 获取总错误数
+     */
+    public long getTotalErrorCount() {
+        return totalErrorCount.get();
+    }
+
+    /**
+     * 获取完整错误统计
+     */
+    public ErrorStatistics getErrorStatistics() {
+        return new ErrorStatistics(
+            totalErrorCount.get(),
+            getErrorTypeStats(),
+            getErrorSourceStats()
+        );
+    }
+
+    /**
+     * 重置错误统计
+     */
+    public void resetErrorStats() {
+        errorTypeCounts.clear();
+        errorSourceCounts.clear();
+        totalErrorCount.set(0);
     }
 
     /**
@@ -94,4 +161,13 @@ public class UnifiedLogger {
     public LogStore getLogStore() {
         return logStore;
     }
+
+    /**
+     * 错误统计数据
+     */
+    public record ErrorStatistics(
+        long totalErrors,
+        Map<String, Long> byExceptionType,
+        Map<String, Long> bySource
+    ) {}
 }

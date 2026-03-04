@@ -1,5 +1,6 @@
 package com.jimuqu.solonclaw.logging;
 
+import cn.hutool.core.util.ObjUtil;
 import org.noear.solon.annotation.Component;
 import org.noear.solon.annotation.Init;
 import org.noear.solon.annotation.Inject;
@@ -38,7 +39,7 @@ public class LogMaintenanceService implements LifecycleBean {
      * 启动维护调度器
      */
     public void startMaintenanceScheduler() {
-        if (scheduler != null && !scheduler.isShutdown()) {
+        if (ObjUtil.isNotNull(scheduler) && !scheduler.isShutdown()) {
             log.warn("Log maintenance scheduler is already running");
             return;
         }
@@ -64,7 +65,7 @@ public class LogMaintenanceService implements LifecycleBean {
      * 停止维护调度器
      */
     public void stopMaintenanceScheduler() {
-        if (scheduler != null) {
+        if (ObjUtil.isNotNull(scheduler)) {
             scheduler.shutdown();
             try {
                 if (!scheduler.awaitTermination(30, TimeUnit.SECONDS)) {

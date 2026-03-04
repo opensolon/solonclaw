@@ -159,4 +159,95 @@ class LogStoreTest {
         List<LogEntry> after = logStore.queryLogs(query);
         // 清空后查询应该返回空列表（因为清空的是之前的日志）
     }
+
+    // ========== 新增测试：getRecentLogs 和 getLogsByTimeRange ==========
+
+    /**
+     * 测试获取最近的日志（所有会话）
+     */
+    @Test
+    void testGetRecentLogsAllSessions() {
+        // 写入几条测试日志
+        logStore.writeLog(new LogEntry(LogLevel.INFO, "Source1", "session1", "消息1"));
+        logStore.writeLog(new LogEntry(LogLevel.INFO, "Source2", "session2", "消息2"));
+        logStore.writeLog(new LogEntry(LogLevel.ERROR, "Source3", "session3", "错误消息"));
+
+        // 获取最近的日志
+        List<LogEntry> logs = logStore.getRecentLogs(null, 10);
+
+        assertNotNull(logs);
+        assertTrue(logs.size() >= 3);
+    }
+
+    /**
+     * 测试获取特定会话的最近日志
+     */
+    @Test
+    void testGetRecentLogsBySession() {
+        // 写入不同会话的日志
+        logStore.writeLog(new LogEntry(LogLevel.INFO, "Source1", "session1", "消息1"));
+        logStore.writeLog(new LogEntry(LogLevel.INFO, "Source2", "session1", "消息2"));
+        logStore.writeLog(new LogEntry(LogLevel.INFO, "Source3", "session2", "消息3"));
+
+        // 获取 session1 的日志
+        List<LogEntry> logs = logStore.getRecentLogs("session1", 10);
+
+        assertNotNull(logs);
+        // 验证所有返回的日志都属于 session1
+        assertTrue(logs.stream().allMatch(e -> "session1".equals(e.getSessionId())));
+    }
+
+    /**
+     * 测试限制返回数量
+     */
+    @Test
+    void testGetRecentLogsWithLimit() {
+        // 写入多条日志
+        for (int i = 0; i < 20; i++) {
+            logStore.writeLog(new LogEntry(LogLevel.INFO, "Source", "session1", "消息" + i));
+        }
+
+        // 只获取最近的 10 条
+        List<LogEntry> logs = logStore.getRecentLogs(null, 10);
+
+        assertNotNull(logs);
+        assertTrue(logs.size() <= 10);
+    }
+
+    /**
+     * 测试获取指定时间范围的日志
+     */
+    @Test
+    void testGetLogsByTimeRange() {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime oneHourAgo = now.minusHours(1);
+
+        // 写入日志
+        logStore.writeLog(new LogEntry(LogLevel.INFO, "Source1", "session1", "最近的消息"));
+
+        // 获取最近一小时的日志
+        List<LogEntry> logs = logStore.getLogsByTimeRange(null, oneHourAgo, now);
+
+        assertNotNull(logs);
+    }
+
+    /**
+     * 测试获取特定会话和时间范围的日志
+     */
+    @Test
+    void testGetLogsByTimeRangeAndSession() {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime oneHourAgo = now.minusHours(1);
+
+        // 写入不同会话的日志
+        logStore.writeLog(new LogEntry(LogLevel.INFO, "Source1", "session1", "消息1"));
+        logStore.writeLog(new LogEntry(LogLevel.INFO, "Source2", "session2", "消息2"));
+
+        // 获取 session1 的日志
+        List<LogEntry> logs = logStore.getLogsByTimeRange("session1", oneHourAgo, now);
+
+        assertNotNull(logs);
+        // 验证所有返回的日志都属于 session1
+        assertTrue(logs.stream().allMatch(e -> "session1".equals(e.getSessionId())));
+    }
 }
