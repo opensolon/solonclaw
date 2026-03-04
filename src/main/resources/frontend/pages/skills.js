@@ -19,12 +19,21 @@ async function loadSkills() {
                 <div class="flex justify-between items-start">
                     <div class="flex-1">
                         <div class="flex items-center space-x-2">
+                            <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                                外部技能
+                            </span>
                             <h3 class="font-medium text-gray-800">${skill.name}</h3>
                             <span class="px-2 py-0.5 text-xs rounded-full ${skill.enabled ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'}">
                                 ${skill.enabled ? '已启用' : '已禁用'}
                             </span>
                         </div>
                         <p class="text-sm text-gray-600 mt-1">${skill.description || ''}</p>
+                        ${skill.tools && skill.tools.length > 0 ?
+                            `<div class="mt-2 flex flex-wrap gap-1">
+                                ${skill.tools.map(tool =>
+                                    `<span class="text-xs px-2 py-0.5 bg-gray-200 text-gray-600 rounded">${tool}</span>`
+                                ).join('')}
+                            </div>` : ''}
                     </div>
                     <div class="flex space-x-2 ml-4">
                         ${skill.enabled

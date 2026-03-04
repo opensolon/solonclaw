@@ -27,6 +27,9 @@ class AgentServiceTest {
     @Inject
     private AgentService agentService;
 
+    @Inject(required = false)
+    private com.jimuqu.solonclaw.skill.SkillsManager skillsManager;
+
     // ==================== 预热功能测试 ====================
 
     @Test
@@ -165,5 +168,122 @@ class AgentServiceTest {
         assertFalse(response.isEmpty());
 
         System.out.println("复杂任务响应: " + response);
+    }
+
+    // ==================== SkillsManager 集成测试 ====================
+
+    @Test
+    @Order(20)
+    @DisplayName("测试 SkillsManager 集成 - Agent 能获取到技能")
+    void testSkillsManagerIntegration() {
+        if (skillsManager == null) {
+            System.out.println("SkillsManager 未注入，跳过测试");
+            return;
+        }
+
+        // 获取所有技能
+        var skills = skillsManager.getSkills();
+        assertNotNull(skills);
+        System.out.println("已注册的技能数量: " + skills.size());
+
+        // 获取技能配置
+        var skillConfigs = skillsManager.getSkillConfigs();
+        assertNotNull(skillConfigs);
+        System.out.println("技能配置数量: " + skillConfigs.size());
+    }
+
+    @Test
+    @Order(21)
+    @DisplayName("测试 Agent 重载功能")
+    void testAgentReload() {
+        // 重载前先进行一次对话
+        String response1 = agentService.chat("测试消息", "test-reload-1");
+        assertNotNull(response1);
+
+        // 执行重载
+        assertDoesNotThrow(() -> agentService.reloadAgent());
+
+        // 重载后再次对话
+        String response2 = agentService.chat("测试消息", "test-reload-2");
+        assertNotNull(response2);
+
+        System.out.println("Agent 重载测试通过");
+    }
+
+    @Test
+    @Order(22)
+    @DisplayName("测试技能启用/禁用触发 Agent 重载")
+    void testSkillToggleTriggersReload() {
+        if (skillsManager == null) {
+            System.out.println("SkillsManager 未注入，跳过测试");
+            return;
+        }
+
+        // 获取现有技能配置
+        var configs = skillsManager.getSkillConfigs();
+        if (configs.isEmpty()) {
+            System.out.println("没有可用技能，跳过测试");
+            return;
+        }
+
+        // 选择第一个技能进行测试
+        var firstSkill = configs.get(0);
+        String skillName = firstSkill.name();
+        boolean originalEnabled = firstSkill.enabled();
+
+        try {
+            // 切换状态
+            boolean newEnabled = !originalEnabled;
+            boolean result = skillsManager.setSkillEnabled(skillName, newEnabled);
+            assertTrue(result, "技能状态切换应成功");
+
+            // 验证状态已更改
+            var updatedConfig = skillsManager.getSkillConfig(skillName);
+            assertEquals(newEnabled, updatedConfig.enabled(), "技能状态应该已更新");
+
+            System.out.println("技能 " + skillName + " 状态已从 " + originalEnabled + " 切换为 " + newEnabled);
+
+        } finally {
+            // 恢复原始状态
+            skillsManager.setSkillEnabled(skillName, originalEnabled);
+            System.out.println("已恢复技能原始状态");
+        }
+    }
+
+    @Test
+    @Order(23)
+    @DisplayName("测试添加技能触发 Agent 重载")
+    void testAddSkillTriggersReload() {
+        if (skillsManager == null) {
+            System.out.println("SkillsManager 未注入，跳过测试");
+            return;
+        }
+
+        // 创建测试技能配置
+        String testSkillName = "test_reload_skill_" + System.currentTimeMillis();
+        var config = new com.jimuqu.solonclaw.skill.DynamicSkill.SkillConfig(
+                testSkillName,
+                "测试重载功能的技能",
+                "这是一个测试技能",
+                null,
+                List.of(),
+                true
+        );
+
+        try {
+            // 添加技能
+            boolean result = skillsManager.addSkill(config);
+            assertTrue(result, "添加技能应成功");
+
+            // 验证技能已添加
+            assertTrue(skillsManager.hasSkill(testSkillName), "技能应该已存在");
+
+            System.out.println("测试技能添加成功: " + testSkillName);
+
+        } finally {
+            // 清理测试技能
+            skillsManager.removeSkill(testSkillName);
+            System.out.println("已清理测试技能");
+        }
     }
 }

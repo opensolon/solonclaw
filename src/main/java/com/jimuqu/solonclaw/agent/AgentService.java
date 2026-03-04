@@ -66,6 +66,9 @@ public class AgentService {
     @Inject(required = false)
     private ContextBuilder contextBuilder;
 
+    @Inject(required = false)
+    private com.jimuqu.solonclaw.skill.SkillsManager skillsManager;
+
     /**
      * ReActAgent 实例（延迟初始化）
      */
@@ -112,6 +115,7 @@ public class AgentService {
     private ReActAgent buildReActAgent() {
         log.info("开始构建 ReActAgent...");
 
+        // 注册内置工具
         List<Object> toolObjects = toolRegistry.getToolObjects();
 
         var builder = ReActAgent.of(chatModel)
@@ -123,14 +127,26 @@ public class AgentService {
                 .retryConfig(3, 1000L)
                 .modelOptions(options -> options.temperature(0.7));
 
+        // 注册内置工具
         for (Object tool : toolObjects) {
             builder.defaultToolAdd(tool);
+        }
+
+        // 注册外部技能
+        if (skillsManager != null) {
+            List<org.noear.solon.ai.chat.skill.Skill> skills = skillsManager.getSkills();
+            log.info("注册 {} 个外部技能", skills.size());
+            for (org.noear.solon.ai.chat.skill.Skill skill : skills) {
+                builder.defaultSkillAdd(skill);
+            }
         }
 
         builder.defaultInterceptorAdd(new LoggingInterceptor());
 
         ReActAgent agent = builder.build();
-        log.info("ReActAgent 构建完成，已注册 {} 个工具", toolObjects.size());
+        log.info("ReActAgent 构建完成，已注册 {} 个工具, {} 个技能", toolObjects.size(),
+                skillsManager != null ? skillsManager.getSkills().size() : 0);
+
         return agent;
     }
 
@@ -271,6 +287,16 @@ public class AgentService {
 
     public Map<String, ToolRegistry.ToolInfo> getAvailableTools() {
         return toolRegistry.getTools();
+    }
+
+    /**
+     * 重新创建 Agent（用于技能/工具更新后）
+     */
+    public synchronized void reloadAgent() {
+        log.info("触发 Agent 重新加载...");
+        this.reactAgent = null;
+        getOrCreateAgent();
+        log.info("Agent 重新加载完成");
     }
 
     /**

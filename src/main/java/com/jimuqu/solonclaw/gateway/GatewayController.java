@@ -121,6 +121,23 @@ public class GatewayController {
     }
 
     /**
+     * 重新加载 Agent
+     * <p>
+     * 用于技能或工具更新后重新构建 Agent
+     */
+    @Post
+    @Mapping("/agent/reload")
+    public Result reloadAgent() {
+        try {
+            agentService.reloadAgent();
+            return Result.success("Agent 重新加载成功", null);
+        } catch (Exception e) {
+            log.error("Agent 重新加载失败", e);
+            return Result.error("重新加载失败: " + e.getMessage());
+        }
+    }
+
+    /**
      * 流式对话接口（SSE）
      *
      * 使用 Server-Sent Events 协议实时推送 AI 响应

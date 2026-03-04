@@ -199,6 +199,7 @@ public class SkillsManager {
             skillConfigs.put(config.name(), config);
             saveSkillConfig(config);
             log.info("添加技能: {}", config.name());
+            triggerAgentReload();
             return true;
         }
         return false;
@@ -230,6 +231,7 @@ public class SkillsManager {
             }
 
             log.info("更新技能: {} -> {}", name, config.name());
+            triggerAgentReload();
             return true;
         }
         return false;
@@ -248,6 +250,7 @@ public class SkillsManager {
         skillConfigs.remove(name);
         deleteSkillFile(name);
         log.info("删除技能: {}", name);
+        triggerAgentReload();
         return true;
     }
 
@@ -286,7 +289,27 @@ public class SkillsManager {
 
         saveSkillConfig(newConfig);
         log.info("{} 技能: {}", enabled ? "启用" : "禁用", name);
+        triggerAgentReload();
         return true;
+    }
+
+    /**
+     * 触发 Agent 重载
+     * <p>
+     * 使用延迟加载方式获取 AgentService，避免循环依赖
+     */
+    private void triggerAgentReload() {
+        try {
+            // 通过 Solon 上下文延迟获取 AgentService，避免循环依赖
+            var context = org.noear.solon.Solon.context();
+            var agentService = context.getBean(com.jimuqu.solonclaw.agent.AgentService.class);
+            if (agentService != null) {
+                agentService.reloadAgent();
+                log.debug("已触发 Agent 重载");
+            }
+        } catch (Exception e) {
+            log.debug("触发 Agent 重载失败（可能 AgentService 尚未初始化或不存在）");
+        }
     }
 
     /**
