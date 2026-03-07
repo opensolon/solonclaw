@@ -55,12 +55,6 @@ solonclaw:
     store:
       enabled: true
 
-  # 回调配置
-  callback:
-    enabled: true
-    url: "${CALLBACK_URL:}"
-    secret: "${CALLBACK_SECRET:}"
-
   # 自主运行配置（测试中禁用）
   autonomous:
     enabled: false

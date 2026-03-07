@@ -33,9 +33,6 @@ public class AlertService {
     private final Map<String, Long> lastAlertTime = new ConcurrentHashMap<>();
     private static final long ALERT_COOLDOWN = 60000; // 1分钟
 
-    @Inject(required = false)
-    private com.jimuqu.solonclaw.callback.CallbackService callbackService;
-
     /**
      * 发送告警
      */
@@ -66,20 +63,6 @@ public class AlertService {
 
         // 记录日志
         logAlert(record);
-
-        // 发送回调通知
-        if (callbackService != null && level.ordinal() >= AlertLevel.WARNING.ordinal()) {
-            try {
-                callbackService.sendCallback("alert", Map.of(
-                        "level", level.name(),
-                        "title", title,
-                        "message", message,
-                        "timestamp", record.getTimestamp().format(FORMATTER)
-                ));
-            } catch (Exception e) {
-                log.error("Failed to send alert callback", e);
-            }
-        }
     }
 
     /**

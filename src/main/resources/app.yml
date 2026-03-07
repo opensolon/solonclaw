@@ -72,11 +72,6 @@ solonclaw:
       # keyInfoPrompt: ""                  # 关键信息提取提示词（可选，有默认值）
       # hierarchicalPrompt: ""             # 层级摘要提示词（可选，有默认值）
 
-  callback:
-    enabled: true
-    url: "${CALLBACK_URL:}"
-    secret: "${CALLBACK_SECRET:}"
-
   # ==================== 上下文构建器配置 ====================
   context:
     builder:
