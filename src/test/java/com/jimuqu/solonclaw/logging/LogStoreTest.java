@@ -6,7 +6,8 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -27,227 +28,100 @@ class LogStoreTest {
 
     @Test
     void testWriteAndReadLog() {
-        LogEntry entry = new LogEntry(
-                LogLevel.INFO,
-                "Test",
-                "test-session",
-                "这是一条测试日志"
-        );
-        entry.addMetadata("key", "value");
+        LogEntry entry = new LogEntry(LogLevel.INFO, "Test", "test-session", "这是一条测试日志");
 
         logStore.writeLog(entry);
 
-        LogQuery query = new LogQuery()
-                .addSource("Test")
-                .setSessionId("test-session");
-
-        List<LogEntry> results = logStore.queryLogs(query);
-
-        assertFalse(results.isEmpty());
-        assertEquals(LogLevel.INFO, results.get(0).getLevel());
-        assertEquals("Test", results.get(0).getSource());
-        assertEquals("test-session", results.get(0).getSessionId());
-        assertEquals("这是一条测试日志", results.get(0).getMessage());
+        String raw = logStore.getRawLogs(100);
+        assertNotNull(raw);
+        assertTrue(raw.contains("这是一条测试日志"));
+        assertTrue(raw.contains("[INFO]"));
+        assertTrue(raw.contains("[Test]"));
+        assertTrue(raw.contains("[test-session]"));
     }
 
     @Test
     void testBatchWriteLogs() {
         List<LogEntry> entries = new ArrayList<>();
         for (int i = 0; i < 5; i++) {
-            LogEntry entry = new LogEntry(
-                    LogLevel.INFO,
-                    "Test",
-                    "test-session",
-                    "日志 " + i
-            );
-            entries.add(entry);
+            entries.add(new LogEntry(LogLevel.INFO, "Test", "test-session", "日志 " + i));
         }
 
         logStore.writeLogs(entries);
 
-        LogQuery query = new LogQuery()
-                .addSource("Test")
-                .setSessionId("test-session");
-
-        List<LogEntry> results = logStore.queryLogs(query);
-
-        assertEquals(5, results.size());
-    }
-
-    @Test
-    void testQueryByLevel() {
-        logStore.writeLog(new LogEntry(LogLevel.INFO, "Test", "s1", "info"));
-        logStore.writeLog(new LogEntry(LogLevel.USER_CHAT, "Test", "s1", "chat"));
-        logStore.writeLog(new LogEntry(LogLevel.ERROR, "Test", "s1", "error"));
-
-        LogQuery query = new LogQuery()
-                .addLevel(LogLevel.ERROR);
-
-        List<LogEntry> results = logStore.queryLogs(query);
-
-        assertEquals(1, results.size());
-        assertEquals(LogLevel.ERROR, results.get(0).getLevel());
-    }
-
-    @Test
-    void testQueryBySource() {
-        logStore.writeLog(new LogEntry(LogLevel.INFO, "Source1", "s1", "msg1"));
-        logStore.writeLog(new LogEntry(LogLevel.INFO, "Source2", "s1", "msg2"));
-        logStore.writeLog(new LogEntry(LogLevel.INFO, "Source1", "s1", "msg3"));
-
-        LogQuery query = new LogQuery()
-                .addSource("Source1");
-
-        List<LogEntry> results = logStore.queryLogs(query);
-
-        assertEquals(2, results.size());
-    }
-
-    @Test
-    void testQueryByKeyword() {
-        logStore.writeLog(new LogEntry(LogLevel.INFO, "Test", "s1", "包含关键词的消息"));
-        logStore.writeLog(new LogEntry(LogLevel.INFO, "Test", "s1", "不包含的消息"));
-        logStore.writeLog(new LogEntry(LogLevel.INFO, "Test", "s1", "关键词在这里"));
-
-        LogQuery query = new LogQuery()
-                .setKeyword("关键词");
-
-        List<LogEntry> results = logStore.queryLogs(query);
-
-        assertEquals(2, results.size());
-    }
-
-    @Test
-    void testPagination() {
-        for (int i = 0; i < 15; i++) {
-            logStore.writeLog(new LogEntry(LogLevel.INFO, "Test", "s1", "日志 " + i));
+        String raw = logStore.getRawLogs(100);
+        for (int i = 0; i < 5; i++) {
+            assertTrue(raw.contains("日志 " + i));
         }
+    }
 
-        LogQuery query = new LogQuery()
-                .addSource("Test")
-                .setPage(1)
-                .setPageSize(10);
+    @Test
+    void testLogFormat() {
+        logStore.writeLog(new LogEntry(LogLevel.ERROR, "Source1", "s1", "error msg unique_marker_format"));
 
-        List<LogEntry> results = logStore.queryLogs(query);
-
-        assertEquals(10, results.size());
-
-        query.setPage(2);
-        results = logStore.queryLogs(query);
-
-        assertEquals(5, results.size());
+        String raw = logStore.getRawLogs(500);
+        assertTrue(raw.contains("[ERROR]"));
+        assertTrue(raw.contains("[Source1]"));
+        assertTrue(raw.contains("[s1]"));
+        assertTrue(raw.contains("error msg unique_marker_format"));
     }
 
     @Test
     void testLogStats() {
         LogStats stats = logStore.getStats();
-
         assertNotNull(stats);
         assertTrue(stats.getTotalFiles() >= 0);
     }
 
     @Test
     void testClearLogs() {
-        logStore.writeLog(new LogEntry(LogLevel.INFO, "Test", "s1", "msg"));
+        String uniqueMsg = "clear_test_unique_" + System.currentTimeMillis();
+        logStore.writeLog(new LogEntry(LogLevel.INFO, "Test", "s1", uniqueMsg));
 
-        LogQuery query = new LogQuery().addSource("Test");
-        List<LogEntry> before = logStore.queryLogs(query);
-        assertFalse(before.isEmpty());
+        String before = logStore.getRawLogs(500);
+        assertTrue(before.contains(uniqueMsg));
 
         logStore.clearLogs(null);
 
-        List<LogEntry> after = logStore.queryLogs(query);
-        // 清空后查询应该返回空列表（因为清空的是之前的日志）
+        String after = logStore.getRawLogs(500);
+        assertTrue(after.isEmpty());
     }
 
-    // ========== 新增测试：getRecentLogs 和 getLogsByTimeRange ==========
-
-    /**
-     * 测试获取最近的日志（所有会话）
-     */
     @Test
-    void testGetRecentLogsAllSessions() {
-        // 写入几条测试日志
-        logStore.writeLog(new LogEntry(LogLevel.INFO, "Source1", "session1", "消息1"));
-        logStore.writeLog(new LogEntry(LogLevel.INFO, "Source2", "session2", "消息2"));
-        logStore.writeLog(new LogEntry(LogLevel.ERROR, "Source3", "session3", "错误消息"));
-
-        // 获取最近的日志
-        List<LogEntry> logs = logStore.getRecentLogs(null, 10);
-
-        assertNotNull(logs);
-        assertTrue(logs.size() >= 3);
-    }
-
-    /**
-     * 测试获取特定会话的最近日志
-     */
-    @Test
-    void testGetRecentLogsBySession() {
-        // 写入不同会话的日志
-        logStore.writeLog(new LogEntry(LogLevel.INFO, "Source1", "session1", "消息1"));
-        logStore.writeLog(new LogEntry(LogLevel.INFO, "Source2", "session1", "消息2"));
-        logStore.writeLog(new LogEntry(LogLevel.INFO, "Source3", "session2", "消息3"));
-
-        // 获取 session1 的日志
-        List<LogEntry> logs = logStore.getRecentLogs("session1", 10);
-
-        assertNotNull(logs);
-        // 验证所有返回的日志都属于 session1
-        assertTrue(logs.stream().allMatch(e -> "session1".equals(e.getSessionId())));
-    }
-
-    /**
-     * 测试限制返回数量
-     */
-    @Test
-    void testGetRecentLogsWithLimit() {
-        // 写入多条日志
+    void testGetRawLogsLimit() {
         for (int i = 0; i < 20; i++) {
             logStore.writeLog(new LogEntry(LogLevel.INFO, "Source", "session1", "消息" + i));
         }
 
-        // 只获取最近的 10 条
-        List<LogEntry> logs = logStore.getRecentLogs(null, 10);
-
-        assertNotNull(logs);
-        assertTrue(logs.size() <= 10);
+        String raw = logStore.getRawLogs(10);
+        long lineCount = raw.lines().filter(l -> !l.isBlank()).count();
+        assertTrue(lineCount <= 10);
     }
 
-    /**
-     * 测试获取指定时间范围的日志
-     */
+    @Test
+    void testGetRawLogsNewestFirst() {
+        logStore.writeLog(new LogEntry(LogLevel.INFO, "Source", "s1", "第一条"));
+        logStore.writeLog(new LogEntry(LogLevel.INFO, "Source", "s1", "第二条"));
+
+        String raw = logStore.getRawLogs(100);
+        int pos1 = raw.indexOf("第一条");
+        int pos2 = raw.indexOf("第二条");
+        // 倒序，第二条应在第一条前面
+        assertTrue(pos2 < pos1);
+    }
+
+    @Test
+    void testGetRawLogsEmpty() {
+        logStore.clearLogs(null);
+        String raw = logStore.getRawLogs(100);
+        assertTrue(raw.isEmpty());
+    }
+
     @Test
     void testGetLogsByTimeRange() {
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime oneHourAgo = now.minusHours(1);
-
-        // 写入日志
         logStore.writeLog(new LogEntry(LogLevel.INFO, "Source1", "session1", "最近的消息"));
-
-        // 获取最近一小时的日志
-        List<LogEntry> logs = logStore.getLogsByTimeRange(null, oneHourAgo, now);
-
-        assertNotNull(logs);
-    }
-
-    /**
-     * 测试获取特定会话和时间范围的日志
-     */
-    @Test
-    void testGetLogsByTimeRangeAndSession() {
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime oneHourAgo = now.minusHours(1);
-
-        // 写入不同会话的日志
-        logStore.writeLog(new LogEntry(LogLevel.INFO, "Source1", "session1", "消息1"));
-        logStore.writeLog(new LogEntry(LogLevel.INFO, "Source2", "session2", "消息2"));
-
-        // 获取 session1 的日志
-        List<LogEntry> logs = logStore.getLogsByTimeRange("session1", oneHourAgo, now);
-
-        assertNotNull(logs);
-        // 验证所有返回的日志都属于 session1
-        assertTrue(logs.stream().allMatch(e -> "session1".equals(e.getSessionId())));
+        String raw = logStore.getRawLogs(100);
+        assertNotNull(raw);
+        assertTrue(raw.contains("最近的消息"));
     }
 }

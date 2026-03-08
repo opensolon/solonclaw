@@ -46,7 +46,7 @@ solonclaw:
     model:
       primary: "openai/gpt-4"
     maxHistoryMessages: 50
-    maxToolIterations: 25
+    maxToolIterations: 50
 
   tools:
     shell:

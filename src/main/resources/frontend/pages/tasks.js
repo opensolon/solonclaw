@@ -33,8 +33,12 @@ async function loadStats() {
 async function loadTasks(tab) {
     currentTaskTab = tab;
     try {
-        const data = await RequestUtil.get(`${API_BASE}/tasks?status=${tab}`, { showError: false });
-        const tasks = data.tasks || [];
+        // 使用独立端点而不是统一的 /tasks?status= 端点
+        const endpoint = `${API_BASE}/tasks/${tab}`;
+        const data = await RequestUtil.get(endpoint, { showError: false });
+
+        // 处理不同的响应格式
+        const tasks = data.data || data.tasks || [];
 
         document.getElementById(`count-${tab}`).textContent = tasks.length;
         renderTasks(tasks);

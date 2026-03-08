@@ -30,149 +30,86 @@ class UnifiedLoggerTest {
     @Test
     void testLog() {
         logger.log(LogLevel.INFO, "Test", "session1", "测试消息");
-
-        LogQuery query = new LogQuery()
-                .addSource("Test")
-                .setSessionId("session1");
-
-        var results = logStore.queryLogs(query);
-
-        assertFalse(results.isEmpty());
-        assertEquals(LogLevel.INFO, results.get(0).getLevel());
-    }
-
-    @Test
-    void testLogWithMetadata() {
-        Map<String, Object> metadata = new HashMap<>();
-        metadata.put("key", "value");
-        metadata.put("number", 123);
-
-        logger.log(LogLevel.INFO, "Test", "session1", "测试消息", metadata);
-
-        LogQuery query = new LogQuery()
-                .addSource("Test")
-                .setSessionId("session1");
-
-        var results = logStore.queryLogs(query);
-
-        assertFalse(results.isEmpty());
-        assertEquals("value", results.get(0).getMetadata("key"));
-        assertEquals(123, results.get(0).getMetadata("number"));
+        String raw = logStore.getRawLogs(100);
+        assertTrue(raw.contains("[INFO]"));
+        assertTrue(raw.contains("测试消息"));
     }
 
     @Test
     void testInfo() {
         logger.info("Test", "session1", "INFO 消息");
-
-        LogQuery query = new LogQuery()
-                .addSource("Test")
-                .setSessionId("session1");
-
-        var results = logStore.queryLogs(query);
-
-        assertFalse(results.isEmpty());
-        assertEquals(LogLevel.INFO, results.get(0).getLevel());
-        assertEquals("INFO 消息", results.get(0).getMessage());
+        String raw = logStore.getRawLogs(100);
+        assertTrue(raw.contains("[INFO]"));
+        assertTrue(raw.contains("INFO 消息"));
     }
 
     @Test
     void testUserChat() {
         logger.userChat("session1", "用户输入的消息");
-
-        LogQuery query = new LogQuery()
-                .addSource("Gateway")
-                .setSessionId("session1");
-
-        var results = logStore.queryLogs(query);
-
-        assertFalse(results.isEmpty());
-        assertEquals(LogLevel.USER_CHAT, results.get(0).getLevel());
-        assertEquals("用户输入的消息", results.get(0).getMessage());
+        String raw = logStore.getRawLogs(100);
+        assertTrue(raw.contains("[USER_CHAT]"));
+        assertTrue(raw.contains("用户输入的消息"));
     }
 
     @Test
     void testAgentThink() {
         logger.agentThink("session1", "Agent 正在思考...");
-
-        LogQuery query = new LogQuery()
-                .addSource("Agent")
-                .setSessionId("session1");
-
-        var results = logStore.queryLogs(query);
-
-        assertFalse(results.isEmpty());
-        assertEquals(LogLevel.AGENT_THINK, results.get(0).getLevel());
-        assertEquals("Agent 正在思考...", results.get(0).getMessage());
+        String raw = logStore.getRawLogs(100);
+        assertTrue(raw.contains("[AGENT_THINK]"));
+        assertTrue(raw.contains("Agent 正在思考..."));
     }
 
     @Test
     void testDecision() {
         Map<String, Object> metadata = new HashMap<>();
         metadata.put("action", "call_tool");
-        metadata.put("tool", "shell");
-
         logger.decision("session1", "决定调用 shell 工具", metadata);
-
-        LogQuery query = new LogQuery()
-                .addSource("DecisionEngine")
-                .setSessionId("session1");
-
-        var results = logStore.queryLogs(query);
-
-        assertFalse(results.isEmpty());
-        assertEquals(LogLevel.DECISION, results.get(0).getLevel());
-        assertEquals("call_tool", results.get(0).getMetadata("action"));
+        String raw = logStore.getRawLogs(100);
+        assertTrue(raw.contains("[DECISION]"));
+        assertTrue(raw.contains("决定调用 shell 工具"));
     }
 
     @Test
     void testAction() {
         Map<String, Object> metadata = new HashMap<>();
         metadata.put("command", "ls -la");
-        metadata.put("exitCode", 0);
-
         logger.action("session1", "执行命令", metadata);
-
-        LogQuery query = new LogQuery()
-                .addSource("Action")
-                .setSessionId("session1");
-
-        var results = logStore.queryLogs(query);
-
-        assertFalse(results.isEmpty());
-        assertEquals(LogLevel.ACTION, results.get(0).getLevel());
-        assertEquals("ls -la", results.get(0).getMetadata("command"));
+        String raw = logStore.getRawLogs(100);
+        assertTrue(raw.contains("[ACTION]"));
+        assertTrue(raw.contains("执行命令"));
     }
 
     @Test
     void testReflection() {
         logger.reflection("session1", "总结经验：这次任务完成得很好");
-
-        LogQuery query = new LogQuery()
-                .addSource("Reflection")
-                .setSessionId("session1");
-
-        var results = logStore.queryLogs(query);
-
-        assertFalse(results.isEmpty());
-        assertEquals(LogLevel.REFLECTION, results.get(0).getLevel());
-        assertEquals("总结经验：这次任务完成得很好", results.get(0).getMessage());
+        String raw = logStore.getRawLogs(100);
+        assertTrue(raw.contains("[REFLECTION]"));
+        assertTrue(raw.contains("总结经验"));
     }
 
     @Test
     void testError() {
         Exception exception = new Exception("测试异常");
-
         logger.error("Test", "session1", "发生错误", exception);
+        String raw = logStore.getRawLogs(100);
+        assertTrue(raw.contains("[ERROR]"));
+        assertTrue(raw.contains("发生错误"));
+    }
 
-        LogQuery query = new LogQuery()
-                .addSource("Test")
-                .setSessionId("session1");
+    @Test
+    void testErrorStatistics() {
+        Exception ex = new RuntimeException("test");
+        logger.error("Test", "s1", "err1", ex);
+        logger.error("Test", "s1", "err2", ex);
+        assertEquals(2, logger.getTotalErrorCount());
+        assertTrue(logger.getErrorTypeStats().containsKey(RuntimeException.class.getName()));
+        assertTrue(logger.getErrorSourceStats().containsKey("Test"));
+    }
 
-        var results = logStore.queryLogs(query);
-
-        assertFalse(results.isEmpty());
-        assertEquals(LogLevel.ERROR, results.get(0).getLevel());
-        assertEquals("发生错误", results.get(0).getMessage());
-        assertEquals("Exception", results.get(0).getMetadata("exception"));
+    @Test
+    void testResetErrorStats() {
+        logger.error("Test", "s1", "err", new Exception("e"));
+        logger.resetErrorStats();
+        assertEquals(0, logger.getTotalErrorCount());
     }
 }

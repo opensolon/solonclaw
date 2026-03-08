@@ -22,28 +22,19 @@ public class FrontendController {
     /**
      * 返回前端首页
      */
-    @Mapping("/frontend/index.html")
+    @Mapping("/index.html")
     @Produces("text/html;charset=utf-8")
     public String index() {
         return readFile("frontend/index.html", "<html><body>前端页面未找到</body></html>");
     }
 
     /**
-     * 返回自主任务页面
+     * 返回前端首页
      */
-    @Mapping("/frontend/autonomous.html")
+    @Mapping("/frontend/index.html")
     @Produces("text/html;charset=utf-8")
-    public String autonomous() {
-        return readFile("frontend/autonomous.html", "<html><body>自主任务页面未找到</body></html>");
-    }
-
-    /**
-     * 返回自主任务 JavaScript 文件
-     */
-    @Mapping("/frontend/autonomous.js")
-    @Produces("application/javascript;charset=utf-8")
-    public String autonomousJs() {
-        return readFile("frontend/autonomous.js", "// autonomous.js 未找到");
+    public String frontendIndex() {
+        return readFile("frontend/index.html", "<html><body>前端页面未找到</body></html>");
     }
 
     /**
@@ -121,6 +112,6 @@ public class FrontendController {
      */
     @Mapping("/")
     public void rootPath(Context ctx) {
-        ctx.redirect("/frontend/index.html");
+        ctx.redirect("/index.html");
     }
 }

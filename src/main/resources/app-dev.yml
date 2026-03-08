@@ -29,7 +29,7 @@ solonclaw:
 
   agent:
     maxHistoryMessages: 10
-    maxToolIterations: 25
+    maxToolIterations: 50
 
   tools:
     shell:

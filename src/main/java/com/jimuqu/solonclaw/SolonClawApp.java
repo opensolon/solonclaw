@@ -29,7 +29,6 @@ public class SolonClawApp {
                 log.info("=".repeat(60));
                 log.info("  主页: http://localhost:{}{}", port, contextPath);
                 log.info("  前端: http://localhost:{}{}", port, contextPath + (contextPath.isEmpty() ? "/" : "") + "index.html");
-                log.info("  自主智能体: http://localhost:{}{}", port, contextPath + (contextPath.isEmpty() ? "/" : "") + "autonomous.html");
                 log.info("  健康检查: http://localhost:{}{}", port, contextPath + (contextPath.isEmpty() ? "/" : "") + "health");
                 log.info("=".repeat(60));
             });

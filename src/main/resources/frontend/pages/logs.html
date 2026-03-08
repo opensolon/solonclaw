@@ -6,186 +6,33 @@
     <title>SolonClaw - 日志查看</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* ==================== 设计系统变量 ==================== */
-        :root {
-            --primary-color: #2563eb;
-            --primary-hover: #1d4ed8;
-            --success-color: #10b981;
-            --warning-color: #f59e0b;
-            --danger-color: #ef4444;
-            --neutral-50: #f9fafb;
-            --neutral-100: #f3f4f6;
-            --neutral-200: #e5e7eb;
-            --neutral-300: #d1d5db;
-            --neutral-400: #9ca3af;
-            --neutral-500: #6b7280;
-            --neutral-600: #4b5563;
-            --neutral-700: #374151;
-            --neutral-800: #1f2937;
-            --neutral-900: #111827;
-
-            --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06);
-            --card-hover-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-
-            --transition-fast: 150ms ease-in-out;
-            --transition-normal: 200ms ease-in-out;
-            --transition-slow: 300ms ease-in-out;
-
-            --radius-sm: 6px;
-            --radius-md: 10px;
-            --radius-lg: 14px;
-            --radius-xl: 18px;
-        }
-
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: var(--neutral-100);
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f3f4f6;
         }
-
-        /* ==================== 滚动条 ==================== */
-        .custom-scroll::-webkit-scrollbar {
-            width: 7px;
-        }
-        .custom-scroll::-webkit-scrollbar-track {
-            background: var(--neutral-100);
-        }
-        .custom-scroll::-webkit-scrollbar-thumb {
-            background: var(--neutral-300);
-            border-radius: 4px;
-        }
-        .custom-scroll::-webkit-scrollbar-thumb:hover {
-            background: var(--neutral-400);
-        }
-
-        /* ==================== 日志条目 ==================== */
-        .log-entry {
-            padding: 12px 16px;
-            border-bottom: 1px solid var(--neutral-200);
+        #logsContent {
             font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
             font-size: 13px;
             line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-all;
         }
-        .log-entry:last-child {
-            border-bottom: none;
-        }
-        .log-entry:hover {
-            background: var(--neutral-50);
-        }
-        .log-entry.level-INFO { color: var(--neutral-700); }
-        .log-entry.level-DEBUG { color: var(--neutral-500); }
-        .log-entry.level-ERROR { color: var(--danger-color); background: rgba(239, 68, 68, 0.05); }
-        .log-entry.level-WARN { color: var(--warning-color); }
-
-        /* ==================== 按钮 ==================== */
-        .btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 10px 16px;
-            border-radius: var(--radius-md);
-            font-weight: 500;
-            font-size: 14px;
-            border: none;
-            cursor: pointer;
-            transition: all var(--transition-normal);
-        }
-        .btn-primary {
-            background: var(--primary-color);
-            color: white;
-        }
-        .btn-primary:hover {
-            background: var(--primary-hover);
-        }
-        .btn-danger {
-            background: var(--danger-color);
-            color: white;
-        }
-        .btn-danger:hover {
-            background: #dc2626;
-        }
-
-        /* ==================== 表单 ==================== */
-        .form-label {
-            display: block;
-            font-size: 14px;
-            font-weight: 500;
-            color: var(--neutral-700);
-            margin-bottom: 8px;
-        }
-        .form-input, .form-select {
-            width: 100%;
-            padding: 10px 14px;
-            border: 1px solid var(--neutral-200);
-            border-radius: var(--radius-md);
-            font-size: 14px;
-            background: white;
-            transition: all var(--transition-fast);
-        }
-        .form-input:focus, .form-select:focus {
-            outline: none;
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-        }
-
-        /* ==================== 焦点可见性 ==================== */
-        *:focus-visible {
-            outline: 2px solid var(--primary-color);
-            outline-offset: 2px;
-        }
-        button:focus-visible {
-            outline-offset: 3px;
-        }
+        #logsContent::-webkit-scrollbar { width: 7px; }
+        #logsContent::-webkit-scrollbar-track { background: #f3f4f6; }
+        #logsContent::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
     </style>
 </head>
 <body class="h-full flex flex-col p-5">
-    <!-- 筛选区域 -->
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-4">
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-                <label class="form-label">日志级别</label>
-                <select id="logLevel" class="form-select">
-                    <option value="">全部</option>
-                    <option value="INFO">INFO</option>
-                    <option value="DEBUG">DEBUG</option>
-                    <option value="ERROR">ERROR</option>
-                    <option value="WARN">WARN</option>
-                </select>
-            </div>
-            <div>
-                <label class="form-label">来源</label>
-                <select id="logSource" class="form-select">
-                    <option value="">全部</option>
-                    <option value="AGENT">Agent</option>
-                    <option value="USER">User</option>
-                    <option value="SYSTEM">System</option>
-                </select>
-            </div>
-            <div>
-                <label class="form-label">关键字</label>
-                <input type="text" id="logKeyword" class="form-input" placeholder="搜索关键字">
-            </div>
-            <div class="flex items-end space-x-2">
-                <button onclick="filterLogs()" class="btn btn-primary flex-1">筛选</button>
-                <button onclick="clearLogs()" class="btn btn-danger">清空</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- 日志列表 -->
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 flex-1 overflow-hidden flex flex-col">
-        <div class="border-b border-gray-200 px-5 py-4">
+        <div class="border-b border-gray-200 px-5 py-4 flex items-center justify-between">
             <h2 class="text-lg font-bold text-gray-900 tracking-tight">系统日志</h2>
+            <span class="text-xs text-gray-400">每 5 秒自动刷新</span>
         </div>
-        <div id="logsContent" class="flex-1 overflow-y-auto custom-scroll">
-            <div class="flex items-center justify-center h-40 text-gray-400">
-                <span class="font-medium">加载中...</span>
-            </div>
+        <div id="logsContent" class="flex-1 overflow-y-auto p-4 text-gray-700">
+            加载中...
         </div>
     </div>
 
-    <script src="../RequestUtil.js?v=1.0"></script>
-    <script src="logs.js?v=1.0"></script>
+    <script src="logs.js?v=2.0"></script>
 </body>
 </html>

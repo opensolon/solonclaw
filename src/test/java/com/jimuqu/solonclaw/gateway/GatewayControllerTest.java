@@ -186,7 +186,10 @@ public class GatewayControllerTest {
         AgentService.StreamEvent event = new AgentService.StreamEvent(
                 AgentService.StreamEventType.ERROR,
                 "发生错误",
-                error
+                error,
+                null,
+                null,
+                null
         );
 
         assertEquals(AgentService.StreamEventType.ERROR, event.type());
@@ -244,7 +247,10 @@ public class GatewayControllerTest {
         AgentService.StreamEvent event = new AgentService.StreamEvent(
                 AgentService.StreamEventType.ERROR,
                 "发生错误",
-                error
+                error,
+                null,
+                null,
+                null
         );
 
         String json = event.toJson();

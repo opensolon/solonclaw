@@ -6,7 +6,6 @@ import org.noear.solon.annotation.Inject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
@@ -67,9 +66,9 @@ public class WorkspaceConfig {
         // 创建必要的子目录
         info.mkdirs();
 
-        log.info("SolonClaw 工作目录: {}", workspace);
-        log.info("  - Skills 目录: {}", info.skillsDir());
-        log.info("  - 数据库: {}", info.databaseFile());
+        log.info("- SolonClaw 工作目录: {}", workspace);
+        log.info("- Skills 目录: {}", info.skillsDir());
+        log.info("- 数据库: {}", info.databaseFile());
 
         return info;
     }
