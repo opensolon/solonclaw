@@ -65,7 +65,7 @@ public class SchedulerController {
     @Post
     @Mapping("/cron")
     public Result addCronJob(@Body JobRequest request) {
-        log.info("添加 Cron 任务: name={}, cron={}", request.name(), request.cron());
+        log.info("添加 Cron 任务: name={}, cron={}, sessionType={}", request.name(), request.cron(), request.sessionType());
 
         try {
             if (request.name() == null || request.name().isEmpty()) {
@@ -78,9 +78,33 @@ public class SchedulerController {
                 return Result.error("执行命令不能为空");
             }
 
-            boolean success = schedulerService.addCronJob(request.name(), request.cron(), request.command());
+            // 解析会话类型
+            SchedulerService.SessionType sessionType = SchedulerService.SessionType.MAIN;
+            if (request.sessionType() != null && !request.sessionType().isEmpty()) {
+                try {
+                    sessionType = SchedulerService.SessionType.valueOf(request.sessionType().toUpperCase());
+                } catch (IllegalArgumentException e) {
+                    return Result.error("无效的 sessionType: " + request.sessionType() + "，请使用 MAIN 或 ISOLATED");
+                }
+            }
+
+            // 解析消息模式
+            SchedulerService.MessageMode messageMode = SchedulerService.MessageMode.STANDARD;
+            if (request.messageMode() != null && !request.messageMode().isEmpty()) {
+                try {
+                    messageMode = SchedulerService.MessageMode.valueOf(request.messageMode().toUpperCase());
+                } catch (IllegalArgumentException e) {
+                    return Result.error("无效的 messageMode: " + request.messageMode() + "，请使用 STANDARD 或 ANNOUNCE");
+                }
+            }
+
+            boolean success = schedulerService.addCronJob(request.name(), request.cron(), request.command(), sessionType, messageMode, null, null);
             if (success) {
-                return Result.success("添加成功", Map.of("name", request.name()));
+                return Result.success("添加成功", Map.of(
+                    "name", request.name(),
+                    "sessionType", sessionType.name(),
+                    "messageMode", messageMode.name()
+                ));
             } else {
                 return Result.error("任务已存在: " + request.name());
             }
@@ -277,7 +301,9 @@ public class SchedulerController {
             String cron,
             Long fixedRate,
             Long delay,
-            String command
+            String command,
+            String sessionType,   // MAIN 或 ISOLATED
+            String messageMode    // STANDARD 或 ANNOUNCE
     ) {
     }
 

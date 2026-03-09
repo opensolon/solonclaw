@@ -20,7 +20,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.*;
 
 /**
  * 调度服务
@@ -45,6 +45,20 @@ public class SchedulerService {
      * Solon 的任务管理器
      */
     private IJobManager jobManager;
+
+    /**
+     * 任务执行器（用于 fixedRate 任务）
+     */
+    private final ScheduledExecutorService scheduledExecutor = Executors.newScheduledThreadPool(2, r -> {
+        Thread t = new Thread(r, "scheduler-fixedrate");
+        t.setDaemon(true);
+        return t;
+    });
+
+    /**
+     * 运行中的 fixedRate 任务（用于取消）
+     */
+    private final Map<String, ScheduledFuture<?>> runningFixedRateTasks = new ConcurrentHashMap<>();
 
     /**
      * 任务定义：名称 -> 任务信息
@@ -74,7 +88,7 @@ public class SchedulerService {
     }
 
     /**
-     * 添加 Cron 表达式任务
+     * 添加 Cron 表达式任务（默认 Main Session 模式）
      *
      * @param name     任务名称
      * @param cron     Cron 表达式
@@ -82,6 +96,22 @@ public class SchedulerService {
      * @return 是否添加成功
      */
     public boolean addCronJob(String name, String cron, String command) {
+        return addCronJob(name, cron, command, SessionType.MAIN, MessageMode.STANDARD, null, null);
+    }
+
+    /**
+     * 添加 Cron 表达式任务（支持会话类型）
+     *
+     * @param name         任务名称
+     * @param cron         Cron 表达式
+     * @param command      要执行的命令（发送给 Agent）
+     * @param sessionType  会话类型（MAIN/ISOLATED）
+     * @param messageMode  消息模式（STANDARD/ANNOUNCE）
+     * @param model        可选：覆盖默认模型
+     * @param thinking     可选：思考级别
+     * @return 是否添加成功
+     */
+    public boolean addCronJob(String name, String cron, String command, SessionType sessionType, MessageMode messageMode, String model, String thinking) {
         if (jobs.containsKey(name)) {
             log.warn("任务已存在: {}", name);
             return false;
@@ -89,7 +119,7 @@ public class SchedulerService {
 
         try {
             // 创建任务信息
-            JobInfo jobInfo = new JobInfo(name, cron, 0, false, 0, command, JobType.CRON);
+            JobInfo jobInfo = new JobInfo(name, cron, 0, false, 0, command, JobType.CRON, sessionType, messageMode, model, thinking);
             jobs.put(name, jobInfo);
 
             // 注册到 Solon 调度器
@@ -97,7 +127,7 @@ public class SchedulerService {
 
             // 持久化
             saveJobs();
-            log.info("添加 Cron 任务: name={}, cron={}", name, cron);
+            log.info("添加 Cron 任务: name={}, cron={}, sessionType={}", name, cron, sessionType);
             return true;
         } catch (Exception e) {
             log.error("添加 Cron 任务失败: {}", name, e);
@@ -124,7 +154,9 @@ public class SchedulerService {
             JobInfo jobInfo = new JobInfo(name, null, fixedRate, false, 0, command, JobType.FIXED_RATE);
             jobs.put(name, jobInfo);
 
-            registerJob(jobInfo);
+            // 使用 ExecutorService 调度 fixedRate 任务
+            startFixedRateTask(jobInfo);
+
             saveJobs();
             log.info("添加固定频率任务: name={}, fixedRate={}ms", name, fixedRate);
             return true;
@@ -133,6 +165,22 @@ public class SchedulerService {
             jobs.remove(name);
             return false;
         }
+    }
+
+    /**
+     * 启动 fixedRate 任务
+     */
+    private void startFixedRateTask(JobInfo jobInfo) {
+        ScheduledFuture<?> future = scheduledExecutor.scheduleAtFixedRate(() -> {
+            try {
+                executeJob(jobInfo);
+            } catch (Exception e) {
+                log.error("FixedRate 任务执行失败: {}", jobInfo.name(), e);
+            }
+        }, 0, jobInfo.fixedRate(), TimeUnit.MILLISECONDS);
+
+        runningFixedRateTasks.put(jobInfo.name(), future);
+        log.info("FixedRate 任务已启动: {}, interval={}ms", jobInfo.name(), jobInfo.fixedRate());
     }
 
     /**
@@ -199,12 +247,21 @@ public class SchedulerService {
 
                 @Override
                 public long fixedRate() {
-                    return jobInfo.jobType() == JobType.FIXED_RATE ? jobInfo.fixedRate() : 0;
+                    // Solon 可能使用 fixedDelay，对于 FIXED_RATE 任务需要同时设置
+                    return 0;
                 }
 
                 @Override
                 public long fixedDelay() {
-                    return jobInfo.jobType() == JobType.ONE_TIME ? jobInfo.fixedRate() : 0;
+                    // 对于 FIXED_RATE 和 CRON 任务，使用 fixedDelay 来调度
+                    if (jobInfo.jobType() == JobType.FIXED_RATE) {
+                        long delay = jobInfo.fixedRate();
+                        log.info("fixedDelay() for FIXED_RATE: {} = {}", jobInfo.name(), delay);
+                        return delay;
+                    } else if (jobInfo.jobType() == JobType.ONE_TIME) {
+                        return jobInfo.fixedRate();
+                    }
+                    return 0;
                 }
 
                 @Override
@@ -220,12 +277,14 @@ public class SchedulerService {
 
             // 创建任务处理器
             JobHandler handler = (ctx) -> {
+                log.info("任务处理器被调用: {}", jobInfo.name());
                 executeJob(jobInfo);
             };
 
             jobManager.jobAdd(jobInfo.name(), scheduled, handler);
 
-            log.debug("任务已注册到调度器: {}", jobInfo.name());
+            log.info("任务已注册到调度器: {}, type={}, cron={}, fixedRate={}",
+                jobInfo.name(), jobInfo.jobType(), jobInfo.cron(), jobInfo.fixedRate());
         } catch (Exception e) {
             log.error("注册任务到调度器失败: {}", jobInfo.name(), e);
             throw new RuntimeException("注册任务失败: " + e.getMessage(), e);
@@ -241,10 +300,17 @@ public class SchedulerService {
         String errorMessage = null;
 
         try {
-            log.info("执行任务: {}", jobInfo.name());
+            log.info("执行任务: {}, sessionType={}", jobInfo.name(), jobInfo.sessionType());
 
-            // 调用 Agent 执行命令
-            String response = agentService.chat(jobInfo.command(), "scheduler-" + jobInfo.name());
+            // 根据会话类型执行任务
+            String response;
+            if (jobInfo.sessionType() == SessionType.ISOLATED) {
+                // Isolated Session 模式 - 创建干净会话
+                response = executeJobIsolated(jobInfo);
+            } else {
+                // Main Session 模式 - 注入主会话
+                response = executeJobMain(jobInfo);
+            }
 
             success = true;
             log.info("任务执行成功: {}, 响应长度: {}", jobInfo.name(), response.length());
@@ -263,6 +329,39 @@ public class SchedulerService {
     }
 
     /**
+     * 执行 Isolated Session 任务（干净的历史记录）
+     */
+    private String executeJobIsolated(JobInfo jobInfo) {
+        String sessionId = "cron:" + jobInfo.name();
+
+        // 清空该会话的历史记录
+        agentService.clearHistory(sessionId);
+        log.debug("Isolated Session 已清空历史: {}", sessionId);
+
+        // 执行任务
+        String response = agentService.chat(jobInfo.command(), sessionId);
+
+        // 执行完成后可以选择保留或清理
+        // 这里保留以便后续调试
+
+        return response;
+    }
+
+    /**
+     * 执行 Main Session 任务（注入主会话）
+     */
+    private String executeJobMain(JobInfo jobInfo) {
+        String sessionId = "main";
+
+        // 注入到主会话，作为系统事件
+        String eventMessage = "System Event: " + jobInfo.name() + " - " + jobInfo.command();
+        log.debug("注入系统事件到主会话: {}", eventMessage);
+
+        // 调用 Agent 执行命令
+        return agentService.chat(jobInfo.command(), sessionId);
+    }
+
+    /**
      * 删除任务
      *
      * @param name 任务名称
@@ -273,6 +372,13 @@ public class SchedulerService {
         if (ObjUtil.isNull(jobInfo)) {
             log.warn("任务不存在: {}", name);
             return false;
+        }
+
+        // 取消 fixedRate 任务
+        ScheduledFuture<?> future = runningFixedRateTasks.remove(name);
+        if (ObjUtil.isNotNull(future)) {
+            future.cancel(false);
+            log.info("已取消 FixedRate 任务: {}", name);
         }
 
         // 从 Solon 调度器中移除
@@ -426,7 +532,14 @@ public class SchedulerService {
     private void restoreJobs() {
         for (JobInfo jobInfo : jobs.values()) {
             try {
-                if (ObjUtil.isNotNull(jobManager) && !jobManager.jobExists(jobInfo.name())) {
+                if (jobInfo.jobType() == JobType.FIXED_RATE) {
+                    // 恢复 fixedRate 任务
+                    if (!runningFixedRateTasks.containsKey(jobInfo.name())) {
+                        startFixedRateTask(jobInfo);
+                        log.info("恢复 FixedRate 任务: {}", jobInfo.name());
+                    }
+                } else if (ObjUtil.isNotNull(jobManager) && !jobManager.jobExists(jobInfo.name())) {
+                    // 恢复 cron/one-time 任务
                     registerJob(jobInfo);
                     log.debug("恢复任务: {}", jobInfo.name());
                 }
@@ -699,6 +812,22 @@ public class SchedulerService {
     }
 
     /**
+     * 会话类型
+     */
+    public enum SessionType {
+        MAIN,       // 主会话 - 注入主会话上下文
+        ISOLATED    // 独立会话 - 干净的历史记录
+    }
+
+    /**
+     * 消息模式
+     */
+    public enum MessageMode {
+        STANDARD,   // 标准模式
+        ANNOUNCE    // 公告模式 - 直接发送摘要
+    }
+
+    /**
      * 任务信息
      *
      * @param name          任务名称
@@ -708,6 +837,10 @@ public class SchedulerService {
      * @param scheduleTime  调度时间（一次性任务）
      * @param command       要执行的命令
      * @param jobType       任务类型
+     * @param sessionType   会话类型（MAIN/ISOLATED）
+     * @param messageMode   消息模式（STANDARD/ANNOUNCE）
+     * @param model         可选：覆盖默认模型
+     * @param thinking      可选：思考级别
      */
     public record JobInfo(
             String name,
@@ -716,8 +849,39 @@ public class SchedulerService {
             boolean isOneTime,
             long scheduleTime,
             String command,
-            JobType jobType
+            JobType jobType,
+            SessionType sessionType,
+            MessageMode messageMode,
+            String model,
+            String thinking
     ) {
+        /**
+         * 便捷构造函数（向后兼容）
+         */
+        public JobInfo(String name, String cron, long fixedRate, boolean isOneTime, long scheduleTime, String command, JobType jobType) {
+            this(name, cron, fixedRate, isOneTime, scheduleTime, command, jobType, SessionType.MAIN, MessageMode.STANDARD, null, null);
+        }
+
+        /**
+         * 更简洁的便捷构造函数（仅 name, cron, command）
+         */
+        public JobInfo(String name, String cron, String command) {
+            this(name, cron, 0, false, 0, command, JobType.CRON, SessionType.MAIN, MessageMode.STANDARD, null, null);
+        }
+
+        /**
+         * 获取会话类型（默认 MAIN）
+         */
+        public SessionType sessionType() {
+            return sessionType != null ? sessionType : SessionType.MAIN;
+        }
+
+        /**
+         * 获取消息模式（默认 STANDARD）
+         */
+        public MessageMode messageMode() {
+            return messageMode != null ? messageMode : MessageMode.STANDARD;
+        }
     }
 
     /**
