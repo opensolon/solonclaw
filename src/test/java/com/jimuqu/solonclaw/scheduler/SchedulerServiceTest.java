@@ -299,7 +299,9 @@ class SchedulerServiceTest {
                 "0 0 * * *",
                 null,
                 null,
-                "echo hello"
+                "echo hello",
+                null,
+                null
             );
 
             assertEquals("test-job", request.name());
@@ -317,7 +319,9 @@ class SchedulerServiceTest {
                 null,
                 5000L,
                 null,
-                "ls"
+                "ls",
+                null,
+                null
             );
 
             assertEquals("fixed-job", request.name());
@@ -334,7 +338,9 @@ class SchedulerServiceTest {
                 null,
                 null,
                 60000L,
-                "date"
+                "date",
+                null,
+                null
             );
 
             assertEquals("onetime-job", request.name());
