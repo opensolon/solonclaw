@@ -2,6 +2,7 @@ package com.jimuqu.solonclaw.agent.subagent;
 
 import com.jimuqu.solonclaw.agent.AgentService;
 import com.jimuqu.solonclaw.agent.event.AgentInternalEvent;
+import com.jimuqu.solonclaw.agent.event.EventStore;
 import com.jimuqu.solonclaw.agent.event.InternalEventListener;
 import org.noear.solon.annotation.Component;
 import org.noear.solon.annotation.Inject;
@@ -36,6 +37,9 @@ public class SubagentSpawnService {
 
     @Inject
     private AgentService agentService;
+
+    @Inject
+    private EventStore eventStore;
 
     /**
      * 子 Agent 执行线程池
@@ -126,7 +130,12 @@ public class SubagentSpawnService {
             // 标记完成
             subagentManager.completeRun(runId, SubagentManager.RunOutcome.OK);
 
-            log.info("子 Agent 执行完成: runId={}, session={}, resultLength={}",
+            // 创建内部事件
+            AgentInternalEvent event = createTaskCompletionEvent(
+                    run, result, AgentInternalEvent.EventStatus.OK);
+            eventStore.addEvent(event);
+
+            log.info("子 Agent 执行完成: runId={}, session={}, resultLength={}, 事件已创建",
                     runId, childSessionKey, result != null ? result.length() : 0);
 
             return new SpawnResult(true, "执行成功", childSessionKey, runId, result);
@@ -134,11 +143,23 @@ public class SubagentSpawnService {
         } catch (TimeoutException e) {
             log.warn("子 Agent 执行超时: runId={}", runId);
             subagentManager.completeRun(runId, SubagentManager.RunOutcome.TIMEOUT);
+
+            // 创建超时事件
+            AgentInternalEvent event = createTaskCompletionEvent(
+                    run, "执行超时", AgentInternalEvent.EventStatus.TIMEOUT);
+            eventStore.addEvent(event);
+
             return new SpawnResult(false, "执行超时", childSessionKey, runId, null);
 
         } catch (Exception e) {
             log.error("子 Agent 执行异常: runId={}", runId, e);
             subagentManager.completeRun(runId, SubagentManager.RunOutcome.ERROR);
+
+            // 创建错误事件
+            AgentInternalEvent event = createTaskCompletionEvent(
+                    run, "执行异常: " + e.getMessage(), AgentInternalEvent.EventStatus.ERROR);
+            eventStore.addEvent(event);
+
             return new SpawnResult(false, "执行异常: " + e.getMessage(), childSessionKey, runId, null);
         }
     }
@@ -231,6 +252,33 @@ public class SubagentSpawnService {
         int length = result.length();
         int lines = result.split("\n").length;
         return String.format("Output: %d chars, %d lines", length, lines);
+    }
+
+    /**
+     * 创建任务完成事件
+     */
+    private AgentInternalEvent createTaskCompletionEvent(
+            SubagentManager.SubagentRun run,
+            String result,
+            AgentInternalEvent.EventStatus status) {
+
+        String statsLine = run.getStatsLine();
+        String replyInstruction = run.getReplyInstruction();
+
+        if (replyInstruction == null || replyInstruction.isEmpty()) {
+            replyInstruction = "请根据子任务结果继续工作";
+        }
+
+        return AgentInternalEvent.taskCompletion(
+                AgentInternalEvent.EventSource.SUBAGENT,
+                run.getChildSessionKey(),
+                run.getChildSessionId(),
+                run.getTaskLabel(),
+                status,
+                result,
+                statsLine,
+                replyInstruction
+        );
     }
 
     /**

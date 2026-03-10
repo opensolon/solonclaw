@@ -3,6 +3,7 @@ package com.jimuqu.solonclaw.agent;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.ObjUtil;
 import cn.hutool.core.util.StrUtil;
+import com.jimuqu.solonclaw.agent.event.AgentInternalEvent;
 import com.jimuqu.solonclaw.context.Context;
 import com.jimuqu.solonclaw.context.ContextBuilder;
 import com.jimuqu.solonclaw.memory.MemoryService;
@@ -76,6 +77,9 @@ public class AgentService {
 
     @Inject(required = false)
     private SummarizationStrategyFactory summarizationStrategyFactory;
+
+    @Inject(required = false)
+    private com.jimuqu.solonclaw.agent.event.EventStore eventStore;
 
     /**
      * ReActAgent 实例（延迟初始化）
@@ -274,18 +278,53 @@ public class AgentService {
      * 构建增强消息（带上下文）
      */
     private String buildEnhancedMessage(String message, String sessionId) {
+        // 首先检查并注入内部事件
+        String messageWithEvents = injectInternalEvents(sessionId, message);
+
         if (ObjUtil.isNull(contextBuilder)) {
-            return message;
+            return messageWithEvents;
         }
         try {
-            Context context = contextBuilder.build(sessionId, message, null);
-            String enhanced = context.buildPrompt(message);
+            Context context = contextBuilder.build(sessionId, messageWithEvents, null);
+            String enhanced = context.buildPrompt(messageWithEvents);
             log.debug("已使用 ContextBuilder 构建上下文：sessionId={}", sessionId);
             return enhanced;
         } catch (Exception e) {
-            log.warn("使用 ContextBuilder 构建上下文失败，回退到原始消息", e);
+            log.warn("使用 ContextBuilder 构建上下文失败，回退到增强消息", e);
+            return messageWithEvents;
+        }
+    }
+
+    /**
+     * 注入内部事件到消息中
+     * <p>
+     * 参考 OpenClaw 的实现：在父 Agent 的上下文中包含子任务的完成事件
+     */
+    private String injectInternalEvents(String sessionId, String message) {
+        if (eventStore == null) {
             return message;
         }
+
+        var events = eventStore.getPendingEvents(sessionId);
+        if (events.isEmpty()) {
+            log.debug("会话 {} 没有待处理的内部事件", sessionId);
+            return message;
+        }
+
+        log.info("发现 {} 个内部事件，注入到会话 {}", events.size(), sessionId);
+
+        // 将事件格式化为提示词文本
+        String eventsText = AgentInternalEvent.formatEventsForPrompt(events);
+
+        // 清除已处理的事件
+        eventStore.clearEvents(sessionId);
+
+        // 将事件文本添加到消息前面
+        StringBuilder enhancedMessage = new StringBuilder();
+        enhancedMessage.append(message).append("\n\n");
+        enhancedMessage.append(eventsText);
+
+        return enhancedMessage.toString();
     }
 
     /**
