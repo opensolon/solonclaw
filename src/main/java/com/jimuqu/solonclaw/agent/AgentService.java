@@ -96,12 +96,20 @@ public class AgentService {
         long startTime = System.currentTimeMillis();
 
         try {
+            // 检查 chatModel 是否可用
+            if (chatModel == null) {
+                log.warn("ChatModel 未注入，跳过 ReActAgent 预热");
+                warmedUp = false;
+                return;
+            }
+
             getOrCreateAgent();
             warmedUp = true;
             long elapsed = System.currentTimeMillis() - startTime;
             log.info("ReActAgent 预热完成，耗时：{} ms", elapsed);
         } catch (Exception e) {
             log.error("ReActAgent 预热失败", e);
+            warmedUp = false;
         }
     }
 
@@ -123,8 +131,12 @@ public class AgentService {
     private ReActAgent buildReActAgent() {
         log.info("开始构建 ReActAgent...");
 
+        if (chatModel == null) {
+            throw new IllegalStateException("ChatModel 未注入，无法构建 ReActAgent");
+        }
+
         // 注册内置工具
-        List<Object> toolObjects = toolRegistry.getToolObjects();
+        List<Object> toolObjects = (toolRegistry != null) ? toolRegistry.getToolObjects() : new ArrayList<>();
 
         var builder = ReActAgent.of(chatModel)
                 .name("solonclaw_agent")
