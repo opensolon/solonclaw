@@ -41,6 +41,9 @@ public class SubagentSpawnService {
     @Inject
     private EventStore eventStore;
 
+    @Inject
+    private WorkspaceContext workspaceContext;
+
     /**
      * 子 Agent 执行线程池
      */
@@ -92,6 +95,13 @@ public class SubagentSpawnService {
         String childSessionKey = deriveChildSessionKey(params.getParentSessionKey());
         String runId = UUID.randomUUID().toString();
         String childSessionId = UUID.randomUUID().toString();
+
+        // 设置工作空间继承（子 Agent 共享父 Agent 的工作目录）
+        String workspacePath = workspaceContext.inheritWorkspace(
+                childSessionKey,
+                params.getParentSessionKey()
+        );
+        log.info("子 Agent 工作空间: childSessionKey={}, workspace={}", childSessionKey, workspacePath);
 
         // 创建运行记录
         SubagentManager.SubagentRun run = new SubagentManager.SubagentRun(
