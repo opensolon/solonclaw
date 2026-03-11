@@ -47,9 +47,17 @@ public class CronTool {
             参数说明：
             - name: 任务名称（必填），如 "my-task"
             - fixedRateMs: 固定间隔（毫秒），如 5000 表示每5秒执行一次
-            - schedule: Cron 表达式，如 "0 9 * * *" 表示每天9点执行（与 fixedRateMs 二选一）
+            - schedule: Cron 表达式，支持5位或6位格式：
+              - 5位格式（推荐）："30 17 * * *" 表示每天17:30执行
+              - 6位格式（内部使用）："0 30 17 * * *"（会自动转换）
             - command: 要执行的命令（必填），如 "echo hello"
             - sessionType: 会话模式，MAIN 或 ISOLATED（默认 MAIN）
+
+            常用 Cron 示例：
+            - "30 17 * * *" = 每天 17:30
+            - "0 9 * * *" = 每天 9:00
+            - "0 */1 * * *" = 每小时
+            - "0 */15 * * *" = 每15分钟
 
             示例：创建每10秒执行的任务
             - action=add, name="test-task", fixedRateMs=10000, command="echo hello", sessionType="ISOLATED"
@@ -128,6 +136,11 @@ public class CronTool {
             actualSchedule = null;
         } else if (StrUtil.isBlank(schedule)) {
             return formatError("必须指定 schedule（Cron 表达式）或 fixedRateMs（固定频率毫秒数）");
+        }
+
+        // 转换 Cron 表达式格式（5位转6位）
+        if (!isFixedRate && StrUtil.isNotBlank(actualSchedule)) {
+            actualSchedule = convertCronExpression(actualSchedule);
         }
 
         // 解析会话类型
@@ -256,6 +269,37 @@ public class CronTool {
         }
 
         return sb.toString();
+    }
+
+    /**
+     * 将 5 位 Cron 表达式转换为 6 位（Solon 框架需要秒）
+     * 5位格式: 分 时 日 月 周
+     * 6位格式: 秒 分 时 日 月 周
+     *
+     * @param cron 5位或6位Cron表达式
+     * @return 6位Cron表达式
+     */
+    private String convertCronExpression(String cron) {
+        if (cron == null) {
+            return cron;
+        }
+
+        String trimmed = cron.trim();
+
+        // 已经是6位，直接返回
+        if (trimmed.split("\\s+").length >= 6) {
+            return trimmed;
+        }
+
+        // 5位格式，添加秒（默认0秒）
+        if (trimmed.split("\\s+").length == 5) {
+            String converted = "0 " + trimmed;
+            log.info("转换 Cron 表达式: {} -> {}", trimmed, converted);
+            return converted;
+        }
+
+        // 其他情况返回原始值
+        return trimmed;
     }
 
     /**
