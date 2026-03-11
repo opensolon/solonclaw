@@ -6,14 +6,19 @@ import org.noear.solon.annotation.Inject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 记忆文件管理服务
@@ -373,5 +378,174 @@ public class MemoryFileManager {
     public synchronized String cleanupOldNotes() {
         int retainDays = config != null ? config.getRetainDays() : 30;
         return cleanupOldNotes(retainDays);
+    }
+
+    /**
+     * 分块读取文件内容
+     * <p>
+     * 使用 BufferedReader 按行读取，避免一次性加载大文件导致性能问题
+     *
+     * @param path      文件路径
+     * @param startLine 起始行（从0开始）
+     * @param maxLines  最大读取行数
+     * @return 读取的内容
+     */
+    public synchronized String readFileBlock(Path path, int startLine, int maxLines) {
+        if (!Files.exists(path)) {
+            log.debug("文件不存在: {}", path);
+            return "";
+        }
+
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(Files.newInputStream(path)))) {
+            List<String> lines = new ArrayList<>();
+            int currentLine = 0;
+            int readLines = 0;
+            String line;
+
+            while ((line = reader.readLine()) != null && readLines < maxLines) {
+                if (currentLine >= startLine) {
+                    lines.add(line);
+                    readLines++;
+                }
+                currentLine++;
+            }
+
+            String content = String.join("\n", lines);
+            log.debug("分块读取文件: {} - 行 {} 到 {}, 共 {} 行, {} 字符",
+                    path.getFileName(), startLine, startLine + readLines - 1, readLines, content.length());
+            return content;
+        } catch (IOException e) {
+            log.error("分块读取文件失败: {}", path, e);
+            return "";
+        }
+    }
+
+    /**
+     * 读取长期记忆的前N行（便捷方法）
+     *
+     * @param maxLines 最大读取行数
+     * @return 读取的内容
+     */
+    public synchronized String readLongTermMemoryPreview(int maxLines) {
+        initMemoryDir();
+        Path memoryPath = getLongTermMemoryPath();
+        return readFileBlock(memoryPath, 0, maxLines);
+    }
+
+    /**
+     * 执行备份
+     * <p>
+     * 使用原子操作：先写临时文件再重命名，防止数据损坏
+     *
+     * @return 备份结果
+     */
+    public synchronized String backup() {
+        if (config == null || !config.isBackupEnabled()) {
+            log.debug("备份功能未启用");
+            return "备份功能未启用";
+        }
+
+        initMemoryDir();
+        Path memoryPath = getLongTermMemoryPath();
+
+        if (!Files.exists(memoryPath)) {
+            log.debug("长期记忆文件不存在，无需备份");
+            return "无需备份";
+        }
+
+        try {
+            // 创建备份目录
+            Path backupDirPath = getBackupDirPath();
+            if (!Files.exists(backupDirPath)) {
+                Files.createDirectories(backupDirPath);
+                log.info("创建备份目录: {}", backupDirPath);
+            }
+
+            // 生成备份文件名：MEMORY_2026-03-12_14-30-00.bak
+            String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"));
+            String backupFileName = "MEMORY_" + timestamp + ".bak";
+            Path backupPath = backupDirPath.resolve(backupFileName);
+
+            // 原子操作：先写临时文件再重命名
+            Path tempPath = backupDirPath.resolve(backupFileName + ".tmp");
+            Files.copy(memoryPath, tempPath, StandardCopyOption.REPLACE_EXISTING);
+            Files.move(tempPath, backupPath, StandardCopyOption.REPLACE_EXISTING);
+
+            log.info("备份长期记忆成功: {}", backupPath.getFileName());
+
+            // 清理过期备份
+            int maxBackups = config.getMaxBackups();
+            cleanupOldBackups(maxBackups);
+
+            return "备份成功: " + backupPath.getFileName();
+        } catch (IOException e) {
+            log.error("备份长期记忆失败", e);
+            return "备份失败: " + e.getMessage();
+        }
+    }
+
+    /**
+     * 清理过期备份
+     * <p>
+     * 按修改时间排序，保留最新的 N 个备份，删除其他备份文件
+     *
+     * @param maxBackups 最大备份数量
+     * @return 清理结果
+     */
+    public synchronized String cleanupOldBackups(int maxBackups) {
+        Path backupDirPath = getBackupDirPath();
+
+        if (!Files.exists(backupDirPath)) {
+            log.debug("备份目录不存在，无需清理");
+            return "无需清理";
+        }
+
+        try {
+            // 获取所有备份文件并按修改时间排序（最新的在前）
+            List<Path> backupFiles;
+            try (var stream = Files.list(backupDirPath)) {
+                backupFiles = stream
+                        .filter(path -> path.getFileName().toString().startsWith("MEMORY_") &&
+                                path.getFileName().toString().endsWith(".bak"))
+                        .sorted((p1, p2) -> {
+                            try {
+                                return Files.getLastModifiedTime(p2).compareTo(Files.getLastModifiedTime(p1));
+                            } catch (IOException e) {
+                                log.warn("获取文件修改时间失败", e);
+                                return 0;
+                            }
+                        })
+                        .collect(Collectors.toList());
+            }
+
+            // 删除超过数量限制的备份
+            int deletedCount = 0;
+            if (backupFiles.size() > maxBackups) {
+                for (int i = maxBackups; i < backupFiles.size(); i++) {
+                    Path fileToDelete = backupFiles.get(i);
+                    Files.deleteIfExists(fileToDelete);
+                    deletedCount++;
+                    log.info("删除过期备份: {}", fileToDelete.getFileName());
+                }
+            }
+
+            log.info("清理过期备份完成: 保留 {} 个, 删除 {} 个",
+                    Math.min(backupFiles.size(), maxBackups), deletedCount);
+            return "清理完成，删除 " + deletedCount + " 个备份";
+        } catch (IOException e) {
+            log.error("清理过期备份失败", e);
+            return "清理失败: " + e.getMessage();
+        }
+    }
+
+    /**
+     * 获取备份目录路径
+     */
+    private Path getBackupDirPath() {
+        if (workspaceInfo == null) {
+            return Path.of("./workspace/memory/backups");
+        }
+        String backupDir = config != null ? config.getBackupDir() : "memory/backups";
+        return workspaceInfo.workspace().resolve(backupDir);
     }
 }

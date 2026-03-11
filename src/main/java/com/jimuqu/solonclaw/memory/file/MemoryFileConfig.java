@@ -35,6 +35,26 @@ public class MemoryFileConfig {
      */
     private int maxNoteSize = 102400;
 
+    /**
+     * 是否启用备份
+     */
+    private boolean backupEnabled = true;
+
+    /**
+     * 备份间隔（小时）
+     */
+    private int backupIntervalHours = 24;
+
+    /**
+     * 最大备份数量
+     */
+    private int maxBackups = 5;
+
+    /**
+     * 备份目录
+     */
+    private String backupDir = "memory/backups";
+
     @Inject("${solonclaw.memory.file.enabled:true}")
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
@@ -59,6 +79,30 @@ public class MemoryFileConfig {
         log.debug("文件记忆 maxNoteSize: {}", maxNoteSize);
     }
 
+    @Inject("${solonclaw.memory.file.backup.enabled:true}")
+    public void setBackupEnabled(boolean backupEnabled) {
+        this.backupEnabled = backupEnabled;
+        log.debug("文件记忆备份 enabled: {}", backupEnabled);
+    }
+
+    @Inject("${solonclaw.memory.file.backup.intervalHours:24}")
+    public void setBackupIntervalHours(int backupIntervalHours) {
+        this.backupIntervalHours = backupIntervalHours;
+        log.debug("文件记忆备份 intervalHours: {}", backupIntervalHours);
+    }
+
+    @Inject("${solonclaw.memory.file.backup.maxBackups:5}")
+    public void setMaxBackups(int maxBackups) {
+        this.maxBackups = maxBackups;
+        log.debug("文件记忆备份 maxBackups: {}", maxBackups);
+    }
+
+    @Inject("${solonclaw.memory.file.backup.backupDir:memory/backups}")
+    public void setBackupDir(String backupDir) {
+        this.backupDir = backupDir;
+        log.debug("文件记忆备份 backupDir: {}", backupDir);
+    }
+
     public boolean isEnabled() {
         return enabled;
     }
@@ -73,5 +117,21 @@ public class MemoryFileConfig {
 
     public int getMaxNoteSize() {
         return maxNoteSize;
+    }
+
+    public boolean isBackupEnabled() {
+        return backupEnabled;
+    }
+
+    public int getBackupIntervalHours() {
+        return backupIntervalHours;
+    }
+
+    public int getMaxBackups() {
+        return maxBackups;
+    }
+
+    public String getBackupDir() {
+        return backupDir;
     }
 }

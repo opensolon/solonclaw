@@ -7,6 +7,8 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -167,5 +169,182 @@ class MemoryFileManagerTest {
         String longContent = "这是一段很长的内容";
         String result = manager.appendToTodayNote(longContent);
         assertEquals("笔记大小超过限制", result);
+    }
+
+    @Test
+    void testReadFileBlock() {
+        // 创建一个大文件
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < 100; i++) {
+            sb.append("第 ").append(i).append(" 行内容\n");
+        }
+        Path testFile = tempDir.resolve("test-block.txt");
+        try {
+            Files.writeString(testFile, sb.toString());
+        } catch (Exception e) {
+            fail("创建测试文件失败: " + e.getMessage());
+        }
+
+        // 测试分块读取
+        String block1 = manager.readFileBlock(testFile, 0, 10);
+        assertTrue(block1.contains("第 0 行内容"));
+        assertTrue(block1.contains("第 9 行内容"));
+        assertFalse(block1.contains("第 10 行内容"));
+
+        // 测试从中间开始读取
+        String block2 = manager.readFileBlock(testFile, 50, 5);
+        assertTrue(block2.contains("第 50 行内容"));
+        assertTrue(block2.contains("第 54 行内容"));
+        assertFalse(block2.contains("第 49 行内容"));
+        assertFalse(block2.contains("第 55 行内容"));
+
+        // 测试读取超过文件末尾
+        String block3 = manager.readFileBlock(testFile, 95, 10);
+        assertTrue(block3.contains("第 95 行内容"));
+        assertTrue(block3.contains("第 99 行内容"));
+    }
+
+    @Test
+    void testReadLongTermMemoryPreview() {
+        // 创建一个包含多行的长期记忆
+        StringBuilder sb = new StringBuilder();
+        sb.append("# 长期记忆\n\n");
+        for (int i = 0; i < 50; i++) {
+            sb.append("内容行 ").append(i).append("\n");
+        }
+        manager.updateLongTermMemory(sb.toString());
+
+        // 测试读取前 10 行
+        String preview = manager.readLongTermMemoryPreview(10);
+        assertTrue(preview.contains("# 长期记忆"));
+        assertTrue(preview.contains("内容行 0"));
+        assertFalse(preview.contains("内容行 20")); // 不应该包含后面的内容
+
+        // 验证完整内容确实存在
+        String fullContent = manager.readLongTermMemory();
+        assertTrue(fullContent.contains("内容行 20"));
+    }
+
+    @Test
+    void testBackup() {
+        // 启用备份
+        config.setBackupEnabled(true);
+        config.setMaxBackups(5);
+        config.setBackupDir("memory/backups");
+
+        // 创建长期记忆
+        manager.appendToLongTermMemory("测试章节", "测试备份内容");
+
+        // 执行备份
+        String result = manager.backup();
+        assertTrue(result.contains("备份成功"));
+
+        // 验证备份文件存在
+        try {
+            Path backupDir = tempDir.resolve("memory/backups");
+            List<Path> backupFiles = Files.list(backupDir)
+                    .filter(p -> p.getFileName().toString().startsWith("MEMORY_"))
+                    .filter(p -> p.getFileName().toString().endsWith(".bak"))
+                    .collect(Collectors.toList());
+
+            assertEquals(1, backupFiles.size(), "应该有 1 个备份文件");
+
+            // 验证备份文件内容
+            Path backupFile = backupFiles.get(0);
+            String backupContent = Files.readString(backupFile);
+            assertTrue(backupContent.contains("测试备份内容"));
+
+        } catch (Exception e) {
+            fail("验证备份文件失败: " + e.getMessage());
+        }
+    }
+
+    @Test
+    void testBackupDisabled() {
+        // 禁用备份
+        config.setBackupEnabled(false);
+
+        // 创建长期记忆
+        manager.appendToLongTermMemory("测试章节", "不应该备份的内容");
+
+        // 执行备份
+        String result = manager.backup();
+        assertEquals("备份功能未启用", result);
+
+        // 验证没有备份文件
+        try {
+            Path backupDir = tempDir.resolve("memory/backups");
+            if (Files.exists(backupDir)) {
+                long count = Files.list(backupDir).count();
+                assertEquals(0, count, "不应该有备份文件");
+            }
+        } catch (Exception e) {
+            fail("验证备份目录失败: " + e.getMessage());
+        }
+    }
+
+    @Test
+    void testCleanupOldBackups() {
+        // 启用备份，设置最大备份数为 3
+        config.setBackupEnabled(true);
+        config.setMaxBackups(3);
+        config.setBackupDir("memory/backups");
+
+        // 创建长期记忆
+        manager.appendToLongTermMemory("测试章节", "测试清理备份");
+
+        // 创建备份目录
+        Path backupDir = tempDir.resolve("memory/backups");
+        try {
+            Files.createDirectories(backupDir);
+
+            // 手动创建 5 个备份文件（模拟多次备份）
+            for (int i = 0; i < 5; i++) {
+                String timestamp = String.format("2026-03-12_%02d-00-00", i);
+                Path backupFile = backupDir.resolve("MEMORY_" + timestamp + ".bak");
+                Files.writeString(backupFile, "# 长期记忆\n测试内容 " + i);
+                // 添加短暂延迟以确保文件修改时间不同
+                try {
+                    Thread.sleep(10);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+
+            // 验证创建了 5 个备份文件
+            long countBefore = Files.list(backupDir)
+                    .filter(p -> p.getFileName().toString().endsWith(".bak"))
+                    .count();
+            assertEquals(5, countBefore, "应该创建了 5 个备份文件");
+
+        } catch (Exception e) {
+            fail("创建测试备份文件失败: " + e.getMessage());
+        }
+
+        // 手动调用清理方法（保留最新的 3 个）
+        String result = manager.cleanupOldBackups(3);
+        assertTrue(result.contains("删除 2 个备份"));
+
+        // 验证只保留最新的 3 个备份
+        try {
+            long countAfter = Files.list(backupDir)
+                    .filter(p -> p.getFileName().toString().endsWith(".bak"))
+                    .count();
+
+            assertEquals(3, countAfter, "应该只保留 3 个备份文件");
+
+        } catch (Exception e) {
+            fail("验证备份数量失败: " + e.getMessage());
+        }
+    }
+
+    @Test
+    void testBackupWhenNoMemoryFile() {
+        // 不创建长期记忆文件
+        config.setBackupEnabled(true);
+
+        // 执行备份
+        String result = manager.backup();
+        assertEquals("无需备份", result);
     }
 }

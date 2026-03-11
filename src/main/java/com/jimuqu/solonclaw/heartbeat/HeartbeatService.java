@@ -149,6 +149,16 @@ public class HeartbeatService {
                 }
             }
 
+            // 9. 执行长期记忆备份（使用 MemoryFileManager）
+            if (memoryFileManager != null) {
+                try {
+                    String backupResult = memoryFileManager.backup();
+                    log.debug("长期记忆备份: {}", backupResult);
+                } catch (Exception e) {
+                    log.warn("长期记忆备份失败", e);
+                }
+            }
+
             return HeartbeatResult.success(response, duration, needsNotify);
 
         } catch (Exception e) {

@@ -80,6 +80,11 @@ solonclaw:
       retainDays: 30                      # 笔记保留天数
       autoAppendEvents: true              # 是否自动追加事件
       maxNoteSize: 102400                # 最大笔记大小（字节）
+      backup:
+        enabled: true                     # 是否启用备份
+        intervalHours: 24                 # 备份间隔（小时）
+        maxBackups: 5                     # 最大备份数量
+        backupDir: "memory/backups"       # 备份目录
 
   # ==================== 上下文构建器配置 ====================
   context:
