@@ -143,6 +143,12 @@ solonclaw:
     ackMaxChars: 300                  # 最大回复字符数（超过则发送通知）
     smartSkip: true                   # 是否启用智能跳过（HEARTBEAT_OK 时不发送通知）
 
+  # ==================== Bootstrap 引导配置 ====================
+  bootstrap:
+    enabled: true                      # 是否启用引导机制
+    templatesDir: "templates"         # 模板目录
+    autoSeed: true                    # 首次运行时自动创建模板文件
+
   # ==================== 钉钉渠道配置 ====================
   dingtalk:
     enabled: true

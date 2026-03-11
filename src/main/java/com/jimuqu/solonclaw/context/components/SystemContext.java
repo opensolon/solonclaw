@@ -1,5 +1,6 @@
 package com.jimuqu.solonclaw.context.components;
 
+import com.jimuqu.solonclaw.bootstrap.BootstrapService;
 import org.noear.solon.annotation.Component;
 import org.noear.solon.annotation.Inject;
 import org.noear.solon.annotation.Init;
@@ -25,6 +26,9 @@ public class SystemContext {
 
     @Inject
     private com.jimuqu.solonclaw.context.config.ContextBuilderConfig config;
+
+    @Inject(required = false)
+    private BootstrapService bootstrapService;
 
     /**
      * 默认系统提示词
@@ -68,8 +72,23 @@ public class SystemContext {
             return customSystemPrompt;
         }
 
-        // 否则使用默认提示词
-        return DEFAULT_SYSTEM_PROMPT;
+        // 构建基本提示词
+        StringBuilder prompt = new StringBuilder();
+        prompt.append(DEFAULT_SYSTEM_PROMPT);
+
+        // 添加引导文件内容（SOUL.md, AGENTS.md, IDENTITY.md, USER.md）
+        if (bootstrapService != null) {
+            String workspaceDir = bootstrapService.getWorkspaceDir();
+            if (workspaceDir != null) {
+                String bootstrapPrompt = bootstrapService.buildBootstrapPrompt(workspaceDir);
+                if (!bootstrapPrompt.isEmpty()) {
+                    prompt.append("\n\n");
+                    prompt.append(bootstrapPrompt);
+                }
+            }
+        }
+
+        return prompt.toString();
     }
 
     /**
