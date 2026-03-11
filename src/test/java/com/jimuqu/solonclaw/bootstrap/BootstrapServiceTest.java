@@ -123,8 +123,8 @@ class BootstrapServiceTest {
 
             assertTrue(soulTemplate.isPresent());
             assertTrue(identityTemplate.isPresent());
-            assertTrue(soulTemplate.get().contains("灵魂"));
-            assertTrue(identityTemplate.get().contains("身份"));
+            assertTrue(soulTemplate.get().contains("SOUL"));
+            assertTrue(identityTemplate.get().contains("IDENTITY"));
         }
 
         @Test
