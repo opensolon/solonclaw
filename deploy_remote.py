@@ -58,9 +58,8 @@ def deploy():
         # 重启服务
         print("\n正在重启服务...")
         commands = [
-            f"cd {REMOTE_DIR}",
             "pkill -f solonclaw.jar || true",
-            "nohup java -jar solonclaw.jar > solonclaw.log 2>&1 &",
+            f"cd {REMOTE_DIR} && nohup java -jar solonclaw.jar > solonclaw.log 2>&1 &",
             "sleep 3",
             "ps aux | grep solonclaw.jar | grep -v grep"
         ]
