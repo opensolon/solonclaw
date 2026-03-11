@@ -7,12 +7,12 @@
     <parent>
         <groupId>org.noear</groupId>
         <artifactId>solon-parent</artifactId>
-        <version>3.9.4</version>
+        <version>3.9.5</version>
     </parent>
 
     <groupId>com.jimuqu</groupId>
     <artifactId>solonclaw</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>1.0.0</version>
     <packaging>jar</packaging>
 
     <name>SolonClaw</name>
@@ -21,7 +21,7 @@
     <properties>
         <java.version>17</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <solon.version>3.9.4</solon.version>
+        <solon.version>3.9.5</solon.version>
         <junit.version>5.10.0</junit.version>
     </properties>
 
