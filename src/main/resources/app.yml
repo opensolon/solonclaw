@@ -1,173 +1,43 @@
 solon:
+  env: prod
   app:
     name: solonclaw
-  env: dev
-
 server:
   port: 12345
 
-  # ==================== Solon AI 配置 ====================
-  ai:
-    chat:
-      openai:
-        apiUrl: "https://api.jimuqu.com/v1/chat/completions"
-        apiKey: "sk-nioMU8aKO7nD9khcOt3hQfQAyBTkRh011AII1kk3gRtQnKcf"
-        provider: "openai"
-        model: "glm-4.7"
-        temperature: 0.7
-        maxTokens: 4096
-
-  # ==================== 序列化配置 ====================
-  serialization:
-    json:
-      dateAsFormat: 'yyyy-MM-dd HH:mm:ss'
-      dateAsTimeZone: 'GMT+8'
-      nullAsWriteable: true
-
-# ==================== SolonClaw 配置 ====================
 solonclaw:
   workspace: "./workspace"
 
-  directories:
-    skillsDir: "skills"
-    jobsFile: "jobs.json"
-    jobHistoryFile: "job-history.json"
-    database: "memory.db"
-    shellWorkspace: "workspace"
-    logsDir: "logs"
-    autonomousStateFile: "autonomous-state.json"
+---
+solon.env.on: prod
+solon:
+  config:
+    add: "./config.yml"
 
-  defaults:
-    temperature: 0.7
-    maxTokens: 4096
-    timeoutSeconds: 120
+--- # 序列化
+solon.serialization.json:
+  dateAsFormat: 'yyyy-MM-dd HH:mm:ss' #配置日期格式（默认输出为时间戳，对 Date、LocalDateTime 有效）
+  dateAsTimeZone: 'GMT+8' #配置时区
+  dateAsTicks: false #将date转为毫秒数（和 dateAsFormat 二选一）
+  longAsString: true #将long型转为字符串输出 （默认为false）
+#  boolAsInt: false   #将bool型转为字符串输出 （默认为false）
+  nullStringAsEmpty: true
+  nullBoolAsFalse: false
+  nullNumberAsZero: false
+  nullArrayAsEmpty: true
+  nullAsWriteable: true #输出所有null值
+  enumAsName: true #枚举使用名字
 
-  agent:
-    model:
-      primary: "openai/gpt-4"
-    maxHistoryMessages: 50
-    maxToolIterations: 50
-
-  tools:
-    shell:
-      enabled: true
-      timeoutSeconds: 60
-      maxOutputBytes: 1048576
-
-  memory:
-    enabled: true
-    session:
-      maxHistory: 50
-      globalSession: true                 # 是否启用全局会话模式（单用户模式）
-      globalSessionId: "global"           # 全局会话ID（启用全局模式时使用）
-    store:
-      enabled: true
-
-    # ==================== 记忆摘要配置 ====================
-    summarization:
-      enabled: true                       # 是否启用记忆摘要（永不失忆功能）
-      maxMessages: 12                     # 超过 12 条消息时触发摘要压缩
-      strategy: composite                 # 摘要策略：lstm, keyInfo, hierarchical, composite
-      maxSummaryLength: 500               # 摘要最大长度（字符数）
-      keyInfoEnabled: true                # 是否启用关键信息提取
-      hierarchicalEnabled: true           # 是否启用层级滚动摘要
-      # keyInfoPrompt: ""                  # 关键信息提取提示词（可选，有默认值）
-      # hierarchicalPrompt: ""             # 层级摘要提示词（可选，有默认值）
-
-    # ==================== 文件记忆配置 ====================
-    file:
-      enabled: true                       # 是否启用文件记忆
-      retainDays: 30                      # 笔记保留天数
-      autoAppendEvents: true              # 是否自动追加事件
-      maxNoteSize: 102400                # 最大笔记大小（字节）
-      backup:
-        enabled: true                     # 是否启用备份
-        intervalHours: 24                 # 备份间隔（小时）
-        maxBackups: 5                     # 最大备份数量
-        backupDir: "memory/backups"       # 备份目录
-
-  # ==================== 上下文构建器配置 ====================
-  context:
-    builder:
-      # 组件启用状态
-      system:
-        enabled: true
-        includeTools: true                # 是否将工具描述包含在系统上下文中
-
-      tools:
-        enabled: false                    # 如果系统上下文已包含工具，这里可以禁用
-        includeParameters: true
-
-      knowledge:
-        enabled: true
-        maxSearchResults: 5               # 最大搜索结果数
-        minConfidenceThreshold: 0.6       # 最小置信度阈值
-
-      session:
-        enabled: true
-        maxHistoryMessages: 10            # 最大历史消息数
-        maxSummaryLength: 500             # 会话摘要长度限制（字符数）
-
-  # ==================== 学习系统配置 ====================
-  learning:
-    enabled: true
-
-    # 反思配置
-    reflection:
-      cron: "0 0 * * * ?"              # 每小时执行一次反思
-      timeWindowHours: 1               # 分析最近1小时的数据
-      maxMessagesPerReflection: 200    # 每次反思最多处理的消息数
-
-    # 自动技能配置
-    autoSkill:
-      processCron: "0 */15 * * * ?"    # 每15分钟处理一次技能请求
-      minConfidenceThreshold: 0.8      # AI 置信度阈值
-      realtimeAnalysisEnabled: true    # 启用实时技能需求分析
-
-    # 知识库配置
-    knowledge:
-      maxSearchResults: 5              # 最大搜索结果数
-      minConfidenceThreshold: 0.6      # 最小置信度阈值
-
-  # ==================== 自主运行配置 ====================
-  autonomous:
-    enabled: true                      # 是否启用自主运行
-
-    runCron: "0/30 * * * * ?"         # 运行循环 cron（每30秒）
-    maxConcurrentTasks: 3             # 最大并发任务数
-    taskTimeoutSeconds: 300           # 任务超时时间（秒）
-    maxGoals: 20                       # 目标最大数量
-    maxTaskQueueSize: 100             # 任务队列最大大小
-
-    autoSkillInstall: true             # 是否启用自动技能安装
-    autoReflection: true               # 是否启用自动反思
-
-    decisionConfidenceThreshold: 0.7   # 决策引擎置信度阈值
-    cleanupIntervalHours: 24           # 资源清理间隔（小时）
-
-  # ==================== Heartbeat 配置 ====================
-  heartbeat:
-    enabled: true                      # 是否启用 Heartbeat
-    cron: "0 0/30 * * * ?"           # Cron 表达式（默认每 30 分钟）
-    target: "last"                    # 目标会话（last 表示最近会话）
-    activeHoursStart: "08:00"         # 活跃时间开始
-    activeHoursEnd: "22:00"           # 活跃时间结束
-    ackMaxChars: 300                  # 最大回复字符数（超过则发送通知）
-    smartSkip: true                   # 是否启用智能跳过（HEARTBEAT_OK 时不发送通知）
-
-  # ==================== Bootstrap 引导配置 ====================
-  bootstrap:
-    enabled: true                      # 是否启用引导机制
-    templatesDir: "templates"         # 模板目录
-    autoSeed: true                    # 首次运行时自动创建模板文件
-
-  # ==================== 钉钉渠道配置 ====================
-  dingtalk:
-    enabled: true
-
-    # 企业内部机器人配置（Stream 模式）
-    appKey: "dinggycia8zrla9md64s"
-    appSecret: "dtjVsB4dlaZafaf_2_srnJwuZCRtb-p--21nS9_7WuX4Lf3-4KLrHo-bb9J0_z7i"
-
-    # 机器人 Code（通常与 AppKey 相同）
-    robotCode: "dinggycia8zrla9md64s"
+# 日志
+solon.logging.appender:
+  console:
+    level: INFO
+    enable: true #是否启用
+  file:
+    name: "logs/${solon.app.name}"
+    rolling: "logs/${solon.app.name}_%d{yyyy-MM-dd}_%i.log"
+    level: INFO
+    enable: true #是否启用
+    extension: ".log"   #v2.2.18 后支持（例：.log, .log.gz, .log.zip）
+    maxFileSize: "1 MB"
+    maxHistory: "7" #单位：天

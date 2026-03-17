@@ -1,40 +1,9 @@
-solon:
-  env: dev
-  logging:
-    level:
-      root: INFO
-      com.jimuqu.solonclaw: DEBUG
-
-  # ==================== Solon AI 配置 ====================
-  ai:
-    chat:
-      openai:
-        apiUrl: "https://api.jimuqu.com/v1/chat/completions"
-        apiKey: "sk-cl9464521"
-        provider: "openai"
-        model: "glm-4.7"
-        temperature: 0.7
-        maxTokens: 4096
-
 solonclaw:
-  workspace: "./workspace-dev"
+  workspace: "./workspace"
 
-  directories:
-    skillsDir: "skills"
-    jobsFile: "jobs.json"
-    jobHistoryFile: "job-history.json"
-    database: "memory.db"
-    shellWorkspace: "workspace"
-    logsDir: "logs"
-
-  agent:
-    maxHistoryMessages: 10
-    maxToolIterations: 30
-
-  tools:
-    shell:
-      enabled: true
-      timeoutSeconds: 120
-
-  memory:
-    enabled: true
+solon.logging:
+  appender:
+    console:
+      level: INFO
+    file:
+      level: INFO
