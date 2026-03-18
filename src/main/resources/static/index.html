@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SolonClaw Debug Chat</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f1ea;
+      --panel: #fffaf2;
+      --line: #d8cbb7;
+      --text: #2f261c;
+      --muted: #746654;
+      --accent: #c56a2d;
+      --accent-soft: #f2d7bf;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "PingFang SC", sans-serif;
+      background: linear-gradient(160deg, #f4f1ea 0%, #efe3d4 100%);
+      color: var(--text);
+    }
+    .app {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 24px 16px 48px;
+    }
+    .panel {
+      background: rgba(255, 250, 242, 0.92);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: 0 18px 40px rgba(68, 50, 31, 0.08);
+      padding: 18px;
+      margin-bottom: 16px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+    }
+    p { color: var(--muted); }
+    .row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .field {
+      flex: 1 1 240px;
+    }
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    input, textarea, button {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      padding: 12px 14px;
+      font: inherit;
+    }
+    textarea {
+      min-height: 120px;
+      resize: vertical;
+    }
+    button {
+      cursor: pointer;
+      background: var(--accent);
+      color: white;
+      border: none;
+      font-weight: 600;
+    }
+    button:hover { opacity: 0.92; }
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+    }
+    .status-card {
+      background: var(--accent-soft);
+      border-radius: 14px;
+      padding: 12px;
+    }
+    .status-card strong {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .messages {
+      white-space: pre-wrap;
+      line-height: 1.6;
+      min-height: 180px;
+    }
+    .event {
+      border-top: 1px dashed var(--line);
+      padding: 10px 0;
+    }
+    .event:first-child { border-top: none; padding-top: 0; }
+    .event-type {
+      font-size: 12px;
+      color: var(--accent);
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    @media (max-width: 720px) {
+      h1 { font-size: 24px; }
+      .app { padding: 16px 12px 32px; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <div class="panel">
+    <h1>SolonClaw Debug Chat</h1>
+    <p>用于本地验证 AI 对话、流式进度和最终回复。默认走 <code>debug-web</code> 渠道，不会和钉钉串会话。</p>
+  </div>
+
+  <div class="panel">
+    <div class="row">
+      <div class="field">
+        <label for="sessionId">Session ID</label>
+        <input id="sessionId" value="debug-session-1">
+      </div>
+    </div>
+    <div class="field" style="margin-top: 12px;">
+      <label for="message">Message</label>
+      <textarea id="message" placeholder="输入一条测试消息"></textarea>
+    </div>
+    <div style="margin-top: 12px;">
+      <button id="sendBtn">Send</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="status-grid">
+      <div class="status-card"><strong>Run ID</strong><span id="runId">-</span></div>
+      <div class="status-card"><strong>Session Key</strong><span id="sessionKey">-</span></div>
+      <div class="status-card"><strong>Status</strong><span id="status">-</span></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="row">
+      <div class="field">
+        <label for="batchKey">Batch Key Filter</label>
+        <input id="batchKey" placeholder="可选：只看某一批子任务，比如 plan-A">
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <strong>Recent Runs</strong>
+    <div id="runs" style="margin-top: 12px;"></div>
+  </div>
+
+  <div class="panel">
+    <strong>Latest Response</strong>
+    <div id="latestResponse" class="messages" style="margin-top: 12px;"></div>
+  </div>
+
+  <div class="panel">
+    <strong>Run Events</strong>
+    <div id="events" class="messages" style="margin-top: 12px;"></div>
+  </div>
+
+  <div class="panel">
+    <strong>Child Summary</strong>
+    <div id="childSummary" class="messages" style="margin-top: 12px;"></div>
+  </div>
+
+  <div class="panel">
+    <strong>Child Runs</strong>
+    <div id="childRuns" class="messages" style="margin-top: 12px;"></div>
+  </div>
+</div>
+
+<script>
+  const sessionIdEl = document.getElementById("sessionId");
+  const messageEl = document.getElementById("message");
+  const batchKeyEl = document.getElementById("batchKey");
+  const sendBtn = document.getElementById("sendBtn");
+  const runIdEl = document.getElementById("runId");
+  const sessionKeyEl = document.getElementById("sessionKey");
+  const statusEl = document.getElementById("status");
+  const latestResponseEl = document.getElementById("latestResponse");
+  const eventsEl = document.getElementById("events");
+  const runsEl = document.getElementById("runs");
+  const childSummaryEl = document.getElementById("childSummary");
+  const childRunsEl = document.getElementById("childRuns");
+
+  const runs = new Map();
+  let currentRunId = null;
+  let pollingTimer = null;
+
+  function escapeHtml(value) {
+    return (value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function renderRuns() {
+    const values = Array.from(runs.values()).sort((a, b) => b.createdAt - a.createdAt);
+    runsEl.innerHTML = values.map(run => `
+      <div class="event" data-run-id="${run.runId}">
+        <div class="event-type">${run.status || "QUEUED"} · ${run.runId}</div>
+        <div><strong>Session:</strong> ${escapeHtml(run.sessionKey || "-")}</div>
+        <div><strong>Latest:</strong> ${escapeHtml(run.latestResponse || "-")}</div>
+      </div>
+    `).join("");
+  }
+
+  function syncPrimaryRun(runState) {
+    if (!runState) return;
+    runIdEl.textContent = runState.runId || "-";
+    sessionKeyEl.textContent = runState.sessionKey || "-";
+    statusEl.textContent = runState.status || "-";
+    latestResponseEl.textContent = runState.latestResponse || "";
+    eventsEl.innerHTML = (runState.events || []).slice().reverse().map(event => `
+      <div class="event">
+        <div class="event-type">${escapeHtml(event.eventType)} #${event.seq}</div>
+        <div>${escapeHtml(event.message)}</div>
+      </div>
+    `).join("");
+    childSummaryEl.textContent = formatChildSummary(runState.childSummary);
+    childRunsEl.innerHTML = (runState.childRuns || []).map(run => `
+      <div class="event">
+        <div class="event-type">${escapeHtml(run.status || "QUEUED")} · ${escapeHtml(run.runId || "-")}</div>
+        <div><strong>Task:</strong> ${escapeHtml(run.taskDescription || "-")}</div>
+        <div><strong>Batch:</strong> ${escapeHtml(run.batchKey || "-")}</div>
+        <div><strong>Session:</strong> ${escapeHtml(run.sessionKey || "-")}</div>
+        <div><strong>Result:</strong> ${escapeHtml(run.finalResponse || run.errorMessage || "-")}</div>
+      </div>
+    `).join("");
+  }
+
+  function formatChildSummary(summary) {
+    if (!summary) {
+      return "";
+    }
+    return [
+      `parentRunId=${summary.parentRunId || "-"}`,
+      `batchKey=${summary.batchKey || "-"}`,
+      `totalChildren=${summary.totalChildren ?? 0}`,
+      `succeededChildren=${summary.succeededChildren ?? 0}`,
+      `failedChildren=${summary.failedChildren ?? 0}`,
+      `pendingChildren=${summary.pendingChildren ?? 0}`,
+      `allCompleted=${summary.allCompleted ?? false}`
+    ].join("\n");
+  }
+
+  function appendEvent(runState, event) {
+    runState.events.push(event);
+    if (event.eventType === "reply") {
+      runState.latestResponse = event.message || "";
+    }
+  }
+
+  async function loadRun(runState) {
+    const response = await fetch(`/api/debug/runs/${runState.runId}`);
+    const data = await response.json();
+    const run = data.run || {};
+    runState.status = run.status || runState.status;
+    runState.sessionKey = run.sessionKey || runState.sessionKey;
+    if (run.finalResponse) {
+      runState.latestResponse = run.finalResponse;
+    }
+  }
+
+  async function loadEvents(runState) {
+    const response = await fetch(`/api/debug/runs/${runState.runId}/events?after=${runState.lastSeq}`);
+    const data = await response.json();
+    (data.events || []).forEach(event => appendEvent(runState, event));
+    runState.lastSeq = data.lastSeq || runState.lastSeq;
+  }
+
+  async function loadChildren(runState) {
+    if (!runState || !runState.runId) {
+      return;
+    }
+    const query = batchKeyEl.value ? `?batchKey=${encodeURIComponent(batchKeyEl.value)}` : "";
+    const response = await fetch(`/api/debug/runs/${runState.runId}/children${query}`);
+    const data = await response.json();
+    runState.childRuns = data.children || [];
+    runState.childSummary = data.summary || null;
+  }
+
+  async function pollRuns() {
+    const activeRuns = Array.from(runs.values()).filter(run => !["SUCCEEDED", "FAILED", "ABORTED", "CANCELLED"].includes(run.status));
+    await Promise.all(activeRuns.flatMap(run => [loadRun(run), loadEvents(run)]));
+    if (currentRunId && runs.get(currentRunId)) {
+      await loadChildren(runs.get(currentRunId));
+    }
+    renderRuns();
+    syncPrimaryRun(runs.get(currentRunId));
+    if (activeRuns.length === 0 && pollingTimer) {
+      clearInterval(pollingTimer);
+      pollingTimer = null;
+    }
+  }
+
+  runsEl.addEventListener("click", event => {
+    const target = event.target.closest("[data-run-id]");
+    if (!target) return;
+    currentRunId = target.dataset.runId;
+    const current = runs.get(currentRunId);
+    if (current) {
+      loadChildren(current).then(() => syncPrimaryRun(current));
+    } else {
+      syncPrimaryRun(current);
+    }
+  });
+
+  batchKeyEl.addEventListener("change", () => {
+    if (!currentRunId) return;
+    const current = runs.get(currentRunId);
+    if (!current) return;
+    loadChildren(current).then(() => syncPrimaryRun(current));
+  });
+
+  sendBtn.addEventListener("click", async () => {
+    const payload = {
+      sessionId: sessionIdEl.value || "default",
+      message: messageEl.value || ""
+    };
+    if (!payload.message.trim()) {
+      return;
+    }
+
+    const response = await fetch("/api/debug/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const data = await response.json();
+    currentRunId = data.runId;
+    runs.set(currentRunId, {
+      runId: currentRunId,
+      sessionKey: data.sessionKey || "-",
+      status: data.status || "QUEUED",
+      latestResponse: "",
+      lastSeq: 0,
+      createdAt: Date.now(),
+      events: [],
+      childRuns: [],
+      childSummary: null
+    });
+    renderRuns();
+    await loadChildren(runs.get(currentRunId));
+    syncPrimaryRun(runs.get(currentRunId));
+
+    if (pollingTimer) {
+      clearInterval(pollingTimer);
+    }
+    await pollRuns();
+    pollingTimer = setInterval(pollRuns, 1000);
+  });
+</script>
+</body>
+</html>

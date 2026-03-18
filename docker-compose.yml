@@ -1,0 +1,16 @@
+services:
+  solonclaw:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: solonclaw:latest
+    container_name: solonclaw
+    restart: unless-stopped
+    ports:
+      - "12345:12345"
+    environment:
+      JAVA_OPTS: "-Xms256m -Xmx512m"
+      APP_ARGS: "--env=prod"
+    volumes:
+      - ./workspace:/app/workspace
+      - ./config.yml:/app/config.yml:ro
