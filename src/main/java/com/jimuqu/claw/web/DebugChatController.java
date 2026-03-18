@@ -4,6 +4,7 @@ import cn.hutool.json.JSONUtil;
 import com.jimuqu.claw.agent.model.AgentRun;
 import com.jimuqu.claw.agent.model.RunEvent;
 import com.jimuqu.claw.agent.runtime.AgentRuntimeService;
+import com.jimuqu.claw.agent.runtime.ParentRunChildrenSummary;
 import org.noear.solon.annotation.Controller;
 import org.noear.solon.annotation.Mapping;
 import org.noear.solon.annotation.Param;
@@ -72,6 +73,22 @@ public class DebugChatController {
         DebugRunEventsResponse response = new DebugRunEventsResponse();
         response.setEvents(events);
         response.setLastSeq(events.isEmpty() ? after : events.get(events.size() - 1).getSeq());
+        return response;
+    }
+
+    /**
+     * 查询某个父运行下的子任务与聚合摘要。
+     *
+     * @param runId 父运行标识
+     * @param batchKey 可选批次键
+     * @return 子任务调试响应
+     */
+    @Mapping("/api/debug/runs/{runId}/children")
+    public DebugChildRunsResponse children(@Param String runId, @Param String batchKey) {
+        DebugChildRunsResponse response = new DebugChildRunsResponse();
+        response.setChildren(agentRuntimeService.listChildRuns(runId, batchKey));
+        ParentRunChildrenSummary summary = agentRuntimeService.getChildSummary(runId, batchKey);
+        response.setSummary(summary);
         return response;
     }
 }

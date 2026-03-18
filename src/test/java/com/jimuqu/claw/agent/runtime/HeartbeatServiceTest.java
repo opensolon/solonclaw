@@ -15,12 +15,14 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.function.BooleanSupplier;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 验证心跳服务能够把消息投递到最近外部路由。
+ * 验证心跳服务只会触发静默内部运行，不会直接向外部渠道发送消息。
  */
 class HeartbeatServiceTest {
     /** 临时测试目录。 */
@@ -28,12 +30,12 @@ class HeartbeatServiceTest {
     Path tempDir;
 
     /**
-     * 验证一次心跳轮询会触发系统消息发送。
+     * 验证一次心跳轮询会触发静默内部运行。
      *
      * @throws Exception 执行异常
      */
     @Test
-    void tickSubmitsHeartbeatIntoLatestExternalRoute() throws Exception {
+    void tickRunsHeartbeatSilentlyWithoutOutboundReply() throws Exception {
         Path workspace = tempDir.resolve("workspace");
         FileUtil.mkdir(workspace.toFile());
         FileUtil.writeUtf8String("请汇报当前状态", workspace.resolve("HEARTBEAT.md").toFile());
@@ -42,7 +44,11 @@ class HeartbeatServiceTest {
         ReplyTarget replyTarget = new ReplyTarget(ChannelType.DINGTALK, ConversationType.GROUP, "group-9", "user-9");
         store.rememberReplyTarget("dingtalk:group:group-9", replyTarget);
 
-        ConversationAgent conversationAgent = (request, progressConsumer) -> "heartbeat:" + request.getCurrentMessage();
+        CountDownLatch executed = new CountDownLatch(1);
+        ConversationAgent conversationAgent = (request, progressConsumer) -> {
+            executed.countDown();
+            return "heartbeat:" + request.getCurrentMessage();
+        };
         ConversationScheduler scheduler = new ConversationScheduler(1);
         ChannelRegistry registry = new ChannelRegistry();
         RecordingChannelAdapter adapter = new RecordingChannelAdapter();
@@ -51,31 +57,19 @@ class HeartbeatServiceTest {
         SolonClawProperties properties = new SolonClawProperties();
         properties.setWorkspace(workspace.toString());
 
-        AgentRuntimeService runtimeService = new AgentRuntimeService(conversationAgent, store, scheduler, registry, properties);
-        HeartbeatService heartbeatService = new HeartbeatService(runtimeService, store, properties);
+        try {
+            AgentRuntimeService runtimeService = new AgentRuntimeService(conversationAgent, store, scheduler, registry, properties);
+            HeartbeatService heartbeatService = new HeartbeatService(runtimeService, store, properties);
 
-        heartbeatService.tick();
+            heartbeatService.tick();
 
-        assertTrue(waitUntil(() -> adapter.messages.stream().anyMatch(message -> message.contains("heartbeat:请汇报当前状态")), 3000));
-    }
-
-    /**
-     * 轮询等待条件成立。
-     *
-     * @param condition 条件判断
-     * @param timeoutMs 超时时间
-     * @return 若条件成立则返回 true
-     * @throws InterruptedException 线程中断异常
-     */
-    private boolean waitUntil(BooleanSupplier condition, long timeoutMs) throws InterruptedException {
-        long deadline = System.currentTimeMillis() + timeoutMs;
-        while (System.currentTimeMillis() < deadline) {
-            if (condition.getAsBoolean()) {
-                return true;
-            }
-            Thread.sleep(50);
+            assertTrue(executed.await(3, TimeUnit.SECONDS));
+            Thread.sleep(200);
+            assertTrue(adapter.messages.isEmpty());
+            assertEquals(0, store.readConversationEvents("dingtalk:group:group-9").size());
+        } finally {
+            scheduler.shutdown();
         }
-        return condition.getAsBoolean();
     }
 
     /**

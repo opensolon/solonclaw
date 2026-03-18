@@ -12,6 +12,16 @@ public class AgentRun {
     private String sourceMessageId;
     /** 来源用户消息版本号。 */
     private long sourceUserVersion;
+    /** 父运行任务标识；为空表示根运行。 */
+    private String parentRunId;
+    /** 父运行所属会话键。 */
+    private String parentSessionKey;
+    /** 父运行原路回复目标。 */
+    private ReplyTarget parentReplyTarget;
+    /** 当前运行承载的任务描述。 */
+    private String taskDescription;
+    /** 当前运行所属的子任务批次键。 */
+    private String batchKey;
     /** 原路回复目标。 */
     private ReplyTarget replyTarget;
     /** 当前运行状态。 */
@@ -97,6 +107,96 @@ public class AgentRun {
      */
     public void setSourceUserVersion(long sourceUserVersion) {
         this.sourceUserVersion = sourceUserVersion;
+    }
+
+    /**
+     * 返回父运行任务标识。
+     *
+     * @return 父运行任务标识
+     */
+    public String getParentRunId() {
+        return parentRunId;
+    }
+
+    /**
+     * 设置父运行任务标识。
+     *
+     * @param parentRunId 父运行任务标识
+     */
+    public void setParentRunId(String parentRunId) {
+        this.parentRunId = parentRunId;
+    }
+
+    /**
+     * 返回父运行所属会话键。
+     *
+     * @return 父运行所属会话键
+     */
+    public String getParentSessionKey() {
+        return parentSessionKey;
+    }
+
+    /**
+     * 设置父运行所属会话键。
+     *
+     * @param parentSessionKey 父运行所属会话键
+     */
+    public void setParentSessionKey(String parentSessionKey) {
+        this.parentSessionKey = parentSessionKey;
+    }
+
+    /**
+     * 返回父运行原路回复目标。
+     *
+     * @return 父运行原路回复目标
+     */
+    public ReplyTarget getParentReplyTarget() {
+        return parentReplyTarget;
+    }
+
+    /**
+     * 设置父运行原路回复目标。
+     *
+     * @param parentReplyTarget 父运行原路回复目标
+     */
+    public void setParentReplyTarget(ReplyTarget parentReplyTarget) {
+        this.parentReplyTarget = parentReplyTarget;
+    }
+
+    /**
+     * 返回当前运行承载的任务描述。
+     *
+     * @return 当前运行任务描述
+     */
+    public String getTaskDescription() {
+        return taskDescription;
+    }
+
+    /**
+     * 设置当前运行承载的任务描述。
+     *
+     * @param taskDescription 当前运行任务描述
+     */
+    public void setTaskDescription(String taskDescription) {
+        this.taskDescription = taskDescription;
+    }
+
+    /**
+     * 返回当前运行所属的子任务批次键。
+     *
+     * @return 子任务批次键
+     */
+    public String getBatchKey() {
+        return batchKey;
+    }
+
+    /**
+     * 设置当前运行所属的子任务批次键。
+     *
+     * @param batchKey 子任务批次键
+     */
+    public void setBatchKey(String batchKey) {
+        this.batchKey = batchKey;
     }
 
     /**

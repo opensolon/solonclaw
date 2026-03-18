@@ -15,6 +15,12 @@ public class ConversationExecutionRequest {
     private String currentMessage;
     /** 历史消息列表。 */
     private List<ChatMessage> history = new ArrayList<>();
+    /** 当前运行可用的子任务派生能力。 */
+    private SpawnTaskSupport spawnTaskSupport;
+    /** 当前运行可用的任务状态查询能力。 */
+    private RunQuerySupport runQuerySupport;
+    /** 当前运行可用的主动通知能力。 */
+    private NotificationSupport notificationSupport;
 
     /**
      * 返回会话键。
@@ -68,5 +74,59 @@ public class ConversationExecutionRequest {
      */
     public void setHistory(List<ChatMessage> history) {
         this.history = history;
+    }
+
+    /**
+     * 返回当前运行可用的子任务派生能力。
+     *
+     * @return 子任务派生能力
+     */
+    public SpawnTaskSupport getSpawnTaskSupport() {
+        return spawnTaskSupport;
+    }
+
+    /**
+     * 设置当前运行可用的子任务派生能力。
+     *
+     * @param spawnTaskSupport 子任务派生能力
+     */
+    public void setSpawnTaskSupport(SpawnTaskSupport spawnTaskSupport) {
+        this.spawnTaskSupport = spawnTaskSupport;
+    }
+
+    /**
+     * 返回当前运行可用的任务状态查询能力。
+     *
+     * @return 任务状态查询能力
+     */
+    public RunQuerySupport getRunQuerySupport() {
+        return runQuerySupport;
+    }
+
+    /**
+     * 设置当前运行可用的任务状态查询能力。
+     *
+     * @param runQuerySupport 任务状态查询能力
+     */
+    public void setRunQuerySupport(RunQuerySupport runQuerySupport) {
+        this.runQuerySupport = runQuerySupport;
+    }
+
+    /**
+     * 返回当前运行可用的主动通知能力。
+     *
+     * @return 主动通知能力
+     */
+    public NotificationSupport getNotificationSupport() {
+        return notificationSupport;
+    }
+
+    /**
+     * 设置当前运行可用的主动通知能力。
+     *
+     * @param notificationSupport 主动通知能力
+     */
+    public void setNotificationSupport(NotificationSupport notificationSupport) {
+        this.notificationSupport = notificationSupport;
     }
 }

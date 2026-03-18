@@ -1,34 +1,55 @@
 package com.jimuqu.claw.agent.runtime;
 
+import com.jimuqu.claw.agent.tool.ConversationRuntimeTools;
+import com.jimuqu.claw.agent.tool.JobTools;
+import com.jimuqu.claw.agent.tool.WorkspaceAgentTools;
+import com.jimuqu.claw.agent.workspace.WorkspacePromptService;
 import org.noear.solon.ai.agent.AgentChunk;
-import org.noear.solon.ai.agent.session.InMemoryAgentSession;
-import org.noear.solon.ai.agent.simple.SimpleAgent;
+import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.skills.cli.CliSkillProvider;
 import reactor.core.publisher.Flux;
 
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 /**
- * 基于 Solon AI SimpleAgent 的会话执行实现。
+ * 基于 Solon AI ReActAgent 的会话执行实现。
  */
 public class SolonAiConversationAgent implements ConversationAgent {
-    /** 实际执行对话的 SimpleAgent。 */
-    private final SimpleAgent simpleAgent;
+    /** 聊天模型。 */
+    private final ChatModel chatModel;
+    /** 工作区提示词服务。 */
+    private final WorkspacePromptService workspacePromptService;
+    /** 工作区工具集。 */
+    private final WorkspaceAgentTools workspaceAgentTools;
+    /** CLI 技能提供者。 */
+    private final CliSkillProvider cliSkillProvider;
+    /** 定时任务工具。 */
+    private final JobTools jobTools;
 
     /**
      * 创建基于聊天模型的会话执行 Agent。
      *
      * @param chatModel 聊天模型
-     * @param systemPrompt 系统提示词
+     * @param workspacePromptService 工作区提示词服务
+     * @param workspaceAgentTools 工作区工具集
+     * @param cliSkillProvider CLI 技能提供者
+     * @param jobTools 定时任务工具
      */
-    public SolonAiConversationAgent(ChatModel chatModel, String systemPrompt) {
-        this.simpleAgent = SimpleAgent.of(chatModel)
-                .name("solonclaw")
-                .instruction(systemPrompt)
-                .sessionWindowSize(64)
-                .build();
+    public SolonAiConversationAgent(
+            ChatModel chatModel,
+            WorkspacePromptService workspacePromptService,
+            WorkspaceAgentTools workspaceAgentTools,
+            CliSkillProvider cliSkillProvider,
+            JobTools jobTools
+    ) {
+        this.chatModel = chatModel;
+        this.workspacePromptService = workspacePromptService;
+        this.workspaceAgentTools = workspaceAgentTools;
+        this.cliSkillProvider = cliSkillProvider;
+        this.jobTools = jobTools;
     }
 
     /**
@@ -41,14 +62,14 @@ public class SolonAiConversationAgent implements ConversationAgent {
      */
     @Override
     public String execute(ConversationExecutionRequest request, Consumer<String> progressConsumer) throws Throwable {
-        InMemoryAgentSession session = InMemoryAgentSession.of(request.getSessionKey());
+        SystemAwareAgentSession session = SystemAwareAgentSession.of(request.getSessionKey());
         for (ChatMessage historyMessage : request.getHistory()) {
             session.addMessage(historyMessage);
         }
 
         AtomicReference<String> latestChunk = new AtomicReference<>("");
 
-        Flux<AgentChunk> stream = simpleAgent
+        Flux<AgentChunk> stream = buildAgent(request)
                 .prompt(request.getCurrentMessage())
                 .session(session)
                 .stream();
@@ -66,5 +87,29 @@ public class SolonAiConversationAgent implements ConversationAgent {
         }
 
         return finalChunk.getContent();
+    }
+
+    /**
+     * 为本次运行创建一个带最新工作区引导内容的 Agent。
+     *
+     * @return 会话执行 Agent
+     */
+    private ReActAgent buildAgent(ConversationExecutionRequest request) {
+        ConversationRuntimeTools runtimeTools = new ConversationRuntimeTools(
+                workspaceAgentTools,
+                request == null ? null : request.getSpawnTaskSupport(),
+                request == null ? null : request.getRunQuerySupport(),
+                request == null ? null : request.getNotificationSupport()
+        );
+        return ReActAgent.of(chatModel)
+                .name(workspacePromptService.resolveAgentName())
+                .instruction(workspacePromptService.buildSystemPrompt())
+                .defaultToolAdd(runtimeTools)
+                .defaultToolAdd(jobTools)
+                .defaultSkillAdd(cliSkillProvider)
+                .maxSteps(50)
+                .retryConfig(5, 1000L)
+                .sessionWindowSize(64)
+                .build();
     }
 }

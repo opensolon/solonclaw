@@ -20,6 +20,8 @@ public class ConversationEvent {
     private String role;
     /** 事件文本内容。 */
     private String content;
+    /** 事件结构化数据的 JSON 表示。 */
+    private String eventDataJson;
     /** 事件创建时间戳。 */
     private long createdAt;
 
@@ -165,6 +167,24 @@ public class ConversationEvent {
      */
     public void setContent(String content) {
         this.content = content;
+    }
+
+    /**
+     * 返回事件结构化数据 JSON。
+     *
+     * @return 事件结构化数据 JSON
+     */
+    public String getEventDataJson() {
+        return eventDataJson;
+    }
+
+    /**
+     * 设置事件结构化数据 JSON。
+     *
+     * @param eventDataJson 事件结构化数据 JSON
+     */
+    public void setEventDataJson(String eventDataJson) {
+        this.eventDataJson = eventDataJson;
     }
 
     /**

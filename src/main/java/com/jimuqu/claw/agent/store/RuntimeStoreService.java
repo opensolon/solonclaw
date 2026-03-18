@@ -5,6 +5,8 @@ import cn.hutool.core.util.StrUtil;
 import cn.hutool.crypto.digest.DigestUtil;
 import cn.hutool.json.JSONUtil;
 import com.jimuqu.claw.agent.model.AgentRun;
+import com.jimuqu.claw.agent.model.ChildRunCompletedData;
+import com.jimuqu.claw.agent.model.ChildRunSpawnedData;
 import com.jimuqu.claw.agent.model.ChannelType;
 import com.jimuqu.claw.agent.model.ConversationEvent;
 import com.jimuqu.claw.agent.model.InboundEnvelope;
@@ -12,7 +14,10 @@ import com.jimuqu.claw.agent.model.LatestReplyRoute;
 import com.jimuqu.claw.agent.model.ReplyTarget;
 import com.jimuqu.claw.agent.model.RunEvent;
 import com.jimuqu.claw.agent.model.RunStatus;
+import com.jimuqu.claw.agent.runtime.ParentRunChildrenSummary;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -28,6 +33,8 @@ import java.util.concurrent.locks.ReentrantLock;
  * 负责以文件形式持久化运行任务、会话事件、去重标记和路由信息。
  */
 public class RuntimeStoreService {
+    /** 日志记录器。 */
+    private static final Logger log = LoggerFactory.getLogger(RuntimeStoreService.class);
     /** 运行时根目录。 */
     private final File runtimeDir;
     /** 运行任务目录。 */
@@ -56,6 +63,7 @@ public class RuntimeStoreService {
         this.dedupDir = FileUtil.mkdir(new File(runtimeDir, "dedup"));
         this.metaDir = FileUtil.mkdir(new File(runtimeDir, "meta"));
         this.mediaDir = FileUtil.mkdir(new File(runtimeDir, "media"));
+        log.info("Runtime store initialized at {}", runtimeDir.getAbsolutePath());
         markIncompleteRunsAborted();
     }
 
@@ -105,9 +113,9 @@ public class RuntimeStoreService {
     public long appendInboundConversationEvent(InboundEnvelope inboundEnvelope) {
         ConversationEvent event = new ConversationEvent();
         event.setSessionKey(inboundEnvelope.getSessionKey());
-        event.setEventType("user_message");
+        event.setEventType(inboundEnvelope.isPersistInboundConversationEvent() ? "user_message" : "system_event");
         event.setSourceMessageId(inboundEnvelope.getMessageId());
-        event.setRole("user");
+        event.setRole(inboundEnvelope.isPersistInboundConversationEvent() ? "user" : "system");
         event.setContent(inboundEnvelope.getContent());
         event.setCreatedAt(inboundEnvelope.getReceivedAt());
         return appendConversationEvent(inboundEnvelope.getSessionKey(), event);
@@ -156,6 +164,67 @@ public class RuntimeStoreService {
     }
 
     /**
+     * 追加一条结构化的子任务创建事件。
+     *
+     * @param sessionKey 父会话键
+     * @param parentRunId 父运行标识
+     * @param sourceUserVersion 所属父输入版本
+     * @param childRun 子运行
+     * @return 新事件版本号
+     */
+    public long appendChildRunSpawnedEvent(String sessionKey, String parentRunId, long sourceUserVersion, AgentRun childRun) {
+        ChildRunSpawnedData data = new ChildRunSpawnedData();
+        data.setParentRunId(parentRunId);
+        data.setChildRunId(childRun.getRunId());
+        data.setChildSessionKey(childRun.getSessionKey());
+        data.setTaskDescription(childRun.getTaskDescription());
+        data.setBatchKey(childRun.getBatchKey());
+
+        ConversationEvent event = new ConversationEvent();
+        event.setSessionKey(sessionKey);
+        event.setEventType("child_run_spawned");
+        event.setRunId(parentRunId);
+        event.setSourceUserVersion(sourceUserVersion);
+        event.setRole("system");
+        event.setContent("子任务已创建");
+        event.setEventDataJson(JSONUtil.toJsonStr(data));
+        event.setCreatedAt(System.currentTimeMillis());
+        return appendConversationEvent(sessionKey, event);
+    }
+
+    /**
+     * 追加一条结构化的子任务完成事件。
+     *
+     * @param sessionKey 父会话键
+     * @param parentRunId 父运行标识
+     * @param sourceUserVersion 所属父输入版本
+     * @param childRun 子运行
+     * @return 新事件版本号
+     */
+    public long appendChildRunCompletedEvent(String sessionKey, String parentRunId, long sourceUserVersion, AgentRun childRun) {
+        ChildRunCompletedData data = new ChildRunCompletedData();
+        data.setParentRunId(parentRunId);
+        data.setChildRunId(childRun.getRunId());
+        data.setChildSessionKey(childRun.getSessionKey());
+        data.setStatus(childRun.getStatus() == null ? null : childRun.getStatus().name());
+        data.setTaskDescription(childRun.getTaskDescription());
+        data.setBatchKey(childRun.getBatchKey());
+        data.setResult(childRun.getFinalResponse());
+        data.setErrorMessage(childRun.getErrorMessage());
+
+        ConversationEvent event = new ConversationEvent();
+        event.setSessionKey(sessionKey);
+        event.setEventType("child_run_completed");
+        event.setRunId(parentRunId);
+        event.setSourceUserVersion(sourceUserVersion);
+        event.setRole("system");
+        event.setContent("子任务已完成");
+        event.setEventDataJson(JSONUtil.toJsonStr(data));
+        event.setCreatedAt(System.currentTimeMillis());
+        return appendConversationEvent(sessionKey, event);
+    }
+
+    /**
      * 在会话事件文件中追加一条事件。
      *
      * @param sessionKey 会话键
@@ -188,6 +257,8 @@ public class RuntimeStoreService {
         List<ConversationEvent> allEvents = readConversationEvents(sessionKey);
         List<ConversationEvent> userEvents = new ArrayList<>();
         Map<Long, List<ConversationEvent>> repliesBySource = new LinkedHashMap<>();
+        Map<Long, List<ConversationEvent>> sideEventsByAnchor = new LinkedHashMap<>();
+        List<ConversationEvent> unanchoredSideEvents = new ArrayList<>();
 
         for (ConversationEvent event : allEvents) {
             if ("user_message".equals(event.getEventType()) && event.getVersion() < beforeUserVersion) {
@@ -195,6 +266,14 @@ public class RuntimeStoreService {
             }
             if ("assistant_reply".equals(event.getEventType()) && event.getSourceUserVersion() < beforeUserVersion) {
                 repliesBySource.computeIfAbsent(event.getSourceUserVersion(), key -> new ArrayList<>()).add(event);
+            }
+            if (event.getVersion() < beforeUserVersion && isRenderableSystemEvent(event)) {
+                long anchorVersion = event.getSourceUserVersion();
+                if (anchorVersion > 0) {
+                    sideEventsByAnchor.computeIfAbsent(anchorVersion, key -> new ArrayList<>()).add(event);
+                } else {
+                    unanchoredSideEvents.add(event);
+                }
             }
         }
 
@@ -209,9 +288,41 @@ public class RuntimeStoreService {
                     history.add(ChatMessage.ofAssistant(reply.getContent()));
                 }
             }
+            List<ConversationEvent> sideEvents = sideEventsByAnchor.get(userEvent.getVersion());
+            if (sideEvents != null) {
+                sideEvents.sort(Comparator.comparingLong(ConversationEvent::getVersion));
+                for (ConversationEvent sideEvent : sideEvents) {
+                    history.add(ChatMessage.ofSystem(renderConversationEvent(sideEvent)));
+                }
+            }
+        }
+
+        unanchoredSideEvents.sort(Comparator.comparingLong(ConversationEvent::getVersion));
+        for (ConversationEvent sideEvent : unanchoredSideEvents) {
+            history.add(ChatMessage.ofSystem(renderConversationEvent(sideEvent)));
         }
 
         return history;
+    }
+
+    /**
+     * 返回某个会话当前最新事件版本号。
+     *
+     * @param sessionKey 会话键
+     * @return 最新事件版本号；若会话为空则返回 0
+     */
+    public long getLatestConversationVersion(String sessionKey) {
+        File file = conversationEventsFile(sessionKey);
+        if (!file.exists()) {
+            return 0L;
+        }
+        ReentrantLock lock = lock(file);
+        lock.lock();
+        try {
+            return countLines(file);
+        } finally {
+            lock.unlock();
+        }
     }
 
     /**
@@ -241,7 +352,16 @@ public class RuntimeStoreService {
         if (!runFile.exists()) {
             return null;
         }
-        return JSONUtil.toBean(FileUtil.readUtf8String(runFile), AgentRun.class);
+        ReentrantLock lock = lock(runFile);
+        lock.lock();
+        try {
+            if (!runFile.exists()) {
+                return null;
+            }
+            return JSONUtil.toBean(FileUtil.readUtf8String(runFile), AgentRun.class);
+        } finally {
+            lock.unlock();
+        }
     }
 
     /**
@@ -284,16 +404,204 @@ public class RuntimeStoreService {
         }
 
         List<RunEvent> events = new ArrayList<>();
-        for (String line : FileUtil.readUtf8Lines(file)) {
-            if (StrUtil.isBlank(line)) {
-                continue;
+        ReentrantLock lock = lock(file);
+        lock.lock();
+        try {
+            for (String line : FileUtil.readUtf8Lines(file)) {
+                if (StrUtil.isBlank(line)) {
+                    continue;
+                }
+                RunEvent event = JSONUtil.toBean(line, RunEvent.class);
+                if (event.getSeq() > afterSeq) {
+                    events.add(event);
+                }
             }
-            RunEvent event = JSONUtil.toBean(line, RunEvent.class);
-            if (event.getSeq() > afterSeq) {
-                events.add(event);
-            }
+        } finally {
+            lock.unlock();
         }
         return events;
+    }
+
+    /**
+     * 判断指定运行是否已写入某种事件类型。
+     *
+     * @param runId 运行任务标识
+     * @param eventType 事件类型
+     * @return 若存在则返回 true
+     */
+    public boolean hasRunEventType(String runId, String eventType) {
+        File file = runEventsFile(runId);
+        if (!file.exists()) {
+            return false;
+        }
+
+        ReentrantLock lock = lock(file);
+        lock.lock();
+        try {
+            for (String line : FileUtil.readUtf8Lines(file)) {
+                if (StrUtil.isBlank(line)) {
+                    continue;
+                }
+                RunEvent event = JSONUtil.toBean(line, RunEvent.class);
+                if (StrUtil.equals(eventType, event.getEventType())) {
+                    return true;
+                }
+            }
+            return false;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * 查询某个父会话最近的子任务列表。
+     *
+     * @param parentSessionKey 父会话键
+     * @param limit 最大返回条数
+     * @return 子任务列表
+     */
+    public List<AgentRun> listChildRuns(String parentSessionKey, int limit) {
+        int resolvedLimit = Math.max(1, limit);
+        List<AgentRun> runs = new ArrayList<>();
+        List<File> files = FileUtil.loopFiles(runsDir, pathname -> pathname.isFile() && pathname.getName().endsWith(".json"));
+        for (File file : files) {
+            try {
+                AgentRun run = JSONUtil.toBean(FileUtil.readUtf8String(file), AgentRun.class);
+                if (run != null && StrUtil.equals(parentSessionKey, run.getParentSessionKey())) {
+                    runs.add(run);
+                }
+            } catch (Exception ignored) {
+                // 子任务与聚合查询并发发生时，允许跳过临时不可读文件。
+            }
+        }
+        runs.sort(Comparator.comparingLong(AgentRun::getCreatedAt).reversed());
+        return runs.size() > resolvedLimit ? new ArrayList<>(runs.subList(0, resolvedLimit)) : runs;
+    }
+
+    /**
+     * 查询某个父会话最近一次子任务。
+     *
+     * @param parentSessionKey 父会话键
+     * @return 最近一次子任务；不存在则返回 null
+     */
+    public AgentRun getLatestChildRun(String parentSessionKey) {
+        List<AgentRun> runs = listChildRuns(parentSessionKey, 1);
+        return runs.isEmpty() ? null : runs.get(0);
+    }
+
+    /**
+     * 查询某个父运行下的所有子任务。
+     *
+     * @param parentRunId 父运行标识
+     * @return 子任务列表
+     */
+    public List<AgentRun> listChildRunsByParentRun(String parentRunId) {
+        return listChildRunsByParentRun(parentRunId, null);
+    }
+
+    /**
+     * 查询某个父运行下的所有子任务。
+     *
+     * @param parentRunId 父运行标识
+     * @param batchKey 批次键；为空时返回全部
+     * @return 子任务列表
+     */
+    public List<AgentRun> listChildRunsByParentRun(String parentRunId, String batchKey) {
+        List<AgentRun> runs = new ArrayList<>();
+        if (StrUtil.isBlank(parentRunId)) {
+            return runs;
+        }
+
+        List<File> files = FileUtil.loopFiles(runsDir, pathname -> pathname.isFile() && pathname.getName().endsWith(".json"));
+        for (File file : files) {
+            try {
+                AgentRun run = JSONUtil.toBean(FileUtil.readUtf8String(file), AgentRun.class);
+                if (run != null
+                        && StrUtil.equals(parentRunId, run.getParentRunId())
+                        && (StrUtil.isBlank(batchKey) || StrUtil.equals(batchKey, run.getBatchKey()))) {
+                    runs.add(run);
+                }
+            } catch (Exception ignored) {
+                // 允许跳过并发写入期间的临时不可读文件。
+            }
+        }
+        runs.sort(Comparator.comparingLong(AgentRun::getCreatedAt));
+        return runs;
+    }
+
+    /**
+     * 返回某个会话最近一个派生过子任务的父运行。
+     *
+     * @param sessionKey 会话键
+     * @return 父运行；不存在则返回 null
+     */
+    public AgentRun getLatestParentRunWithChildren(String sessionKey) {
+        List<File> files = FileUtil.loopFiles(runsDir, pathname -> pathname.isFile() && pathname.getName().endsWith(".json"));
+        AgentRun latest = null;
+        for (File file : files) {
+            try {
+                AgentRun run = JSONUtil.toBean(FileUtil.readUtf8String(file), AgentRun.class);
+                if (run == null || !StrUtil.equals(sessionKey, run.getSessionKey())) {
+                    continue;
+                }
+                if (listChildRunsByParentRun(run.getRunId()).isEmpty()) {
+                    continue;
+                }
+                if (latest == null || run.getCreatedAt() > latest.getCreatedAt()) {
+                    latest = run;
+                }
+            } catch (Exception ignored) {
+                // 允许跳过并发写入期间的临时不可读文件。
+            }
+        }
+        return latest;
+    }
+
+    /**
+     * 聚合某个父运行下的子任务状态。
+     *
+     * @param parentRunId 父运行标识
+     * @return 聚合结果
+     */
+    public ParentRunChildrenSummary summarizeChildRuns(String parentRunId) {
+        return summarizeChildRuns(parentRunId, null);
+    }
+
+    /**
+     * 聚合某个父运行下的子任务状态。
+     *
+     * @param parentRunId 父运行标识
+     * @param batchKey 批次键；为空时聚合全部子任务
+     * @return 聚合结果
+     */
+    public ParentRunChildrenSummary summarizeChildRuns(String parentRunId, String batchKey) {
+        List<AgentRun> children = listChildRunsByParentRun(parentRunId, batchKey);
+        ParentRunChildrenSummary summary = new ParentRunChildrenSummary();
+        summary.setParentRunId(parentRunId);
+        summary.setBatchKey(batchKey);
+        summary.setChildren(children);
+        summary.setTotalChildren(children.size());
+
+        int succeeded = 0;
+        int failed = 0;
+        int pending = 0;
+        for (AgentRun child : children) {
+            if (child.getStatus() == RunStatus.SUCCEEDED) {
+                succeeded++;
+            } else if (child.getStatus() == RunStatus.FAILED
+                    || child.getStatus() == RunStatus.CANCELLED
+                    || child.getStatus() == RunStatus.ABORTED) {
+                failed++;
+            } else {
+                pending++;
+            }
+        }
+
+        summary.setSucceededChildren(succeeded);
+        summary.setFailedChildren(failed);
+        summary.setPendingChildren(pending);
+        summary.setAllCompleted(!children.isEmpty() && pending == 0);
+        return summary;
     }
 
     /**
@@ -320,13 +628,56 @@ public class RuntimeStoreService {
     }
 
     /**
+     * 读取某个会话最近一次回复目标。
+     *
+     * @param sessionKey 会话键
+     * @return 最近回复目标；不存在则返回 null
+     */
+    public ReplyTarget getReplyTarget(String sessionKey) {
+        if (StrUtil.isBlank(sessionKey)) {
+            return null;
+        }
+        File file = sessionReplyTargetFile(sessionKey);
+        if (!file.exists()) {
+            return null;
+        }
+        ReentrantLock lock = lock(file);
+        lock.lock();
+        try {
+            if (!file.exists()) {
+                return null;
+            }
+            LatestReplyRoute route = JSONUtil.toBean(FileUtil.readUtf8String(file), LatestReplyRoute.class);
+            return route == null ? null : route.getReplyTarget();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
      * 记录最近一次外部回复目标。
      *
      * @param sessionKey 会话键
      * @param replyTarget 回复目标
      */
     public void rememberReplyTarget(String sessionKey, ReplyTarget replyTarget) {
-        if (replyTarget == null || replyTarget.isDebugWeb()) {
+        if (replyTarget == null) {
+            return;
+        }
+
+        File sessionFile = sessionReplyTargetFile(sessionKey);
+        ReentrantLock sessionLock = lock(sessionFile);
+        sessionLock.lock();
+        try {
+            LatestReplyRoute route = new LatestReplyRoute();
+            route.setSessionKey(sessionKey);
+            route.setReplyTarget(replyTarget);
+            FileUtil.writeUtf8String(JSONUtil.toJsonStr(route), sessionFile);
+        } finally {
+            sessionLock.unlock();
+        }
+
+        if (replyTarget.isDebugWeb()) {
             return;
         }
 
@@ -481,6 +832,53 @@ public class RuntimeStoreService {
      */
     private File latestReplyTargetFile() {
         return new File(metaDir, "latest-reply-target.json");
+    }
+
+    /**
+     * 返回某个会话的最近回复目标文件。
+     *
+     * @param sessionKey 会话键
+     * @return 回复目标文件
+     */
+    private File sessionReplyTargetFile(String sessionKey) {
+        File dir = FileUtil.mkdir(new File(metaDir, "reply-targets"));
+        return new File(dir, safeSessionKey(sessionKey) + ".json");
+    }
+
+    private boolean isRenderableSystemEvent(ConversationEvent event) {
+        return "system_event".equals(event.getEventType())
+                || "child_run_spawned".equals(event.getEventType())
+                || "child_run_completed".equals(event.getEventType());
+    }
+
+    private String renderConversationEvent(ConversationEvent event) {
+        if ("child_run_spawned".equals(event.getEventType())) {
+            ChildRunSpawnedData data = JSONUtil.toBean(event.getEventDataJson(), ChildRunSpawnedData.class);
+            return "[系统事件] 已创建子任务\n"
+                    + "parentRunId=" + StrUtil.blankToDefault(data.getParentRunId(), "(未知)") + "\n"
+                    + "childRunId=" + StrUtil.blankToDefault(data.getChildRunId(), "(未知)") + "\n"
+                    + "childSessionKey=" + StrUtil.blankToDefault(data.getChildSessionKey(), "(未知)") + "\n"
+                    + (StrUtil.isBlank(data.getBatchKey()) ? "" : "batchKey=" + data.getBatchKey() + "\n")
+                    + "task=" + StrUtil.blankToDefault(data.getTaskDescription(), "(未记录任务描述)");
+        }
+        if ("child_run_completed".equals(event.getEventType())) {
+            ChildRunCompletedData data = JSONUtil.toBean(event.getEventDataJson(), ChildRunCompletedData.class);
+            StringBuilder builder = new StringBuilder("[系统事件] 子任务已完成\n");
+            builder.append("parentRunId=").append(StrUtil.blankToDefault(data.getParentRunId(), "(未知)")).append('\n');
+            builder.append("childRunId=").append(StrUtil.blankToDefault(data.getChildRunId(), "(未知)")).append('\n');
+            builder.append("status=").append(StrUtil.blankToDefault(data.getStatus(), "(未知)")).append('\n');
+            if (StrUtil.isNotBlank(data.getBatchKey())) {
+                builder.append("batchKey=").append(data.getBatchKey()).append('\n');
+            }
+            builder.append("task=").append(StrUtil.blankToDefault(data.getTaskDescription(), "(未记录任务描述)")).append('\n');
+            if (StrUtil.isNotBlank(data.getResult())) {
+                builder.append("result=\n").append(data.getResult());
+            } else if (StrUtil.isNotBlank(data.getErrorMessage())) {
+                builder.append("error=\n").append(data.getErrorMessage());
+            }
+            return builder.toString().trim();
+        }
+        return StrUtil.blankToDefault(event.getContent(), "[系统事件]");
     }
 
     /**

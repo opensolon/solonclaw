@@ -9,8 +9,6 @@ import java.util.List;
 public class SolonClawProperties {
     /** 工作区目录。 */
     private String workspace = "./workspace";
-    /** 存储相关配置。 */
-    private Storage storage = new Storage();
     /** Agent 相关配置。 */
     private Agent agent = new Agent();
     /** 渠道相关配置。 */
@@ -32,24 +30,6 @@ public class SolonClawProperties {
      */
     public void setWorkspace(String workspace) {
         this.workspace = workspace;
-    }
-
-    /**
-     * 返回存储配置。
-     *
-     * @return 存储配置
-     */
-    public Storage getStorage() {
-        return storage;
-    }
-
-    /**
-     * 设置存储配置。
-     *
-     * @param storage 存储配置
-     */
-    public void setStorage(Storage storage) {
-        this.storage = storage;
     }
 
     /**
@@ -89,37 +69,11 @@ public class SolonClawProperties {
     }
 
     /**
-     * 描述存储目录配置。
-     */
-    public static class Storage {
-        /** 运行时数据保存目录。 */
-        private String runtimeDir = "./runtime";
-
-        /**
-         * 返回运行时目录。
-         *
-         * @return 运行时目录
-         */
-        public String getRuntimeDir() {
-            return runtimeDir;
-        }
-
-        /**
-         * 设置运行时目录。
-         *
-         * @param runtimeDir 运行时目录
-         */
-        public void setRuntimeDir(String runtimeDir) {
-            this.runtimeDir = runtimeDir;
-        }
-    }
-
-    /**
      * 描述 Agent 行为配置。
      */
     public static class Agent {
-        /** 默认系统提示词。 */
-        private String systemPrompt = "你是 SolonClaw，一个长期运行的中文 AI 助手。请基于上下文直接回答；当信息不足时，明确说明。";
+        /** 基础系统提示词。 */
+        private String systemPrompt;
         /** 调度器配置。 */
         private Scheduler scheduler = new Scheduler();
         /** 心跳配置。 */

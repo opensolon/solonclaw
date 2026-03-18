@@ -15,7 +15,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 定时读取工作区心跳文件并向最近外部会话发送系统消息。
+ * 定时读取工作区心跳文件并触发一次静默的内部系统检查。
  */
 public class HeartbeatService {
     /** 日志记录器。 */
@@ -112,6 +112,6 @@ public class HeartbeatService {
             return;
         }
 
-        agentRuntimeService.submitSystemMessage(route.getSessionKey(), route.getReplyTarget(), content);
+        agentRuntimeService.submitSilentSystemMessage(route.getSessionKey(), route.getReplyTarget(), content, "heartbeat");
     }
 }

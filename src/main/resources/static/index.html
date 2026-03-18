@@ -143,6 +143,15 @@
   </div>
 
   <div class="panel">
+    <div class="row">
+      <div class="field">
+        <label for="batchKey">Batch Key Filter</label>
+        <input id="batchKey" placeholder="可选：只看某一批子任务，比如 plan-A">
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
     <strong>Recent Runs</strong>
     <div id="runs" style="margin-top: 12px;"></div>
   </div>
@@ -156,11 +165,22 @@
     <strong>Run Events</strong>
     <div id="events" class="messages" style="margin-top: 12px;"></div>
   </div>
+
+  <div class="panel">
+    <strong>Child Summary</strong>
+    <div id="childSummary" class="messages" style="margin-top: 12px;"></div>
+  </div>
+
+  <div class="panel">
+    <strong>Child Runs</strong>
+    <div id="childRuns" class="messages" style="margin-top: 12px;"></div>
+  </div>
 </div>
 
 <script>
   const sessionIdEl = document.getElementById("sessionId");
   const messageEl = document.getElementById("message");
+  const batchKeyEl = document.getElementById("batchKey");
   const sendBtn = document.getElementById("sendBtn");
   const runIdEl = document.getElementById("runId");
   const sessionKeyEl = document.getElementById("sessionKey");
@@ -168,6 +188,8 @@
   const latestResponseEl = document.getElementById("latestResponse");
   const eventsEl = document.getElementById("events");
   const runsEl = document.getElementById("runs");
+  const childSummaryEl = document.getElementById("childSummary");
+  const childRunsEl = document.getElementById("childRuns");
 
   const runs = new Map();
   let currentRunId = null;
@@ -200,6 +222,31 @@
         <div>${escapeHtml(event.message)}</div>
       </div>
     `).join("");
+    childSummaryEl.textContent = formatChildSummary(runState.childSummary);
+    childRunsEl.innerHTML = (runState.childRuns || []).map(run => `
+      <div class="event">
+        <div class="event-type">${escapeHtml(run.status || "QUEUED")} · ${escapeHtml(run.runId || "-")}</div>
+        <div><strong>Task:</strong> ${escapeHtml(run.taskDescription || "-")}</div>
+        <div><strong>Batch:</strong> ${escapeHtml(run.batchKey || "-")}</div>
+        <div><strong>Session:</strong> ${escapeHtml(run.sessionKey || "-")}</div>
+        <div><strong>Result:</strong> ${escapeHtml(run.finalResponse || run.errorMessage || "-")}</div>
+      </div>
+    `).join("");
+  }
+
+  function formatChildSummary(summary) {
+    if (!summary) {
+      return "";
+    }
+    return [
+      `parentRunId=${summary.parentRunId || "-"}`,
+      `batchKey=${summary.batchKey || "-"}`,
+      `totalChildren=${summary.totalChildren ?? 0}`,
+      `succeededChildren=${summary.succeededChildren ?? 0}`,
+      `failedChildren=${summary.failedChildren ?? 0}`,
+      `pendingChildren=${summary.pendingChildren ?? 0}`,
+      `allCompleted=${summary.allCompleted ?? false}`
+    ].join("\n");
   }
 
   function appendEvent(runState, event) {
@@ -227,9 +274,23 @@
     runState.lastSeq = data.lastSeq || runState.lastSeq;
   }
 
+  async function loadChildren(runState) {
+    if (!runState || !runState.runId) {
+      return;
+    }
+    const query = batchKeyEl.value ? `?batchKey=${encodeURIComponent(batchKeyEl.value)}` : "";
+    const response = await fetch(`/api/debug/runs/${runState.runId}/children${query}`);
+    const data = await response.json();
+    runState.childRuns = data.children || [];
+    runState.childSummary = data.summary || null;
+  }
+
   async function pollRuns() {
     const activeRuns = Array.from(runs.values()).filter(run => !["SUCCEEDED", "FAILED", "ABORTED", "CANCELLED"].includes(run.status));
     await Promise.all(activeRuns.flatMap(run => [loadRun(run), loadEvents(run)]));
+    if (currentRunId && runs.get(currentRunId)) {
+      await loadChildren(runs.get(currentRunId));
+    }
     renderRuns();
     syncPrimaryRun(runs.get(currentRunId));
     if (activeRuns.length === 0 && pollingTimer) {
@@ -242,7 +303,19 @@
     const target = event.target.closest("[data-run-id]");
     if (!target) return;
     currentRunId = target.dataset.runId;
-    syncPrimaryRun(runs.get(currentRunId));
+    const current = runs.get(currentRunId);
+    if (current) {
+      loadChildren(current).then(() => syncPrimaryRun(current));
+    } else {
+      syncPrimaryRun(current);
+    }
+  });
+
+  batchKeyEl.addEventListener("change", () => {
+    if (!currentRunId) return;
+    const current = runs.get(currentRunId);
+    if (!current) return;
+    loadChildren(current).then(() => syncPrimaryRun(current));
   });
 
   sendBtn.addEventListener("click", async () => {
@@ -268,9 +341,12 @@
       latestResponse: "",
       lastSeq: 0,
       createdAt: Date.now(),
-      events: []
+      events: [],
+      childRuns: [],
+      childSummary: null
     });
     renderRuns();
+    await loadChildren(runs.get(currentRunId));
     syncPrimaryRun(runs.get(currentRunId));
 
     if (pollingTimer) {

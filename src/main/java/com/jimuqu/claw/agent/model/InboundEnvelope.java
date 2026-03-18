@@ -31,6 +31,12 @@ public class InboundEnvelope {
     private String sessionKey;
     /** 会话事件版本号。 */
     private long sessionVersion;
+    /** 是否允许将最终回复回发到外部渠道。 */
+    private boolean externalReplyEnabled = true;
+    /** 是否将当前入站消息写入会话历史。 */
+    private boolean persistInboundConversationEvent = true;
+    /** 是否将本次运行产生的助手回复写入会话历史。 */
+    private boolean persistAssistantConversationEvent = true;
 
     /**
      * 返回消息唯一标识。
@@ -246,5 +252,59 @@ public class InboundEnvelope {
      */
     public void setSessionVersion(long sessionVersion) {
         this.sessionVersion = sessionVersion;
+    }
+
+    /**
+     * 返回是否允许外部回发。
+     *
+     * @return 若允许外部回发则返回 true
+     */
+    public boolean isExternalReplyEnabled() {
+        return externalReplyEnabled;
+    }
+
+    /**
+     * 设置是否允许外部回发。
+     *
+     * @param externalReplyEnabled 外部回发标记
+     */
+    public void setExternalReplyEnabled(boolean externalReplyEnabled) {
+        this.externalReplyEnabled = externalReplyEnabled;
+    }
+
+    /**
+     * 返回是否持久化当前入站事件。
+     *
+     * @return 若持久化则返回 true
+     */
+    public boolean isPersistInboundConversationEvent() {
+        return persistInboundConversationEvent;
+    }
+
+    /**
+     * 设置是否持久化当前入站事件。
+     *
+     * @param persistInboundConversationEvent 入站事件持久化标记
+     */
+    public void setPersistInboundConversationEvent(boolean persistInboundConversationEvent) {
+        this.persistInboundConversationEvent = persistInboundConversationEvent;
+    }
+
+    /**
+     * 返回是否持久化助手回复事件。
+     *
+     * @return 若持久化则返回 true
+     */
+    public boolean isPersistAssistantConversationEvent() {
+        return persistAssistantConversationEvent;
+    }
+
+    /**
+     * 设置是否持久化助手回复事件。
+     *
+     * @param persistAssistantConversationEvent 助手回复事件持久化标记
+     */
+    public void setPersistAssistantConversationEvent(boolean persistAssistantConversationEvent) {
+        this.persistAssistantConversationEvent = persistAssistantConversationEvent;
     }
 }
