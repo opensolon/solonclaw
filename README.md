@@ -236,6 +236,61 @@ java -jar target/solonclaw.jar --env=dev
 
 - [http://localhost:12345](http://localhost:12345)
 
+### 5. 一键复制的启动命令
+
+如果你希望 README 里直接给出“先设置变量，再启动”的现成命令，可以直接使用下面这些示例。
+
+PowerShell：
+
+```powershell
+$env:APP_JAR="target/solonclaw.jar"
+$env:APP_ENV="dev"
+$env:APP_PORT="12345"
+$env:APP_WORKSPACE="./workspace"
+$env:APP_XMS="256m"
+$env:APP_XMX="512m"
+
+java `
+  "-Xms$env:APP_XMS" `
+  "-Xmx$env:APP_XMX" `
+  "-Dserver.port=$env:APP_PORT" `
+  "-Dsolonclaw.workspace=$env:APP_WORKSPACE" `
+  -jar $env:APP_JAR `
+  --env=$env:APP_ENV
+```
+
+Bash：
+
+```bash
+export APP_JAR="target/solonclaw.jar"
+export APP_ENV="dev"
+export APP_PORT="12345"
+export APP_WORKSPACE="./workspace"
+export JAVA_OPTS="-Xms256m -Xmx512m"
+
+java ${JAVA_OPTS} \
+  -Dserver.port="${APP_PORT}" \
+  -Dsolonclaw.workspace="${APP_WORKSPACE}" \
+  -jar "${APP_JAR}" \
+  --env="${APP_ENV}"
+```
+
+生产环境示例：
+
+```bash
+export APP_JAR="target/solonclaw.jar"
+export APP_ENV="prod"
+export APP_PORT="12345"
+export APP_WORKSPACE="./workspace"
+export JAVA_OPTS="-Xms512m -Xmx1024m"
+
+java ${JAVA_OPTS} \
+  -Dserver.port="${APP_PORT}" \
+  -Dsolonclaw.workspace="${APP_WORKSPACE}" \
+  -jar "${APP_JAR}" \
+  --env="${APP_ENV}"
+```
+
 ## 配置说明
 
 主配置文件：
@@ -255,6 +310,115 @@ java -jar target/solonclaw.jar --env=dev
 
 - 仓库内不提交生产密钥
 - `prod` 环境默认追加加载根目录 `./config.yml`
+
+## Docker 部署
+
+仓库现在已经提供：
+
+- [Dockerfile](./Dockerfile)
+- [docker-compose.yml](./docker-compose.yml)
+- [.dockerignore](./.dockerignore)
+
+### 1. 构建镜像
+
+```bash
+docker build -t solonclaw:latest .
+```
+
+### 2. 准备宿主机文件
+
+建议在项目根目录准备：
+
+- `config.yml`
+- `workspace/`
+
+其中：
+
+- `config.yml` 用来放生产环境密钥、模型配置、钉钉配置
+- `workspace/` 用来持久化运行时数据、记忆文件、技能和任务定义
+
+可先参考：
+
+- [scripts/config.example.yml](./scripts/config.example.yml)
+
+### 3. 直接用 `docker run` 启动
+
+```bash
+docker run -d \
+  --name solonclaw \
+  -p 12345:12345 \
+  -e JAVA_OPTS="-Xms256m -Xmx512m" \
+  -e APP_ARGS="--env=prod" \
+  -v "$(pwd)/workspace:/app/workspace" \
+  -v "$(pwd)/config.yml:/app/config.yml:ro" \
+  solonclaw:latest
+```
+
+Windows PowerShell：
+
+```powershell
+docker run -d `
+  --name solonclaw `
+  -p 12345:12345 `
+  -e JAVA_OPTS="-Xms256m -Xmx512m" `
+  -e APP_ARGS="--env=prod" `
+  -v "${PWD}/workspace:/app/workspace" `
+  -v "${PWD}/config.yml:/app/config.yml:ro" `
+  solonclaw:latest
+```
+
+说明：
+
+- 容器工作目录固定为 `/app`
+- `APP_ARGS="--env=prod"` 会启用 `app.yml` 中的 `prod` 段，并加载 `/app/config.yml`
+- `workspace` 目录挂载后，运行数据不会随容器删除而丢失
+
+### 4. 使用 Docker Compose 启动
+
+```bash
+docker compose up -d --build
+```
+
+停止：
+
+```bash
+docker compose down
+```
+
+查看日志：
+
+```bash
+docker compose logs -f solonclaw
+```
+
+当前 `docker-compose.yml` 默认会：
+
+- 暴露端口 `12345`
+- 挂载 `./workspace` 到 `/app/workspace`
+- 挂载 `./config.yml` 到 `/app/config.yml`
+- 以 `--env=prod` 启动应用
+
+### 5. Docker Compose 文件说明
+
+如果你需要自定义 JVM 参数或启动参数，可以直接修改 [docker-compose.yml](./docker-compose.yml) 里的环境变量：
+
+- `JAVA_OPTS`
+- `APP_ARGS`
+
+例如：
+
+```yaml
+environment:
+  JAVA_OPTS: "-Xms512m -Xmx1024m"
+  APP_ARGS: "--env=prod"
+```
+
+### 6. 容器部署建议
+
+- 生产环境务必挂载独立的 `workspace` 目录
+- 生产环境不要把真实密钥写进镜像
+- 如果使用本地 Ollama，请确保容器能访问你的模型服务地址
+- 如果要接钉钉，请在 `config.yml` 中补齐 `clientId`、`clientSecret`、`robotCode`
 
 ## 测试覆盖
 
@@ -280,6 +444,66 @@ java -jar target/solonclaw.jar --env=dev
 - 新增配置优先并入 `SolonClawProperties`
 - 调试能力优先复用现有 Debug Web
 - 不要把系统退回成全局串行队列
+
+## PR 规范
+
+建议所有 Pull Request 默认包含这些内容：
+
+- `背景`
+- `改动内容`
+- `影响范围`
+- `验证方式`
+- `风险与回滚`
+
+推荐模板：
+
+```md
+## 背景
+- 为什么要做这次修改
+
+## 改动内容
+- 这次具体改了什么
+
+## 影响范围
+- 涉及哪些模块、接口、配置或部署方式
+
+## 验证方式
+- 执行了哪些测试
+- 做了哪些人工验证
+
+## 风险与回滚
+- 潜在风险是什么
+- 出现问题如何回滚
+```
+
+附加要求：
+
+- 一个 PR 尽量只做一类改动
+- PR 标题与提交信息建议使用中英双语
+- 改动涉及配置或行为变化时，要同步更新文档
+
+## AI 辅助开发说明
+
+本项目允许使用 AI 辅助编写代码和文档。
+
+但需要明确：
+
+- AI 可以参与实现，不可以替代开发者责任
+- 所有 AI 参与生成的代码，都必须由开发者人工阅读
+- 所有待合并改动，都必须经过开发者人工测试和验证
+- 不能因为使用了 AI，就跳过 Review、测试或关键链路回归
+
+建议至少完成与风险等级匹配的人工验证：
+
+- 本地编译
+- 单元测试或集成测试
+- 关键功能手工验证
+- 配置与部署检查
+
+结论很简单：
+
+- 允许使用 AI 写代码
+- 不允许未经开发者人工测试和验证直接合并
 
 更完整的仓库协作说明请阅读：
 

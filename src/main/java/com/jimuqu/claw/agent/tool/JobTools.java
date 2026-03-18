@@ -28,10 +28,10 @@ public class JobTools {
         return definition == null ? "任务不存在: " + name : JSONUtil.toJsonPrettyStr(definition);
     }
 
-    @ToolMapping(name = "add_job", description = "新增定时任务。mode 仅支持 fixed_rate、fixed_delay、cron；fixed_* 的 scheduleValue 单位为毫秒")
+    @ToolMapping(name = "add_job", description = "新增定时任务。mode 仅支持 fixed_rate、fixed_delay、once_delay、cron；fixed_* 与 once_delay 的 scheduleValue 单位为毫秒")
     public String addJob(
             @Param(description = "任务名称") String name,
-            @Param(description = "调度模式：fixed_rate、fixed_delay、cron") String mode,
+            @Param(description = "调度模式：fixed_rate、fixed_delay、once_delay、cron") String mode,
             @Param(description = "调度值：cron 表达式或毫秒值") String scheduleValue,
             @Param(description = "触发时提交给 Agent 的任务提示词") String prompt,
             @Param(description = "首次执行前延迟毫秒数，可填 0") long initialDelay,

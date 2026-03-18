@@ -21,7 +21,7 @@ class JobStoreServiceTest {
 
         JobDefinition definition = new JobDefinition();
         definition.setName("demo");
-        definition.setMode("fixed_rate");
+        definition.setMode("once_delay");
         definition.setScheduleValue("1000");
         definition.setPrompt("hello");
         definition.setSessionKey("dingtalk:private:demo");
@@ -34,7 +34,7 @@ class JobStoreServiceTest {
 
         JobDefinition saved = storeService.get("demo");
         assertNotNull(saved);
-        assertEquals("fixed_rate", saved.getMode());
+        assertEquals("once_delay", saved.getMode());
         assertEquals("1000", saved.getScheduleValue());
         assertEquals("hello", saved.getPrompt());
         assertTrue(storeService.getJobsFile().exists());

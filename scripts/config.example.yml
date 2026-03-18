@@ -1,5 +1,116 @@
+# 复制本文件到项目根目录，命名为 ./config.yml 后再按需修改。
+#
+# 使用方式：
+# 1. 默认示例使用 openai 兼容协议（最广泛）
+# 2. 本地 java -jar 运行：通常使用 127.0.0.1 访问本机服务
+# 3. Docker 运行，容器访问宿主机服务：通常使用 host.docker.internal
+# 4. Docker Compose 运行，若模型服务也在 Compose 网络中：通常使用服务名
+#
+# 注意：
+# - prod 环境下会自动追加加载 ./config.yml
+# - 真实密钥不要提交进仓库
+# - workspace 建议始终挂载到持久化目录
+# - Solon AI 默认聊天方言就是 openai；大量平台都兼容这套协议
+# - 如果你的服务兼容 OpenAI 接口，优先使用 provider=openai
+
+server:
+  port: 12345
+
+solon.ai.chat:
+  default:
+    # 默认使用 openai 兼容协议；这是当前最通用的接法
+    provider: "openai"
+    apiUrl: "https://api.openai.com/v1/chat/completions"
+    apiKey: "sk-your-openai-compatible-api-key"
+    model: "gpt-4o-mini"
+
+    # ----------------------------------------------------------------------
+    # Solon AI 聊天方言 / 协议示例（按当前仓库文档整理）
+    # 支持示例：
+    # - openai
+    # - openai-responses
+    # - ollama
+    # - gemini
+    # - claude
+    # - dashscope
+    #
+    # 说明：
+    # - 如果平台兼容 OpenAI 协议，优先使用 openai
+    # - 下面的示例都用注释保留，切换时把目标方案取消注释，并删掉默认方案即可
+    # ----------------------------------------------------------------------
+
+    # [协议 1] openai（默认、最广泛）
+    # 适用：
+    # - OpenAI 官方
+    # - DeepSeek
+    # - Qwen OpenAI 兼容入口
+    # - GLM / Kimi / MiniMax / SiliconFlow / 火山引擎 / 智谱 / 百度千帆 等兼容 OpenAI 的平台
+    # provider: "openai"
+    # apiUrl: "https://api.openai.com/v1/chat/completions"
+    # apiKey: "sk-your-openai-compatible-api-key"
+    # model: "gpt-4o-mini"
+
+    # [协议 2] openai-responses
+    # 适用：
+    # - OpenAI Responses API 风格接口
+    # provider: "openai-responses"
+    # apiUrl: "https://api.openai.com/v1/responses"
+    # apiKey: "sk-your-openai-compatible-api-key"
+    # model: "gpt-4.1-mini"
+
+    # [协议 3] ollama
+    # 适用：
+    # - 本地或私有 Ollama 服务
+    #
+    # 方案 A：本地直接运行 java -jar，且 Ollama 就在本机
+    # provider: "ollama"
+    # apiUrl: "http://127.0.0.1:11434/api/chat"
+    # model: "qwen3.5:0.8b"
+    #
+    # 方案 B：Docker / Docker Compose 中运行 SolonClaw，访问宿主机 Ollama
+    # provider: "ollama"
+    # apiUrl: "http://host.docker.internal:11434/api/chat"
+    # model: "qwen3.5:0.8b"
+    #
+    # 方案 C：Docker Compose 中同时部署了 ollama 服务
+    # provider: "ollama"
+    # apiUrl: "http://ollama:11434/api/chat"
+    # model: "qwen3.5:0.8b"
+
+    # [协议 4] gemini
+    # 适用：
+    # - Gemini 原生协议
+    # provider: "gemini"
+    # apiUrl: "https://your-gemini-native-endpoint"
+    # apiKey: "your-gemini-api-key"
+    # model: "gemini-2.0-flash"
+
+    # [协议 5] claude
+    # 适用：
+    # - Claude 原生协议
+    # 提醒：
+    # - 如果 Claude 平台提供 OpenAI 兼容入口，也建议优先走 openai 协议
+    # provider: "claude"
+    # apiUrl: "https://api.anthropic.com/v1/messages"
+    # apiKey: "your-claude-api-key"
+    # model: "claude-3-5-sonnet-latest"
+
+    # [协议 6] dashscope
+    # 适用：
+    # - 阿里云百炼原生协议
+    # 提醒：
+    # - 如果你使用的是百炼 OpenAI 兼容入口，也建议优先走 openai 协议
+    # - 原生 DashScope 聊天接口地址请按实际控制台文档填写完整地址
+    # provider: "dashscope"
+    # apiUrl: "https://your-dashscope-native-endpoint"
+    # apiKey: "your-dashscope-api-key"
+    # model: "qwen-plus"
+
 solonclaw:
+  # 本地运行时通常保持 ./workspace
+  # Docker / Compose 中建议挂载宿主机目录到 /app/workspace，并保持这里仍为 ./workspace
   workspace: "./workspace"
+
   agent:
     systemPrompt: |
       你是在 SolonClaw 内运行的个人助理。
@@ -30,13 +141,29 @@ solonclaw:
       ## 心跳
       - 如果收到心跳检查且当前没有需要处理的事项，就简洁确认状态正常。
       - 如果有待办、异常或需要提醒用户的事项，就优先汇报真实状态。
+
     scheduler:
+      maxConcurrentPerConversation: 4
       ackWhenBusy: false
+
+    heartbeat:
+      enabled: true
+      intervalSeconds: 1800
+
   channels:
     dingtalk:
-      enabled: true
-      clientId: ""
-      clientSecret: ""
-      robotCode: ""
+      # 不使用钉钉时保持 false
+      enabled: false
+
+      # 钉钉机器人配置
+      clientId: "your-client-id"
+      clientSecret: "your-client-secret"
+      robotCode: "your-robot-code"
+
+      # 私聊白名单：为空时当前代码行为是默认允许
+      # 示例：["manager001", "alice"]
       allowFrom: []
+
+      # 群聊白名单：为空时当前代码行为是默认允许
+      # 示例：["cidAxxxx", "cidByyyy"]
       groupAllowFrom: []

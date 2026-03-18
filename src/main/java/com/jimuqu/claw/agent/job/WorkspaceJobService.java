@@ -140,6 +140,9 @@ public class WorkspaceJobService {
                 return;
             }
             jobDispatcher.dispatch(definition.getSessionKey(), replyTarget, definition.getPrompt());
+            if (isOneShot(definition)) {
+                removeJob(definition.getName());
+            }
         });
         holder.simpleName(definition.getName());
 
@@ -167,6 +170,11 @@ public class WorkspaceJobService {
             scheduled.fixedRate(parseLong(definition.getScheduleValue(), "fixedRate"));
         } else if ("fixed_delay".equals(mode)) {
             scheduled.fixedDelay(parseLong(definition.getScheduleValue(), "fixedDelay"));
+        } else if ("once_delay".equals(mode)) {
+            long delay = definition.getInitialDelay() > 0
+                    ? definition.getInitialDelay()
+                    : parseLong(definition.getScheduleValue(), "onceDelay");
+            scheduled.fixedDelay(delay);
         } else if ("cron".equals(mode)) {
             scheduled.cron(definition.getScheduleValue());
         } else {
@@ -199,8 +207,15 @@ public class WorkspaceJobService {
         }
 
         String normalized = mode.trim().toLowerCase();
-        if (!"fixed_rate".equals(normalized) && !"fixed_delay".equals(normalized) && !"cron".equals(normalized)) {
-            throw new IllegalArgumentException("mode 仅支持 fixed_rate、fixed_delay、cron");
+        if (!"fixed_rate".equals(normalized)
+                && !"fixed_delay".equals(normalized)
+                && !"once_delay".equals(normalized)
+                && !"cron".equals(normalized)) {
+            throw new IllegalArgumentException("mode 仅支持 fixed_rate、fixed_delay、once_delay、cron");
         }
+    }
+
+    private boolean isOneShot(JobDefinition definition) {
+        return "once_delay".equals(definition.getMode());
     }
 }
