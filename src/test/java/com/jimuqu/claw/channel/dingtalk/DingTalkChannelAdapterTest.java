@@ -5,7 +5,7 @@ import com.dingtalk.open.app.api.models.bot.MessageContent;
 import com.jimuqu.claw.agent.model.enums.ConversationType;
 import com.jimuqu.claw.agent.model.envelope.InboundEnvelope;
 import com.jimuqu.claw.channel.dingtalk.adapter.DingTalkChannelAdapter;
-import com.jimuqu.claw.config.SolonClawProperties;
+import com.jimuqu.claw.config.props.DingTalkProperties;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
@@ -23,7 +23,7 @@ class DingTalkChannelAdapterTest {
      */
     @Test
     void mapsGroupMessageIntoGroupSession() {
-        SolonClawProperties.DingTalk properties = new SolonClawProperties.DingTalk();
+        DingTalkProperties properties = new DingTalkProperties();
         properties.setGroupAllowFrom(Collections.singletonList("cid-group"));
 
         DingTalkChannelAdapter adapter = new DingTalkChannelAdapter(null, null, properties);
@@ -39,7 +39,7 @@ class DingTalkChannelAdapterTest {
      */
     @Test
     void mapsPrivateMessageIntoPrivateSession() {
-        SolonClawProperties.DingTalk properties = new SolonClawProperties.DingTalk();
+        DingTalkProperties properties = new DingTalkProperties();
         properties.setAllowFrom(Collections.singletonList("staff-private"));
 
         DingTalkChannelAdapter adapter = new DingTalkChannelAdapter(null, null, properties);
@@ -55,7 +55,7 @@ class DingTalkChannelAdapterTest {
      */
     @Test
     void allowsGroupMessageWhenAllowListIsEmpty() {
-        SolonClawProperties.DingTalk properties = new SolonClawProperties.DingTalk();
+        DingTalkProperties properties = new DingTalkProperties();
 
         DingTalkChannelAdapter adapter = new DingTalkChannelAdapter(null, null, properties);
         InboundEnvelope inboundEnvelope = adapter.toInboundEnvelope(groupMessage("cid-other", "staff-1", "未授权群"));
@@ -69,7 +69,7 @@ class DingTalkChannelAdapterTest {
      */
     @Test
     void rejectsMessageOutsideAllowListWhenConfigured() {
-        SolonClawProperties.DingTalk properties = new SolonClawProperties.DingTalk();
+        DingTalkProperties properties = new DingTalkProperties();
         properties.setGroupAllowFrom(Collections.singletonList("cid-group"));
 
         DingTalkChannelAdapter adapter = new DingTalkChannelAdapter(null, null, properties);
@@ -125,4 +125,6 @@ class DingTalkChannelAdapterTest {
         return message;
     }
 }
+
+
 

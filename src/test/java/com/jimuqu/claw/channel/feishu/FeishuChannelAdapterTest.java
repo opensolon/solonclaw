@@ -9,7 +9,7 @@ import com.lark.oapi.service.im.v1.model.UserId;
 import com.jimuqu.claw.agent.model.enums.ConversationType;
 import com.jimuqu.claw.agent.model.envelope.InboundEnvelope;
 import com.jimuqu.claw.channel.feishu.adapter.FeishuChannelAdapter;
-import com.jimuqu.claw.config.SolonClawProperties;
+import com.jimuqu.claw.config.props.FeishuProperties;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 class FeishuChannelAdapterTest {
     @Test
     void mapsGroupMessageIntoGroupSession() {
-        SolonClawProperties.Feishu properties = new SolonClawProperties.Feishu();
+        FeishuProperties properties = new FeishuProperties();
         properties.setGroupAllowFrom(Collections.singletonList("oc-group"));
 
         FeishuChannelAdapter adapter = new FeishuChannelAdapter(null, null, properties);
@@ -35,7 +35,7 @@ class FeishuChannelAdapterTest {
 
     @Test
     void mapsPrivateMessageIntoPrivateSession() {
-        SolonClawProperties.Feishu properties = new SolonClawProperties.Feishu();
+        FeishuProperties properties = new FeishuProperties();
         properties.setAllowFrom(Collections.singletonList("ou-private"));
 
         FeishuChannelAdapter adapter = new FeishuChannelAdapter(null, null, properties);
@@ -49,7 +49,7 @@ class FeishuChannelAdapterTest {
 
     @Test
     void rejectsMessageOutsideAllowListWhenConfigured() {
-        SolonClawProperties.Feishu properties = new SolonClawProperties.Feishu();
+        FeishuProperties properties = new FeishuProperties();
         properties.setGroupAllowFrom(Collections.singletonList("oc-group"));
 
         FeishuChannelAdapter adapter = new FeishuChannelAdapter(null, null, properties);
@@ -59,7 +59,7 @@ class FeishuChannelAdapterTest {
 
     @Test
     void extractsPlainTextFromPostMessage() {
-        SolonClawProperties.Feishu properties = new SolonClawProperties.Feishu();
+        FeishuProperties properties = new FeishuProperties();
 
         FeishuChannelAdapter adapter = new FeishuChannelAdapter(null, null, properties);
         InboundEnvelope inboundEnvelope = adapter.toInboundEnvelope(messageEvent("oc-post", "ou-2", "group", "post", postContent("标题", "正文")));
@@ -110,4 +110,6 @@ class FeishuChannelAdapterTest {
         return post.toJSONString();
     }
 }
+
+
 

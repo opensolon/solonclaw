@@ -452,6 +452,10 @@ environment:
 - 新增配置优先并入 `SolonClawProperties`
 - 调试能力优先复用现有 Debug Web
 - 不要把系统退回成全局串行队列
+- 实体类、DTO、事件载荷、结果对象、配置承载对象优先使用 Lombok 管理字段访问器；明确适合的类优先使用 `@Data`
+- 无参构造优先交给 Lombok 管理，这类数据类默认优先使用 `@NoArgsConstructor`
+- 需要持久化、序列化传输、缓存或作为稳定数据载体的类，应按需实现 `Serializable`
+- 尽量避免新增内部类；配置承载对象优先拆成独立类维护
 
 ## PR 规范
 

@@ -7,7 +7,7 @@ import com.jimuqu.claw.agent.model.envelope.OutboundEnvelope;
 import com.jimuqu.claw.agent.model.route.ReplyTarget;
 import com.jimuqu.claw.channel.feishu.gateway.FeishuMessageGateway;
 import com.jimuqu.claw.channel.feishu.gateway.FeishuSdkMessageGateway;
-import com.jimuqu.claw.config.SolonClawProperties;
+import com.jimuqu.claw.config.props.FeishuProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -21,7 +21,7 @@ public class FeishuBotSender {
     /** 日志记录器。 */
     private static final Logger log = LoggerFactory.getLogger(FeishuBotSender.class);
     /** 飞书配置。 */
-    private final SolonClawProperties.Feishu properties;
+    private final FeishuProperties properties;
     /** 飞书消息网关。 */
     private final FeishuMessageGateway messageGateway;
     /** 运行任务对应的飞书消息 ID，用于流式 patch 更新。 */
@@ -32,7 +32,7 @@ public class FeishuBotSender {
      *
      * @param properties 飞书配置
      */
-    public FeishuBotSender(SolonClawProperties.Feishu properties) {
+    public FeishuBotSender(FeishuProperties properties) {
         this(properties, new FeishuSdkMessageGateway(properties));
     }
 
@@ -42,7 +42,7 @@ public class FeishuBotSender {
      * @param properties 飞书配置
      * @param messageGateway 消息网关
      */
-    public FeishuBotSender(SolonClawProperties.Feishu properties, FeishuMessageGateway messageGateway) {
+    public FeishuBotSender(FeishuProperties properties, FeishuMessageGateway messageGateway) {
         this.properties = properties;
         this.messageGateway = messageGateway;
     }
@@ -177,5 +177,6 @@ public class FeishuBotSender {
         return builder.toString().trim();
     }
 }
+
 
 

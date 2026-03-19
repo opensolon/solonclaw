@@ -1,9 +1,18 @@
 package com.jimuqu.claw.agent.model.event;
 
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.io.Serializable;
+
 /**
  * 描述父会话中的子任务完成事件数据。
  */
-public class ChildRunCompletedData {
+@Data
+@NoArgsConstructor
+public class ChildRunCompletedData implements Serializable {
+    private static final long serialVersionUID = 1L;
+
     /** 父运行标识。 */
     private String parentRunId;
     /** 子运行标识。 */
@@ -20,69 +29,4 @@ public class ChildRunCompletedData {
     private String result;
     /** 子任务错误。 */
     private String errorMessage;
-
-    public String getParentRunId() {
-        return parentRunId;
-    }
-
-    public void setParentRunId(String parentRunId) {
-        this.parentRunId = parentRunId;
-    }
-
-    public String getChildRunId() {
-        return childRunId;
-    }
-
-    public void setChildRunId(String childRunId) {
-        this.childRunId = childRunId;
-    }
-
-    public String getChildSessionKey() {
-        return childSessionKey;
-    }
-
-    public void setChildSessionKey(String childSessionKey) {
-        this.childSessionKey = childSessionKey;
-    }
-
-    public String getStatus() {
-        return status;
-    }
-
-    public void setStatus(String status) {
-        this.status = status;
-    }
-
-    public String getTaskDescription() {
-        return taskDescription;
-    }
-
-    public void setTaskDescription(String taskDescription) {
-        this.taskDescription = taskDescription;
-    }
-
-    public String getBatchKey() {
-        return batchKey;
-    }
-
-    public void setBatchKey(String batchKey) {
-        this.batchKey = batchKey;
-    }
-
-    public String getResult() {
-        return result;
-    }
-
-    public void setResult(String result) {
-        this.result = result;
-    }
-
-    public String getErrorMessage() {
-        return errorMessage;
-    }
-
-    public void setErrorMessage(String errorMessage) {
-        this.errorMessage = errorMessage;
-    }
 }
-

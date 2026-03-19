@@ -5,7 +5,7 @@ import com.aliyun.dingtalkoauth2_1_0.Client;
 import com.aliyun.dingtalkoauth2_1_0.models.GetAccessTokenRequest;
 import com.aliyun.dingtalkoauth2_1_0.models.GetAccessTokenResponse;
 import com.aliyun.dingtalkoauth2_1_0.models.GetAccessTokenResponseBody;
-import com.jimuqu.claw.config.SolonClawProperties;
+import com.jimuqu.claw.config.props.DingTalkProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,7 +22,7 @@ public class DingTalkAccessTokenService {
     /** 日志记录器。 */
     private static final Logger log = LoggerFactory.getLogger(DingTalkAccessTokenService.class);
     /** 钉钉配置。 */
-    private final SolonClawProperties.DingTalk properties;
+    private final DingTalkProperties properties;
     /** 当前可用 token。 */
     private volatile AccessToken currentToken;
     /** 定时刷新调度器。 */
@@ -35,7 +35,7 @@ public class DingTalkAccessTokenService {
      *
      * @param properties 钉钉配置
      */
-    public DingTalkAccessTokenService(SolonClawProperties.DingTalk properties) {
+    public DingTalkAccessTokenService(DingTalkProperties properties) {
         this.properties = properties;
     }
 
@@ -178,4 +178,5 @@ public class DingTalkAccessTokenService {
         private long expireTimestamp;
     }
 }
+
 

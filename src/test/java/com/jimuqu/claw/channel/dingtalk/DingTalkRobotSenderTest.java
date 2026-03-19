@@ -2,7 +2,7 @@ package com.jimuqu.claw.channel.dingtalk;
 
 import com.alibaba.fastjson.JSONObject;
 import com.jimuqu.claw.channel.dingtalk.sender.DingTalkRobotSender;
-import com.jimuqu.claw.config.SolonClawProperties;
+import com.jimuqu.claw.config.props.DingTalkProperties;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class DingTalkRobotSenderTest {
     @Test
     void buildsMarkdownPayloadFromContent() throws Exception {
-        DingTalkRobotSender sender = new DingTalkRobotSender(null, new SolonClawProperties.DingTalk(), null);
+        DingTalkRobotSender sender = new DingTalkRobotSender(null, new DingTalkProperties(), null);
 
         String payload = sender.markdownMessageParam("#### 杭州天气\n> 9度，西北风1级");
         JSONObject json = JSONObject.parseObject(payload);
@@ -23,8 +23,10 @@ class DingTalkRobotSenderTest {
 
     @Test
     void fallsBackToDefaultTitleWhenContentIsBlank() throws Exception {
-        DingTalkRobotSender sender = new DingTalkRobotSender(null, new SolonClawProperties.DingTalk(), null);
+        DingTalkRobotSender sender = new DingTalkRobotSender(null, new DingTalkProperties(), null);
 
         assertEquals("SolonClaw", sender.resolveMarkdownTitle("   "));
     }
 }
+
+

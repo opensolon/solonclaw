@@ -19,7 +19,7 @@ import com.jimuqu.claw.agent.model.envelope.OutboundEnvelope;
 import com.jimuqu.claw.agent.model.route.ReplyTarget;
 import com.jimuqu.claw.agent.runtime.impl.AgentRuntimeService;
 import com.jimuqu.claw.channel.feishu.sender.FeishuBotSender;
-import com.jimuqu.claw.config.SolonClawProperties;
+import com.jimuqu.claw.config.props.FeishuProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,7 +36,7 @@ public class FeishuChannelAdapter implements ChannelAdapter {
     /** 飞书消息发送服务。 */
     private final FeishuBotSender feishuBotSender;
     /** 飞书渠道配置。 */
-    private final SolonClawProperties.Feishu properties;
+    private final FeishuProperties properties;
     /** 飞书长连接客户端。 */
     private com.lark.oapi.ws.Client wsClient;
 
@@ -50,7 +50,7 @@ public class FeishuChannelAdapter implements ChannelAdapter {
     public FeishuChannelAdapter(
             AgentRuntimeService agentRuntimeService,
             FeishuBotSender feishuBotSender,
-            SolonClawProperties.Feishu properties
+            FeishuProperties properties
     ) {
         this.agentRuntimeService = agentRuntimeService;
         this.feishuBotSender = feishuBotSender;
@@ -382,6 +382,7 @@ public class FeishuChannelAdapter implements ChannelAdapter {
         return null;
     }
 }
+
 
 
 

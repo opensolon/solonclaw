@@ -17,7 +17,7 @@ import com.jimuqu.claw.agent.model.envelope.OutboundEnvelope;
 import com.jimuqu.claw.agent.model.route.ReplyTarget;
 import com.jimuqu.claw.agent.runtime.impl.AgentRuntimeService;
 import com.jimuqu.claw.channel.dingtalk.sender.DingTalkRobotSender;
-import com.jimuqu.claw.config.SolonClawProperties;
+import com.jimuqu.claw.config.props.DingTalkProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,7 +34,7 @@ public class DingTalkChannelAdapter implements
     /** 钉钉消息发送服务。 */
     private final DingTalkRobotSender dingTalkRobotSender;
     /** 钉钉渠道配置。 */
-    private final SolonClawProperties.DingTalk properties;
+    private final DingTalkProperties properties;
     /** 钉钉 Stream 客户端。 */
     private OpenDingTalkClient client;
 
@@ -48,7 +48,7 @@ public class DingTalkChannelAdapter implements
     public DingTalkChannelAdapter(
             AgentRuntimeService agentRuntimeService,
             DingTalkRobotSender dingTalkRobotSender,
-            SolonClawProperties.DingTalk properties
+            DingTalkProperties properties
     ) {
         this.agentRuntimeService = agentRuntimeService;
         this.dingTalkRobotSender = dingTalkRobotSender;
@@ -323,6 +323,7 @@ public class DingTalkChannelAdapter implements
         return isBlank(second) ? null : second;
     }
 }
+
 
 
 

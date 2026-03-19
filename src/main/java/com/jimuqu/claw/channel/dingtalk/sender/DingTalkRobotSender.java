@@ -11,7 +11,7 @@ import com.aliyun.teautil.models.RuntimeOptions;
 import com.jimuqu.claw.agent.model.enums.ConversationType;
 import com.jimuqu.claw.agent.model.route.ReplyTarget;
 import com.jimuqu.claw.channel.dingtalk.service.DingTalkAccessTokenService;
-import com.jimuqu.claw.config.SolonClawProperties;
+import com.jimuqu.claw.config.props.DingTalkProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,7 +29,7 @@ public class DingTalkRobotSender {
     /** access_token 服务。 */
     private final DingTalkAccessTokenService accessTokenService;
     /** 钉钉配置。 */
-    private final SolonClawProperties.DingTalk properties;
+    private final DingTalkProperties properties;
     /** 机器人 OpenAPI 客户端。 */
     private final Client robotClient;
 
@@ -42,7 +42,7 @@ public class DingTalkRobotSender {
      */
     public DingTalkRobotSender(
             DingTalkAccessTokenService accessTokenService,
-            SolonClawProperties.DingTalk properties
+            DingTalkProperties properties
     ) throws Exception {
         this(accessTokenService, properties, createRobotClient());
     }
@@ -56,7 +56,7 @@ public class DingTalkRobotSender {
      */
     public DingTalkRobotSender(
             DingTalkAccessTokenService accessTokenService,
-            SolonClawProperties.DingTalk properties,
+            DingTalkProperties properties,
             Client robotClient
     ) {
         this.accessTokenService = accessTokenService;
@@ -213,5 +213,6 @@ public class DingTalkRobotSender {
         return new Client(config);
     }
 }
+
 
 

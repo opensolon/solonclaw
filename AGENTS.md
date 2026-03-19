@@ -488,6 +488,10 @@ java -jar target/solonclaw.jar --env=dev
 12. `subject` 必填，用于对 commit 做简短描述；默认继续使用中英双语描述，例如：`feat(agent): 增加了子任务聚合能力 (Add child-run aggregation)`
 13. `type` 必填，可选值固定为：`feat` 新功能、`fix` 修复 bug、`docs` 文档注释、`style` 代码格式、`refactor` 重构优化、`perf` 性能优化、`test` 增加测试、`chore` 构建过程或辅助工具变动、`revert` 回退、`build` 打包
 14. 提交代码时，默认按职责拆分 commit；优先拆成“提示词与上下文 / 运行时治理 / 配置默认值与注释 / 测试”这类最小修改单元，尽量做到一个 commit 只解决一类问题，避免把无关改动混在一起
+15. 实体类、DTO、事件载荷、结果对象、配置承载对象这类数据类，优先使用 Lombok 管理字段访问器；明确适合的类优先使用 `@Data`
+16. 无参构造优先交给 Lombok 管理；这类数据类默认优先使用 `@NoArgsConstructor`，不要继续手写大量空构造
+17. 需要持久化、序列化传输、缓存或作为稳定数据载体的类，应按需实现 `Serializable`
+18. 不允许或尽量减少内部类的使用；尤其是配置承载对象，应优先拆成独立类，例如不要在 `SolonClawProperties` 中持续堆叠大量静态内部类
 
 ## PR 规范
 

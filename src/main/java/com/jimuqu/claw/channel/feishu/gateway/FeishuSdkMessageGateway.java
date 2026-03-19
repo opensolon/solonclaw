@@ -10,7 +10,7 @@ import com.lark.oapi.service.im.v1.model.CreateMessageResp;
 import com.lark.oapi.service.im.v1.model.PatchMessageReq;
 import com.lark.oapi.service.im.v1.model.PatchMessageReqBody;
 import com.lark.oapi.service.im.v1.model.PatchMessageResp;
-import com.jimuqu.claw.config.SolonClawProperties;
+import com.jimuqu.claw.config.props.FeishuProperties;
 
 /**
  * 基于飞书 Java SDK 的消息网关实现。
@@ -24,7 +24,7 @@ public class FeishuSdkMessageGateway implements FeishuMessageGateway {
      *
      * @param properties 飞书配置
      */
-    public FeishuSdkMessageGateway(SolonClawProperties.Feishu properties) {
+    public FeishuSdkMessageGateway(FeishuProperties properties) {
         Client.Builder builder = Client.newBuilder(properties.getAppId(), properties.getAppSecret());
         if (StrUtil.isNotBlank(properties.getBaseDomain())) {
             builder.openBaseUrl(properties.getBaseDomain().trim());
@@ -75,4 +75,5 @@ public class FeishuSdkMessageGateway implements FeishuMessageGateway {
         }
     }
 }
+
 

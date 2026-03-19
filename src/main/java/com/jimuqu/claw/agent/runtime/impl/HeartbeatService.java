@@ -5,6 +5,7 @@ import cn.hutool.core.util.StrUtil;
 import com.jimuqu.claw.agent.model.route.LatestReplyRoute;
 import com.jimuqu.claw.agent.store.RuntimeStoreService;
 import com.jimuqu.claw.config.SolonClawProperties;
+import com.jimuqu.claw.config.props.HeartbeatProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,7 +51,7 @@ public class HeartbeatService {
      * 启动心跳定时任务。
      */
     public void start() {
-        SolonClawProperties.Heartbeat heartbeat = properties.getAgent().getHeartbeat();
+        HeartbeatProperties heartbeat = properties.getAgent().getHeartbeat();
         if (!heartbeat.isEnabled()) {
             log.info("Heartbeat service disabled.");
             return;

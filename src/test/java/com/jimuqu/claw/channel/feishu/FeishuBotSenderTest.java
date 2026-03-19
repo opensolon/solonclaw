@@ -7,7 +7,7 @@ import com.jimuqu.claw.agent.model.envelope.OutboundEnvelope;
 import com.jimuqu.claw.agent.model.route.ReplyTarget;
 import com.jimuqu.claw.channel.feishu.gateway.FeishuMessageGateway;
 import com.jimuqu.claw.channel.feishu.sender.FeishuBotSender;
-import com.jimuqu.claw.config.SolonClawProperties;
+import com.jimuqu.claw.config.props.FeishuProperties;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class FeishuBotSenderTest {
     @Test
     void buildsMarkdownCardPayloadFromContent() {
-        FeishuBotSender sender = new FeishuBotSender(new SolonClawProperties.Feishu(), new RecordingGateway());
+        FeishuBotSender sender = new FeishuBotSender(new FeishuProperties(), new RecordingGateway());
 
         String payload = sender.cardMessageParam("#### 杭州天气\n> 9度，西北风1级");
         JSONObject root = JSONObject.parseObject(payload);
@@ -38,7 +38,7 @@ class FeishuBotSenderTest {
 
     @Test
     void patchesExistingProgressMessageForSameRun() {
-        SolonClawProperties.Feishu properties = new SolonClawProperties.Feishu();
+        FeishuProperties properties = new FeishuProperties();
         properties.setStreamingReply(true);
         RecordingGateway gateway = new RecordingGateway();
         FeishuBotSender sender = new FeishuBotSender(properties, gateway);
@@ -84,4 +84,6 @@ class FeishuBotSenderTest {
         }
     }
 }
+
+
 

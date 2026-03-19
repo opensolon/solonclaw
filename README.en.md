@@ -381,6 +381,10 @@ The current test suite covers:
 - Prefer Solon lifecycle hooks for long-running resources
 - Add new project config under `SolonClawProperties`
 - Reuse the existing Debug Web entrypoint for local debugging
+- Prefer Lombok-managed accessors for entity classes, DTOs, event payloads, result objects, and config carrier objects; use `@Data` where it is clearly appropriate
+- Prefer Lombok-managed no-arg constructors for these data carriers, typically via `@NoArgsConstructor`
+- Classes that need persistence, serialized transport, caching, or stable data-carrier semantics should implement `Serializable` when appropriate
+- Avoid adding inner classes when possible; config carrier objects should preferably be extracted into standalone classes
 
 ## PR Guidelines
 
