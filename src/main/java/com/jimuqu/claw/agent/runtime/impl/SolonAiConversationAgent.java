@@ -12,9 +12,12 @@ import com.jimuqu.claw.agent.workspace.WorkspacePromptService;
 import cn.hutool.core.util.StrUtil;
 import org.noear.solon.ai.agent.AgentChunk;
 import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.skills.cli.CliSkillProvider;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 
 import java.util.concurrent.atomic.AtomicReference;
@@ -24,44 +27,62 @@ import java.util.function.Consumer;
  * 基于 Solon AI ReActAgent 的会话执行实现。
  */
 public class SolonAiConversationAgent implements ConversationAgent {
-    /** 聊天模型。 */
+
+    private static final Logger log = LoggerFactory.getLogger(SolonAiConversationAgent.class);
+    /**
+     * 聊天模型。
+     */
     private final ChatModel chatModel;
-    /** 工作区提示词服务。 */
+    /**
+     * 工作区提示词服务。
+     */
     private final WorkspacePromptService workspacePromptService;
-    /** 工作区工具集。 */
+    /**
+     * 工作区工具集。
+     */
     private final WorkspaceAgentTools workspaceAgentTools;
-    /** CLI 技能提供者。 */
+    /**
+     * CLI 技能提供者。
+     */
     private final CliSkillProvider cliSkillProvider;
-    /** 定时任务工具。 */
+    /**
+     * 定时任务工具。
+     */
     private final JobTools jobTools;
+    /**
+     * ReAct 运行日志拦截器。
+     */
+    private final ReActInterceptor reActInterceptor;
 
     /**
      * 创建基于聊天模型的会话执行 Agent。
      *
-     * @param chatModel 聊天模型
+     * @param chatModel              聊天模型
      * @param workspacePromptService 工作区提示词服务
-     * @param workspaceAgentTools 工作区工具集
-     * @param cliSkillProvider CLI 技能提供者
-     * @param jobTools 定时任务工具
+     * @param workspaceAgentTools    工作区工具集
+     * @param cliSkillProvider       CLI 技能提供者
+     * @param jobTools               定时任务工具
      */
     public SolonAiConversationAgent(
             ChatModel chatModel,
             WorkspacePromptService workspacePromptService,
             WorkspaceAgentTools workspaceAgentTools,
             CliSkillProvider cliSkillProvider,
-            JobTools jobTools
+            JobTools jobTools,
+            ReActInterceptor reActInterceptor
     ) {
         this.chatModel = chatModel;
         this.workspacePromptService = workspacePromptService;
         this.workspaceAgentTools = workspaceAgentTools;
         this.cliSkillProvider = cliSkillProvider;
         this.jobTools = jobTools;
+        this.reActInterceptor = reActInterceptor;
     }
 
     /**
      * 执行一次对话请求。
      *
-     * @param request 会话执行请求
+     * @param request          会话执行请求
      * @param progressConsumer 进度回调
      * @return 最终回复内容
      * @throws Throwable 流式执行过程中的异常
@@ -77,23 +98,30 @@ public class SolonAiConversationAgent implements ConversationAgent {
         VisibleProgressAccumulator progressAccumulator = new VisibleProgressAccumulator();
 
         String prompt = resolvePrompt(request, session);
+
         Flux<AgentChunk> stream = buildAgent(request)
                 .prompt(prompt)
                 .session(session)
                 .stream();
 
-        AgentChunk finalChunk = stream.doOnNext(chunk -> {
-            ChatMessage message = chunk.getMessage();
-            String content = message.getContent();
-            boolean thinking = message.isThinking();
-            boolean toolCalls = message.isToolCalls();
+        AgentChunk finalChunk;
+        try {
+            finalChunk = stream.doOnNext(chunk -> {
+                ChatMessage message = chunk.getMessage();
+                String content = message.getContent();
+                boolean thinking = message.isThinking();
+                boolean toolCalls = message.isToolCalls();
 
-            String visibleProgress = progressAccumulator.append(content, thinking, toolCalls);
-            if (StrUtil.isNotBlank(visibleProgress) && !visibleProgress.equals(latestChunk.get())) {
-                latestChunk.set(visibleProgress);
-                progressConsumer.accept(visibleProgress);
-            }
-        }).blockLast();
+                String visibleProgress = progressAccumulator.append(content, thinking, toolCalls);
+                if (StrUtil.isNotBlank(visibleProgress) && !visibleProgress.equals(latestChunk.get())) {
+                    latestChunk.set(visibleProgress);
+                    progressConsumer.accept(visibleProgress);
+                }
+            }).blockLast();
+        } catch (Exception e) {
+            log.error("Failed to execute conversation: {}", e.getMessage(), e);
+            return "执行会话失败：" + e.getMessage();
+        }
 
         if (finalChunk == null) {
             return latestChunk.get();
@@ -120,6 +148,7 @@ public class SolonAiConversationAgent implements ConversationAgent {
                 .defaultToolAdd(runtimeTools)
                 .defaultToolAdd(jobTools)
                 .defaultSkillAdd(cliSkillProvider)
+                .defaultInterceptorAdd(reActInterceptor)
                 .maxSteps(50)
                 .retryConfig(5, 1000L)
                 .sessionWindowSize(64)

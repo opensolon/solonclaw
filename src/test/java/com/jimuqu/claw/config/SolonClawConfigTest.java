@@ -1,8 +1,10 @@
 package com.jimuqu.claw.config;
 
 import com.jimuqu.claw.agent.workspace.AgentWorkspaceService;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.skills.cli.CliSkillProvider;
 
 import java.lang.reflect.Field;
@@ -32,5 +34,14 @@ class SolonClawConfigTest {
         sandboxModeField.setAccessible(true);
 
         assertFalse((Boolean) sandboxModeField.get(skillProvider.getTerminalSkill()));
+    }
+
+    @Test
+    void reactLoggingInterceptorBeanCreated() {
+        SolonClawConfig config = new SolonClawConfig();
+
+        ReActInterceptor interceptor = config.reActLoggingInterceptor();
+
+        Assertions.assertNotNull(interceptor);
     }
 }

@@ -7,6 +7,7 @@ import com.jimuqu.claw.agent.runtime.impl.AgentRuntimeService;
 import com.jimuqu.claw.agent.runtime.api.ConversationAgent;
 import com.jimuqu.claw.agent.runtime.impl.ConversationScheduler;
 import com.jimuqu.claw.agent.runtime.impl.HeartbeatService;
+import com.jimuqu.claw.agent.runtime.impl.ReActLoggingInterceptor;
 import com.jimuqu.claw.agent.runtime.impl.SolonAiConversationAgent;
 import com.jimuqu.claw.agent.store.RuntimeStoreService;
 import com.jimuqu.claw.agent.tool.JobTools;
@@ -18,6 +19,7 @@ import com.jimuqu.claw.channel.dingtalk.adapter.DingTalkChannelAdapter;
 import com.jimuqu.claw.channel.dingtalk.sender.DingTalkRobotSender;
 import com.jimuqu.claw.channel.feishu.sender.FeishuBotSender;
 import com.jimuqu.claw.channel.feishu.adapter.FeishuChannelAdapter;
+import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.skills.cli.CliSkillProvider;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.annotation.Bean;
@@ -171,6 +173,16 @@ public class SolonClawConfig {
     }
 
     /**
+     * 创建 ReAct 运行日志拦截器。
+     *
+     * @return ReAct 日志拦截器
+     */
+    @Bean
+    public ReActInterceptor reActLoggingInterceptor() {
+        return new ReActLoggingInterceptor();
+    }
+
+    /**
      * 创建会话执行 Agent。
      *
      * @param chatModel 聊天模型
@@ -183,14 +195,16 @@ public class SolonClawConfig {
             WorkspacePromptService workspacePromptService,
             WorkspaceAgentTools workspaceAgentTools,
             CliSkillProvider cliSkillProvider,
-            JobTools jobTools
+            JobTools jobTools,
+            ReActInterceptor reActLoggingInterceptor
     ) {
         return new SolonAiConversationAgent(
                 chatModel,
                 workspacePromptService,
                 workspaceAgentTools,
                 cliSkillProvider,
-                jobTools
+                jobTools,
+                reActLoggingInterceptor
         );
     }
 
