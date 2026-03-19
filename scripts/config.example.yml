@@ -153,6 +153,12 @@ solonclaw:
       # 说明：@skills 这类逻辑路径始终是只读挂载池，开关不会放开写入
       sandboxMode: true
 
+    subtasks:
+      # 是否允许子任务继续派生新的子任务
+      # true: 默认允许子任务继续拆分
+      # false: 可用于收紧编排，避免出现多层失控扇出
+      allowNestedSpawn: true
+
     heartbeat:
       enabled: true
       intervalSeconds: 1800

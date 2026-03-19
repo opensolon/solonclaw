@@ -78,6 +78,8 @@ public class SolonClawProperties {
         private Scheduler scheduler = new Scheduler();
         /** 工具配置。 */
         private Tools tools = new Tools();
+        /** 子任务治理配置。 */
+        private Subtasks subtasks = new Subtasks();
         /** 心跳配置。 */
         private Heartbeat heartbeat = new Heartbeat();
 
@@ -136,6 +138,24 @@ public class SolonClawProperties {
         }
 
         /**
+         * 返回子任务治理配置。
+         *
+         * @return 子任务治理配置
+         */
+        public Subtasks getSubtasks() {
+            return subtasks;
+        }
+
+        /**
+         * 设置子任务治理配置。
+         *
+         * @param subtasks 子任务治理配置
+         */
+        public void setSubtasks(Subtasks subtasks) {
+            this.subtasks = subtasks;
+        }
+
+        /**
          * 返回心跳配置。
          *
          * @return 心跳配置
@@ -177,6 +197,32 @@ public class SolonClawProperties {
          */
         public void setSandboxMode(boolean sandboxMode) {
             this.sandboxMode = sandboxMode;
+        }
+    }
+
+    /**
+     * 描述子任务运行时治理配置。
+     */
+    public static class Subtasks {
+        /** 是否允许子任务继续派生新的子任务。 */
+        private boolean allowNestedSpawn = true;
+
+        /**
+         * 返回是否允许子任务继续派生。
+         *
+         * @return 若允许则返回 true
+         */
+        public boolean isAllowNestedSpawn() {
+            return allowNestedSpawn;
+        }
+
+        /**
+         * 设置是否允许子任务继续派生。
+         *
+         * @param allowNestedSpawn 允许标记
+         */
+        public void setAllowNestedSpawn(boolean allowNestedSpawn) {
+            this.allowNestedSpawn = allowNestedSpawn;
         }
     }
 
