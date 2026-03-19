@@ -50,6 +50,14 @@ solonclaw:
       enabled: true
       intervalSeconds: 1800
   channels:
+    feishu:
+      enabled: false
+      appId: ""
+      appSecret: ""
+      baseDomain: "https://open.feishu.cn"
+      streamingReply: true
+      allowFrom: []
+      groupAllowFrom: []
     dingtalk:
       enabled: false
       clientId: ""

@@ -16,6 +16,8 @@ import com.jimuqu.claw.agent.workspace.WorkspacePromptService;
 import com.jimuqu.claw.channel.dingtalk.DingTalkAccessTokenService;
 import com.jimuqu.claw.channel.dingtalk.DingTalkChannelAdapter;
 import com.jimuqu.claw.channel.dingtalk.DingTalkRobotSender;
+import com.jimuqu.claw.channel.feishu.FeishuBotSender;
+import com.jimuqu.claw.channel.feishu.FeishuChannelAdapter;
 import org.noear.solon.ai.skills.cli.CliSkillProvider;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.annotation.Bean;
@@ -203,6 +205,17 @@ public class SolonClawConfig {
     }
 
     /**
+     * 创建飞书消息发送服务。
+     *
+     * @param properties 项目配置
+     * @return 飞书发送服务
+     */
+    @Bean
+    public FeishuBotSender feishuBotSender(SolonClawProperties properties) {
+        return new FeishuBotSender(properties.getChannels().getFeishu());
+    }
+
+    /**
      * 创建钉钉 token 服务。
      *
      * @param properties 项目配置
@@ -282,6 +295,31 @@ public class SolonClawConfig {
                 runtimeStoreService,
                 dingTalkRobotSender,
                 properties.getChannels().getDingtalk()
+        );
+        channelRegistry.register(adapter);
+        return adapter;
+    }
+
+    /**
+     * 创建并注册飞书渠道适配器。
+     *
+     * @param agentRuntimeService Agent 运行时服务
+     * @param feishuBotSender 飞书消息发送服务
+     * @param channelRegistry 渠道注册表
+     * @param properties 项目配置
+     * @return 飞书渠道适配器
+     */
+    @Bean(initMethod = "start", destroyMethod = "stop")
+    public FeishuChannelAdapter feishuChannelAdapter(
+            AgentRuntimeService agentRuntimeService,
+            FeishuBotSender feishuBotSender,
+            ChannelRegistry channelRegistry,
+            SolonClawProperties properties
+    ) {
+        FeishuChannelAdapter adapter = new FeishuChannelAdapter(
+                agentRuntimeService,
+                feishuBotSender,
+                properties.getChannels().getFeishu()
         );
         channelRegistry.register(adapter);
         return adapter;

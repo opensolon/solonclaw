@@ -2,6 +2,7 @@ package com.jimuqu.claw.agent.runtime;
 
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
+import com.jimuqu.claw.agent.channel.ChannelAdapter;
 import com.jimuqu.claw.agent.channel.ChannelRegistry;
 import com.jimuqu.claw.agent.model.AgentRun;
 import com.jimuqu.claw.agent.model.ChannelType;
@@ -365,6 +366,7 @@ public class AgentRuntimeService {
             String response = conversationAgent.execute(request, progress -> {
                 latestProgress[0] = progress;
                 runtimeStoreService.appendRunEvent(runId, "progress", progress);
+                dispatchProgressOutbound(runId, inboundEnvelope, progress);
             });
             AgentRun latestRun = runtimeStoreService.getRun(runId);
             if (latestRun != null) {
@@ -705,6 +707,35 @@ public class AgentRuntimeService {
             result.setMessage("sent to " + replyTarget.getChannelType() + ":" + replyTarget.getConversationId());
             return result;
         };
+    }
+
+    /**
+     * 若当前渠道支持进度更新，则将运行中的增量内容透传到外部渠道。
+     *
+     * @param runId 运行任务标识
+     * @param inboundEnvelope 当前入站消息
+     * @param progress 增量内容
+     */
+    private void dispatchProgressOutbound(String runId, InboundEnvelope inboundEnvelope, String progress) {
+        if (StrUtil.isBlank(progress)
+                || inboundEnvelope == null
+                || !inboundEnvelope.isExternalReplyEnabled()
+                || inboundEnvelope.getReplyTarget() == null
+                || inboundEnvelope.getReplyTarget().isDebugWeb()) {
+            return;
+        }
+
+        ChannelAdapter adapter = channelRegistry.get(inboundEnvelope.getReplyTarget().getChannelType());
+        if (adapter == null || !adapter.supportsProgressUpdates()) {
+            return;
+        }
+
+        OutboundEnvelope outboundEnvelope = new OutboundEnvelope();
+        outboundEnvelope.setRunId(runId);
+        outboundEnvelope.setReplyTarget(inboundEnvelope.getReplyTarget());
+        outboundEnvelope.setContent(progress);
+        outboundEnvelope.setProgress(true);
+        channelRegistry.send(outboundEnvelope);
     }
 
     /**

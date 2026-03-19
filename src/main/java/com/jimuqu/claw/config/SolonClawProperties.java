@@ -276,8 +276,28 @@ public class SolonClawProperties {
      * 描述所有渠道配置的聚合对象。
      */
     public static class Channels {
+        /** 飞书渠道配置。 */
+        private Feishu feishu = new Feishu();
         /** 钉钉渠道配置。 */
         private DingTalk dingtalk = new DingTalk();
+
+        /**
+         * 返回飞书配置。
+         *
+         * @return 飞书配置
+         */
+        public Feishu getFeishu() {
+            return feishu;
+        }
+
+        /**
+         * 设置飞书配置。
+         *
+         * @param feishu 飞书配置
+         */
+        public void setFeishu(Feishu feishu) {
+            this.feishu = feishu;
+        }
 
         /**
          * 返回钉钉配置。
@@ -295,6 +315,152 @@ public class SolonClawProperties {
          */
         public void setDingtalk(DingTalk dingtalk) {
             this.dingtalk = dingtalk;
+        }
+    }
+
+    /**
+     * 描述飞书机器人配置。
+     */
+    public static class Feishu {
+        /** 是否启用飞书渠道。 */
+        private boolean enabled;
+        /** 飞书 appId。 */
+        private String appId = "";
+        /** 飞书 appSecret。 */
+        private String appSecret = "";
+        /** 飞书开放平台域名。 */
+        private String baseDomain = "https://open.feishu.cn";
+        /** 是否启用基于卡片 patch 的流式更新。 */
+        private boolean streamingReply = true;
+        /** 私聊允许列表。 */
+        private List<String> allowFrom = new ArrayList<>();
+        /** 群聊允许列表。 */
+        private List<String> groupAllowFrom = new ArrayList<>();
+
+        /**
+         * 返回飞书渠道启用状态。
+         *
+         * @return 若启用则返回 true
+         */
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        /**
+         * 设置飞书渠道启用状态。
+         *
+         * @param enabled 启用标记
+         */
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        /**
+         * 返回 appId。
+         *
+         * @return appId
+         */
+        public String getAppId() {
+            return appId;
+        }
+
+        /**
+         * 设置 appId。
+         *
+         * @param appId appId
+         */
+        public void setAppId(String appId) {
+            this.appId = appId;
+        }
+
+        /**
+         * 返回 appSecret。
+         *
+         * @return appSecret
+         */
+        public String getAppSecret() {
+            return appSecret;
+        }
+
+        /**
+         * 设置 appSecret。
+         *
+         * @param appSecret appSecret
+         */
+        public void setAppSecret(String appSecret) {
+            this.appSecret = appSecret;
+        }
+
+        /**
+         * 返回开放平台域名。
+         *
+         * @return 开放平台域名
+         */
+        public String getBaseDomain() {
+            return baseDomain;
+        }
+
+        /**
+         * 设置开放平台域名。
+         *
+         * @param baseDomain 开放平台域名
+         */
+        public void setBaseDomain(String baseDomain) {
+            this.baseDomain = baseDomain;
+        }
+
+        /**
+         * 返回是否启用流式更新。
+         *
+         * @return 若启用则返回 true
+         */
+        public boolean isStreamingReply() {
+            return streamingReply;
+        }
+
+        /**
+         * 设置是否启用流式更新。
+         *
+         * @param streamingReply 流式更新标记
+         */
+        public void setStreamingReply(boolean streamingReply) {
+            this.streamingReply = streamingReply;
+        }
+
+        /**
+         * 返回私聊白名单。
+         *
+         * @return 私聊白名单
+         */
+        public List<String> getAllowFrom() {
+            return allowFrom;
+        }
+
+        /**
+         * 设置私聊白名单。
+         *
+         * @param allowFrom 私聊白名单
+         */
+        public void setAllowFrom(List<String> allowFrom) {
+            this.allowFrom = allowFrom;
+        }
+
+        /**
+         * 返回群聊白名单。
+         *
+         * @return 群聊白名单
+         */
+        public List<String> getGroupAllowFrom() {
+            return groupAllowFrom;
+        }
+
+        /**
+         * 设置群聊白名单。
+         *
+         * @param groupAllowFrom 群聊白名单
+         */
+        public void setGroupAllowFrom(List<String> groupAllowFrom) {
+            this.groupAllowFrom = groupAllowFrom;
         }
     }
 

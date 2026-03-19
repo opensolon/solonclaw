@@ -532,6 +532,51 @@ class AgentRuntimeServiceTest {
     }
 
     /**
+     * 验证只有声明支持进度更新的渠道才会收到运行中的增量内容。
+     */
+    @Test
+    void progressIsDispatchedOnlyToProgressCapableChannel() throws Exception {
+        RuntimeStoreService store = new RuntimeStoreService(tempDir.toFile());
+        ConversationScheduler scheduler = new ConversationScheduler(1);
+        ChannelRegistry registry = new ChannelRegistry();
+        ProgressChannelAdapter adapter = new ProgressChannelAdapter();
+        registry.register(adapter);
+
+        ConversationAgent conversationAgent = (request, progressConsumer) -> {
+            progressConsumer.accept("draft-1");
+            progressConsumer.accept("draft-2");
+            return "final-answer";
+        };
+
+        SolonClawProperties properties = new SolonClawProperties();
+        properties.getAgent().getScheduler().setAckWhenBusy(false);
+
+        try {
+            AgentRuntimeService runtimeService = new AgentRuntimeService(conversationAgent, store, scheduler, registry, properties);
+            InboundEnvelope inboundEnvelope = new InboundEnvelope();
+            inboundEnvelope.setMessageId("msg-feishu");
+            inboundEnvelope.setChannelType(ChannelType.FEISHU);
+            inboundEnvelope.setChannelInstanceId("feishu-default");
+            inboundEnvelope.setSenderId("ou-1");
+            inboundEnvelope.setConversationId("oc-1");
+            inboundEnvelope.setConversationType(ConversationType.GROUP);
+            inboundEnvelope.setContent("hello");
+            inboundEnvelope.setReplyTarget(new ReplyTarget(ChannelType.FEISHU, ConversationType.GROUP, "oc-1", "ou-1"));
+            inboundEnvelope.setReceivedAt(System.currentTimeMillis());
+            inboundEnvelope.setSessionKey("feishu:group:oc-1");
+
+            runtimeService.submitInbound(inboundEnvelope);
+
+            assertTrue(waitUntil(() -> adapter.outbounds.size() >= 3, 5000));
+            assertTrue(adapter.outbounds.get(0).isProgress());
+            assertTrue(adapter.outbounds.get(1).isProgress());
+            assertEquals("final-answer", adapter.outbounds.get(2).getContent());
+        } finally {
+            scheduler.shutdown();
+        }
+    }
+
+    /**
      * 构造一条测试入站消息。
      *
      * @param messageId 消息标识
@@ -579,9 +624,9 @@ class AgentRuntimeServiceTest {
      */
     private static class RecordingChannelAdapter implements ChannelAdapter {
         /** 记录发送文本。 */
-        private final List<String> messages = new CopyOnWriteArrayList<>();
+        protected final List<String> messages = new CopyOnWriteArrayList<>();
         /** 记录完整出站消息。 */
-        private final List<OutboundEnvelope> outbounds = new CopyOnWriteArrayList<>();
+        protected final List<OutboundEnvelope> outbounds = new CopyOnWriteArrayList<>();
 
         /**
          * 返回适配器渠道类型。
@@ -602,6 +647,21 @@ class AgentRuntimeServiceTest {
         public void send(OutboundEnvelope outboundEnvelope) {
             outbounds.add(outboundEnvelope);
             messages.add(outboundEnvelope.getContent());
+        }
+    }
+
+    /**
+     * 支持进度更新的伪渠道适配器。
+     */
+    private static class ProgressChannelAdapter extends RecordingChannelAdapter {
+        @Override
+        public ChannelType channelType() {
+            return ChannelType.FEISHU;
+        }
+
+        @Override
+        public boolean supportsProgressUpdates() {
+            return true;
         }
     }
 }

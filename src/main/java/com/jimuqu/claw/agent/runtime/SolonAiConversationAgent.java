@@ -70,6 +70,7 @@ public class SolonAiConversationAgent implements ConversationAgent {
         }
 
         AtomicReference<String> latestChunk = new AtomicReference<>("");
+        VisibleProgressAccumulator progressAccumulator = new VisibleProgressAccumulator();
 
         String prompt = resolvePrompt(request, session);
         Flux<AgentChunk> stream = buildAgent(request)
@@ -78,10 +79,15 @@ public class SolonAiConversationAgent implements ConversationAgent {
                 .stream();
 
         AgentChunk finalChunk = stream.doOnNext(chunk -> {
-            String content = chunk.getContent();
-            if (StrUtil.isNotBlank(content) && !content.equals(latestChunk.get())) {
-                latestChunk.set(content);
-                progressConsumer.accept(content);
+            ChatMessage message = chunk.getMessage();
+            String content = message.getContent();
+            boolean thinking = message.isThinking();
+            boolean toolCalls = message.isToolCalls();
+
+            String visibleProgress = progressAccumulator.append(content, thinking, toolCalls);
+            if (StrUtil.isNotBlank(visibleProgress) && !visibleProgress.equals(latestChunk.get())) {
+                latestChunk.set(visibleProgress);
+                progressConsumer.accept(visibleProgress);
             }
         }).blockLast();
 

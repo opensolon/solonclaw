@@ -15,6 +15,15 @@ public interface ChannelAdapter {
     ChannelType channelType();
 
     /**
+     * 当前渠道是否支持将运行中的增量内容作为“进度更新”透传到外部。
+     *
+     * @return 若支持进度更新则返回 true
+     */
+    default boolean supportsProgressUpdates() {
+        return false;
+    }
+
+    /**
      * 发送一条出站消息。
      *
      * @param outboundEnvelope 出站消息

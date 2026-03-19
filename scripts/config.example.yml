@@ -158,6 +158,26 @@ solonclaw:
       intervalSeconds: 1800
 
   channels:
+    feishu:
+      # 不使用飞书时保持 false
+      enabled: false
+
+      # 飞书机器人配置
+      appId: "cli_your_app_id"
+      appSecret: "your-app-secret"
+      baseDomain: "https://open.feishu.cn"
+
+      # 是否启用基于卡片 patch 的流式更新
+      streamingReply: true
+
+      # 私聊白名单：为空时当前代码行为是默认允许
+      # 示例：["ou_xxx", "ou_yyy"]
+      allowFrom: []
+
+      # 群聊白名单：为空时当前代码行为是默认允许
+      # 示例：["oc_xxx", "oc_yyy"]
+      groupAllowFrom: []
+
     dingtalk:
       # 不使用钉钉时保持 false
       enabled: false

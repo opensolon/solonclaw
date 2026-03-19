@@ -6,6 +6,8 @@ package com.jimuqu.claw.agent.model;
 public enum ChannelType {
     /** 浏览器调试页渠道。 */
     DEBUG_WEB,
+    /** 飞书机器人渠道。 */
+    FEISHU,
     /** 钉钉机器人渠道。 */
     DINGTALK,
     /** 系统内部触发渠道。 */
