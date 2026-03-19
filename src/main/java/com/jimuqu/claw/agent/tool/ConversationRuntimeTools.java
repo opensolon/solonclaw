@@ -1,13 +1,13 @@
 package com.jimuqu.claw.agent.tool;
 
 import cn.hutool.core.util.StrUtil;
-import com.jimuqu.claw.agent.model.AgentRun;
-import com.jimuqu.claw.agent.runtime.NotificationResult;
-import com.jimuqu.claw.agent.runtime.NotificationSupport;
-import com.jimuqu.claw.agent.runtime.ParentRunChildrenSummary;
-import com.jimuqu.claw.agent.runtime.SpawnTaskResult;
-import com.jimuqu.claw.agent.runtime.SpawnTaskSupport;
-import com.jimuqu.claw.agent.runtime.RunQuerySupport;
+import com.jimuqu.claw.agent.model.run.AgentRun;
+import com.jimuqu.claw.agent.runtime.support.NotificationResult;
+import com.jimuqu.claw.agent.runtime.api.NotificationSupport;
+import com.jimuqu.claw.agent.runtime.support.ParentRunChildrenSummary;
+import com.jimuqu.claw.agent.runtime.support.SpawnTaskResult;
+import com.jimuqu.claw.agent.runtime.api.SpawnTaskSupport;
+import com.jimuqu.claw.agent.runtime.api.RunQuerySupport;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.annotation.Param;
 
@@ -94,11 +94,15 @@ public class ConversationRuntimeTools {
             return "当前运行不支持 spawn_task";
         }
 
-        SpawnTaskResult result = spawnTaskSupport.spawnTask(taskDescription, batchKey);
-        return "已创建子任务。childRunId=" + result.getRunId()
-                + ", childSessionKey=" + result.getSessionKey()
-                + ", task=" + result.getTaskDescription()
-                + (StrUtil.isBlank(result.getBatchKey()) ? "" : ", batchKey=" + result.getBatchKey());
+        try {
+            SpawnTaskResult result = spawnTaskSupport.spawnTask(taskDescription, batchKey);
+            return "已创建子任务。childRunId=" + result.getRunId()
+                    + ", childSessionKey=" + result.getSessionKey()
+                    + ", task=" + result.getTaskDescription()
+                    + (StrUtil.isBlank(result.getBatchKey()) ? "" : ", batchKey=" + result.getBatchKey());
+        } catch (RuntimeException e) {
+            return "创建子任务失败: " + StrUtil.blankToDefault(e.getMessage(), e.getClass().getSimpleName());
+        }
     }
 
     @ToolMapping(name = "list_child_runs", description = "查看当前会话最近的子任务列表，返回 runId、状态、任务描述和结果摘要")
@@ -227,3 +231,5 @@ public class ConversationRuntimeTools {
         return text.substring(0, maxChars) + "...";
     }
 }
+
+

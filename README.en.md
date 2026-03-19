@@ -381,6 +381,10 @@ The current test suite covers:
 - Prefer Solon lifecycle hooks for long-running resources
 - Add new project config under `SolonClawProperties`
 - Reuse the existing Debug Web entrypoint for local debugging
+- Prefer Lombok-managed accessors for entity classes, DTOs, event payloads, result objects, and config carrier objects; use `@Data` where it is clearly appropriate
+- Prefer Lombok-managed no-arg constructors for these data carriers, typically via `@NoArgsConstructor`
+- Classes that need persistence, serialized transport, caching, or stable data-carrier semantics should implement `Serializable` when appropriate
+- Avoid adding inner classes when possible; config carrier objects should preferably be extracted into standalone classes
 
 ## PR Guidelines
 
@@ -418,6 +422,46 @@ Additional expectations:
 - Keep one PR focused on one kind of change whenever possible.
 - PR titles and commit messages are encouraged to use bilingual Chinese/English wording in this repository.
 - If behavior or configuration changes, update the related docs in the same PR.
+
+## Commit Guidelines
+
+Commit messages should follow the Conventional Commits style:
+
+```text
+<type>(<scope>): <subject>
+```
+
+Notes:
+
+- There must be one space after the colon `:`
+- `scope` is optional and describes the affected area, such as a module name, directory name, or a responsibility like `runtime`, `workspace`, or `web`
+- `subject` is required and should briefly describe the change; bilingual Chinese/English wording is recommended in this repository
+
+`type` is required and may be one of:
+
+- `feat`: new feature
+- `fix`: bug fix
+- `docs`: documentation changes
+- `style`: formatting-only changes that do not affect runtime behavior
+- `refactor`: refactoring or optimization that is neither a feature nor a bug fix
+- `perf`: performance optimization
+- `test`: test additions or adjustments
+- `chore`: build process or auxiliary tooling changes
+- `revert`: revert
+- `build`: packaging/build changes
+
+Recommended examples:
+
+```text
+feat(agent): 增加了子任务聚合能力 (Add child-run aggregation)
+docs(readme): 补充了提交信息格式说明 (Add commit message format notes)
+fix(runtime): 修复了 continuation 丢失问题 (Fix continuation dispatch issue)
+```
+
+Additional conventions:
+
+- Split commits by responsibility whenever possible, preferably into small units such as prompt/context, runtime governance, config defaults/comments, and tests
+- Try to keep each commit focused on one kind of change instead of mixing unrelated work
 
 ## AI-Assisted Development
 

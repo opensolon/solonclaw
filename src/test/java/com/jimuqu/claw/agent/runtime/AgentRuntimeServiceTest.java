@@ -2,17 +2,22 @@ package com.jimuqu.claw.agent.runtime;
 
 import com.jimuqu.claw.agent.channel.ChannelAdapter;
 import com.jimuqu.claw.agent.channel.ChannelRegistry;
-import com.jimuqu.claw.agent.model.AgentRun;
-import com.jimuqu.claw.agent.model.ChannelType;
-import com.jimuqu.claw.agent.model.ConversationEvent;
-import com.jimuqu.claw.agent.model.ConversationType;
-import com.jimuqu.claw.agent.model.InboundEnvelope;
-import com.jimuqu.claw.agent.model.InboundTriggerType;
-import com.jimuqu.claw.agent.model.OutboundEnvelope;
-import com.jimuqu.claw.agent.model.ReplyTarget;
-import com.jimuqu.claw.agent.model.RunStatus;
+import com.jimuqu.claw.agent.model.run.AgentRun;
+import com.jimuqu.claw.agent.model.enums.ChannelType;
+import com.jimuqu.claw.agent.model.event.ConversationEvent;
+import com.jimuqu.claw.agent.model.enums.ConversationType;
+import com.jimuqu.claw.agent.model.envelope.InboundEnvelope;
+import com.jimuqu.claw.agent.model.enums.InboundTriggerType;
+import com.jimuqu.claw.agent.model.envelope.OutboundEnvelope;
+import com.jimuqu.claw.agent.model.route.ReplyTarget;
+import com.jimuqu.claw.agent.model.enums.RunStatus;
+import com.jimuqu.claw.agent.runtime.api.ConversationAgent;
+import com.jimuqu.claw.agent.runtime.impl.AgentRuntimeService;
+import com.jimuqu.claw.agent.runtime.impl.ConversationScheduler;
+import com.jimuqu.claw.agent.runtime.support.ConversationExecutionRequest;
+import com.jimuqu.claw.agent.runtime.support.NotificationResult;
 import com.jimuqu.claw.agent.store.RuntimeStoreService;
-import com.jimuqu.claw.agent.runtime.ParentRunChildrenSummary;
+import com.jimuqu.claw.agent.runtime.support.ParentRunChildrenSummary;
 import com.jimuqu.claw.config.SolonClawProperties;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -155,6 +160,60 @@ class AgentRuntimeServiceTest {
     }
 
     /**
+     * 验证子任务默认不能继续派生新的子任务，避免无边界扇出。
+     *
+     * @throws Exception 执行异常
+     */
+    @Test
+    void childRunCannotSpawnNestedChildByDefault() throws Exception {
+        RuntimeStoreService store = new RuntimeStoreService(tempDir.toFile());
+        ConversationScheduler scheduler = new ConversationScheduler(1);
+        ChannelRegistry registry = new ChannelRegistry();
+        RecordingChannelAdapter adapter = new RecordingChannelAdapter();
+        registry.register(adapter);
+
+        ConversationAgent conversationAgent = (request, progressConsumer) -> {
+            String message = request.getCurrentMessage();
+            if ("question-parent-nested".equals(message)) {
+                request.getSpawnTaskSupport().spawnTask("child-needs-more");
+                return "parent-waiting";
+            }
+            if ("child-needs-more".equals(message)) {
+                try {
+                    request.getSpawnTaskSupport().spawnTask("nested-child");
+                    return "nested-allowed";
+                } catch (IllegalStateException e) {
+                    return "child-blocked:" + e.getMessage();
+                }
+            }
+            if (message != null && message.contains("[内部事件] 子任务已完成")) {
+                return message.contains("当前子任务默认禁止继续派生子任务")
+                        ? "parent-saw-nested-block"
+                        : "parent-missed-nested-block";
+            }
+            return "reply-" + message;
+        };
+
+        SolonClawProperties properties = new SolonClawProperties();
+        properties.getAgent().getScheduler().setMaxConcurrentPerConversation(1);
+        properties.getAgent().getScheduler().setAckWhenBusy(false);
+        properties.getAgent().getSubtasks().setAllowNestedSpawn(false);
+
+        try {
+            AgentRuntimeService runtimeService = new AgentRuntimeService(conversationAgent, store, scheduler, registry, properties);
+            String parentRunId = runtimeService.submitInbound(inbound("msg-parent-nested", "question-parent-nested"));
+            assertNotNull(parentRunId);
+
+            assertTrue(waitUntil(() -> adapter.messages.contains("parent-saw-nested-block"), 5000));
+            assertEquals(1, runtimeService.listChildRuns(parentRunId, null).size());
+            assertTrue(store.getRunEvents(runtimeService.listChildRuns(parentRunId, null).get(0).getRunId(), 0).stream()
+                    .anyMatch(event -> "spawn_task_blocked".equals(event.getEventType())));
+        } finally {
+            scheduler.shutdown();
+        }
+    }
+
+    /**
      * 验证后续一句“看看上个任务的情况”可以通过查询能力读取最近子任务状态。
      *
      * @throws Exception 执行异常
@@ -198,6 +257,68 @@ class AgentRuntimeServiceTest {
             String inspectRunId = runtimeService.submitInbound(inbound("msg-inspect", "看看上个任务的情况"));
             assertNotNull(inspectRunId);
             assertTrue(waitUntil(() -> adapter.messages.contains("latest-child-status=SUCCEEDED"), 5000));
+        } finally {
+            scheduler.shutdown();
+        }
+    }
+
+    /**
+     * 验证子任务完成后，父运行会记录更清晰的调试事件，并向 continuation 注入结构化汇总。
+     *
+     * @throws Exception 执行异常
+     */
+    @Test
+    void childCompletionAddsParentDebugEventsAndStructuredSummary() throws Exception {
+        RuntimeStoreService store = new RuntimeStoreService(tempDir.toFile());
+        ConversationScheduler scheduler = new ConversationScheduler(1);
+        ChannelRegistry registry = new ChannelRegistry();
+        RecordingChannelAdapter adapter = new RecordingChannelAdapter();
+        registry.register(adapter);
+
+        ConversationAgent conversationAgent = (request, progressConsumer) -> {
+            String message = request.getCurrentMessage();
+            if ("question-parent-summary".equals(message)) {
+                request.getSpawnTaskSupport().spawnTask("summary-child");
+                return "parent-waiting";
+            }
+            if ("summary-child".equals(message)) {
+                return "summary-child-result";
+            }
+            if (message != null && message.contains("[内部事件] 子任务已完成")) {
+                return message.contains("全部子任务汇总: total=1")
+                        && message.contains("FINAL_REPLY_ONCE:")
+                        && message.contains("NO_REPLY")
+                        ? "parent-saw-summary-guidance"
+                        : "parent-missed-summary-guidance";
+            }
+            return "reply-" + message;
+        };
+
+        SolonClawProperties properties = new SolonClawProperties();
+        properties.getAgent().getScheduler().setMaxConcurrentPerConversation(1);
+        properties.getAgent().getScheduler().setAckWhenBusy(false);
+
+        try {
+            AgentRuntimeService runtimeService = new AgentRuntimeService(conversationAgent, store, scheduler, registry, properties);
+            String parentRunId = runtimeService.submitInbound(inbound("msg-parent-summary", "question-parent-summary"));
+            assertNotNull(parentRunId);
+
+            assertTrue(waitUntil(() -> adapter.messages.contains("parent-saw-summary-guidance"), 5000));
+
+            List<String> eventTypes = store.getRunEvents(parentRunId, 0).stream()
+                    .map(event -> event.getEventType())
+                    .collect(java.util.stream.Collectors.toList());
+            assertTrue(eventTypes.contains("child_completion_received"));
+            assertTrue(eventTypes.contains("children_all_completed"));
+            assertTrue(eventTypes.contains("child_continuation_submitted"));
+
+            List<ConversationEvent> events = store.readConversationEvents("dingtalk:group:group-1");
+            assertTrue(events.stream().anyMatch(event ->
+                    "system_event".equals(event.getEventType())
+                            && event.getContent() != null
+                            && event.getContent().contains("全部子任务汇总: total=1")
+                            && event.getContent().contains("FINAL_REPLY_ONCE:")
+                            && event.getContent().contains("NO_REPLY")));
         } finally {
             scheduler.shutdown();
         }
@@ -665,3 +786,5 @@ class AgentRuntimeServiceTest {
         }
     }
 }
+
+

@@ -452,6 +452,10 @@ environment:
 - 新增配置优先并入 `SolonClawProperties`
 - 调试能力优先复用现有 Debug Web
 - 不要把系统退回成全局串行队列
+- 实体类、DTO、事件载荷、结果对象、配置承载对象优先使用 Lombok 管理字段访问器；明确适合的类优先使用 `@Data`
+- 无参构造优先交给 Lombok 管理，这类数据类默认优先使用 `@NoArgsConstructor`
+- 需要持久化、序列化传输、缓存或作为稳定数据载体的类，应按需实现 `Serializable`
+- 尽量避免新增内部类；配置承载对象优先拆成独立类维护
 
 ## PR 规范
 
@@ -489,6 +493,46 @@ environment:
 - 一个 PR 尽量只做一类改动
 - PR 标题与提交信息建议使用中英双语
 - 改动涉及配置或行为变化时，要同步更新文档
+
+## Commit 规范
+
+提交信息默认采用 Conventional Commits 风格：
+
+```text
+<type>(<scope>): <subject>
+```
+
+说明：
+
+- 冒号 `:` 后必须有一个空格
+- `scope` 选填，表示 commit 的作用范围，可以写模块名、目录名，或 `runtime`、`workspace`、`web` 这类职责范围
+- `subject` 必填，用于简短描述本次提交内容，建议使用中英双语
+
+`type` 必填，允许值如下：
+
+- `feat`：新功能 feature
+- `fix`：修复 bug
+- `docs`：文档注释
+- `style`：代码格式（不影响代码运行的变动）
+- `refactor`：重构、优化（既不增加新功能，也不是修复 bug）
+- `perf`：性能优化
+- `test`：增加测试
+- `chore`：构建过程或辅助工具的变动
+- `revert`：回退
+- `build`：打包
+
+推荐示例：
+
+```text
+feat(agent): 增加了子任务聚合能力 (Add child-run aggregation)
+docs(readme): 补充了提交信息格式说明 (Add commit message format notes)
+fix(runtime): 修复了 continuation 丢失问题 (Fix continuation dispatch issue)
+```
+
+额外约定：
+
+- 默认按职责拆分 commit，优先拆成“提示词与上下文 / 运行时治理 / 配置默认值与注释 / 测试”这类最小修改单元
+- 尽量做到一个 commit 只解决一类问题，避免把无关改动混在一起
 
 ## AI 辅助开发说明
 

@@ -1,15 +1,15 @@
 package com.jimuqu.claw.agent.store;
 
-import com.jimuqu.claw.agent.model.AgentRun;
-import com.jimuqu.claw.agent.model.ChannelType;
-import com.jimuqu.claw.agent.model.ConversationEvent;
-import com.jimuqu.claw.agent.model.ConversationType;
-import com.jimuqu.claw.agent.model.InboundEnvelope;
-import com.jimuqu.claw.agent.model.InboundTriggerType;
-import com.jimuqu.claw.agent.model.ReplyTarget;
-import com.jimuqu.claw.agent.model.RunEvent;
-import com.jimuqu.claw.agent.model.RunStatus;
-import com.jimuqu.claw.agent.runtime.ParentRunChildrenSummary;
+import com.jimuqu.claw.agent.model.run.AgentRun;
+import com.jimuqu.claw.agent.model.enums.ChannelType;
+import com.jimuqu.claw.agent.model.event.ConversationEvent;
+import com.jimuqu.claw.agent.model.enums.ConversationType;
+import com.jimuqu.claw.agent.model.envelope.InboundEnvelope;
+import com.jimuqu.claw.agent.model.enums.InboundTriggerType;
+import com.jimuqu.claw.agent.model.route.ReplyTarget;
+import com.jimuqu.claw.agent.model.event.RunEvent;
+import com.jimuqu.claw.agent.model.enums.RunStatus;
+import com.jimuqu.claw.agent.runtime.support.ParentRunChildrenSummary;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -276,3 +276,5 @@ class RuntimeStoreServiceTest {
         return envelope;
     }
 }
+
+

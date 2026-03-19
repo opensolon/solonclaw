@@ -1,5 +1,6 @@
 package com.jimuqu.claw.agent.runtime;
 
+import com.jimuqu.claw.agent.runtime.support.VisibleProgressAccumulator;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;

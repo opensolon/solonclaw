@@ -2,9 +2,10 @@ package com.jimuqu.claw.channel.dingtalk;
 
 import com.dingtalk.open.app.api.models.bot.ChatbotMessage;
 import com.dingtalk.open.app.api.models.bot.MessageContent;
-import com.jimuqu.claw.agent.model.ConversationType;
-import com.jimuqu.claw.agent.model.InboundEnvelope;
-import com.jimuqu.claw.config.SolonClawProperties;
+import com.jimuqu.claw.agent.model.enums.ConversationType;
+import com.jimuqu.claw.agent.model.envelope.InboundEnvelope;
+import com.jimuqu.claw.channel.dingtalk.adapter.DingTalkChannelAdapter;
+import com.jimuqu.claw.config.props.DingTalkProperties;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
@@ -22,10 +23,10 @@ class DingTalkChannelAdapterTest {
      */
     @Test
     void mapsGroupMessageIntoGroupSession() {
-        SolonClawProperties.DingTalk properties = new SolonClawProperties.DingTalk();
+        DingTalkProperties properties = new DingTalkProperties();
         properties.setGroupAllowFrom(Collections.singletonList("cid-group"));
 
-        DingTalkChannelAdapter adapter = new DingTalkChannelAdapter(null, null, null, properties);
+        DingTalkChannelAdapter adapter = new DingTalkChannelAdapter(null, null, properties);
         InboundEnvelope inboundEnvelope = adapter.toInboundEnvelope(groupMessage("cid-group", "staff-1", "群消息"));
 
         assertEquals(ConversationType.GROUP, inboundEnvelope.getConversationType());
@@ -38,10 +39,10 @@ class DingTalkChannelAdapterTest {
      */
     @Test
     void mapsPrivateMessageIntoPrivateSession() {
-        SolonClawProperties.DingTalk properties = new SolonClawProperties.DingTalk();
+        DingTalkProperties properties = new DingTalkProperties();
         properties.setAllowFrom(Collections.singletonList("staff-private"));
 
-        DingTalkChannelAdapter adapter = new DingTalkChannelAdapter(null, null, null, properties);
+        DingTalkChannelAdapter adapter = new DingTalkChannelAdapter(null, null, properties);
         InboundEnvelope inboundEnvelope = adapter.toInboundEnvelope(privateMessage("cid-private", "staff-private", "私聊消息"));
 
         assertEquals(ConversationType.PRIVATE, inboundEnvelope.getConversationType());
@@ -54,9 +55,9 @@ class DingTalkChannelAdapterTest {
      */
     @Test
     void allowsGroupMessageWhenAllowListIsEmpty() {
-        SolonClawProperties.DingTalk properties = new SolonClawProperties.DingTalk();
+        DingTalkProperties properties = new DingTalkProperties();
 
-        DingTalkChannelAdapter adapter = new DingTalkChannelAdapter(null, null, null, properties);
+        DingTalkChannelAdapter adapter = new DingTalkChannelAdapter(null, null, properties);
         InboundEnvelope inboundEnvelope = adapter.toInboundEnvelope(groupMessage("cid-other", "staff-1", "未授权群"));
 
         assertNotNull(inboundEnvelope);
@@ -68,10 +69,10 @@ class DingTalkChannelAdapterTest {
      */
     @Test
     void rejectsMessageOutsideAllowListWhenConfigured() {
-        SolonClawProperties.DingTalk properties = new SolonClawProperties.DingTalk();
+        DingTalkProperties properties = new DingTalkProperties();
         properties.setGroupAllowFrom(Collections.singletonList("cid-group"));
 
-        DingTalkChannelAdapter adapter = new DingTalkChannelAdapter(null, null, null, properties);
+        DingTalkChannelAdapter adapter = new DingTalkChannelAdapter(null, null, properties);
 
         assertNull(adapter.toInboundEnvelope(groupMessage("cid-other", "staff-1", "未授权群")));
     }
@@ -124,3 +125,6 @@ class DingTalkChannelAdapterTest {
         return message;
     }
 }
+
+
+

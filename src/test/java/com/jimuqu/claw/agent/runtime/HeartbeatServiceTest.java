@@ -3,10 +3,14 @@ package com.jimuqu.claw.agent.runtime;
 import cn.hutool.core.io.FileUtil;
 import com.jimuqu.claw.agent.channel.ChannelAdapter;
 import com.jimuqu.claw.agent.channel.ChannelRegistry;
-import com.jimuqu.claw.agent.model.ChannelType;
-import com.jimuqu.claw.agent.model.ConversationType;
-import com.jimuqu.claw.agent.model.OutboundEnvelope;
-import com.jimuqu.claw.agent.model.ReplyTarget;
+import com.jimuqu.claw.agent.model.enums.ChannelType;
+import com.jimuqu.claw.agent.model.enums.ConversationType;
+import com.jimuqu.claw.agent.model.envelope.OutboundEnvelope;
+import com.jimuqu.claw.agent.model.route.ReplyTarget;
+import com.jimuqu.claw.agent.runtime.api.ConversationAgent;
+import com.jimuqu.claw.agent.runtime.impl.AgentRuntimeService;
+import com.jimuqu.claw.agent.runtime.impl.ConversationScheduler;
+import com.jimuqu.claw.agent.runtime.impl.HeartbeatService;
 import com.jimuqu.claw.agent.store.RuntimeStoreService;
 import com.jimuqu.claw.config.SolonClawProperties;
 import org.junit.jupiter.api.Test;
@@ -100,3 +104,4 @@ class HeartbeatServiceTest {
         }
     }
 }
+

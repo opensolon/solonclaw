@@ -73,7 +73,13 @@
 
 ### 1. 统一消息模型
 
-位于 [src/main/java/com/jimuqu/claw/agent/model](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/agent/model)：
+位于 [src/main/java/com/jimuqu/claw/agent/model](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/agent/model) 及其子包：
+
+- [src/main/java/com/jimuqu/claw/agent/model/envelope](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/agent/model/envelope)
+- [src/main/java/com/jimuqu/claw/agent/model/event](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/agent/model/event)
+- [src/main/java/com/jimuqu/claw/agent/model/route](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/agent/model/route)
+- [src/main/java/com/jimuqu/claw/agent/model/run](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/agent/model/run)
+- [src/main/java/com/jimuqu/claw/agent/model/enums](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/agent/model/enums)
 
 - `InboundEnvelope`：标准化后的入站消息
 - `OutboundEnvelope`：标准化后的出站消息
@@ -303,8 +309,8 @@
 
 本地调试页相关文件：
 
-- [src/main/java/com/jimuqu/claw/web/DebugChatController.java](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/web/DebugChatController.java)
-- [src/main/java/com/jimuqu/claw/web/RootController.java](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/web/RootController.java)
+- [src/main/java/com/jimuqu/claw/web/controller/DebugChatController.java](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/web/controller/DebugChatController.java)
+- [src/main/java/com/jimuqu/claw/web/controller/RootController.java](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/web/controller/RootController.java)
 - [src/main/resources/static/index.html](D:/IdeaProjects/SolonClaw/src/main/resources/static/index.html)
 
 当前调试接口：
@@ -477,7 +483,15 @@ java -jar target/solonclaw.jar --env=dev
 7. 钉钉相关改动要同时考虑私聊、群聊、白名单、markdown 发送和回复路由
 8. 工具、子任务、通知、定时任务都应复用统一运行时，不要平行造轮子
 9. 工作区相关能力优先改 `AgentWorkspaceService / WorkspacePromptService / WorkspaceAgentTools`
-10. Git 提交信息使用中英双语描述，推荐格式：`增加了xx功能 (Add xx feature)`
+10. Git 提交信息默认使用 Conventional Commits 风格：`<type>(<scope>): <subject>`；注意冒号 `:` 后必须有一个空格
+11. `scope` 选填，表示 commit 作用范围；可以写模块名、目录名，或数据层 / 视图层 / runtime / workspace 这类职责范围
+12. `subject` 必填，用于对 commit 做简短描述；默认继续使用中英双语描述，例如：`feat(agent): 增加了子任务聚合能力 (Add child-run aggregation)`
+13. `type` 必填，可选值固定为：`feat` 新功能、`fix` 修复 bug、`docs` 文档注释、`style` 代码格式、`refactor` 重构优化、`perf` 性能优化、`test` 增加测试、`chore` 构建过程或辅助工具变动、`revert` 回退、`build` 打包
+14. 提交代码时，默认按职责拆分 commit；优先拆成“提示词与上下文 / 运行时治理 / 配置默认值与注释 / 测试”这类最小修改单元，尽量做到一个 commit 只解决一类问题，避免把无关改动混在一起
+15. 实体类、DTO、事件载荷、结果对象、配置承载对象这类数据类，优先使用 Lombok 管理字段访问器；明确适合的类优先使用 `@Data`
+16. 无参构造优先交给 Lombok 管理；这类数据类默认优先使用 `@NoArgsConstructor`，不要继续手写大量空构造
+17. 需要持久化、序列化传输、缓存或作为稳定数据载体的类，应按需实现 `Serializable`
+18. 不允许或尽量减少内部类的使用；尤其是配置承载对象，应优先拆成独立类，例如不要在 `SolonClawProperties` 中持续堆叠大量静态内部类
 
 ## PR 规范
 
@@ -561,6 +575,6 @@ java -jar target/solonclaw.jar --env=dev
 - [src/main/java/com/jimuqu/claw/agent/job/WorkspaceJobService.java](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/agent/job/WorkspaceJobService.java)
 - [src/main/java/com/jimuqu/claw/channel/dingtalk/DingTalkChannelAdapter.java](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/channel/dingtalk/DingTalkChannelAdapter.java)
 - [src/main/java/com/jimuqu/claw/channel/dingtalk/DingTalkRobotSender.java](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/channel/dingtalk/DingTalkRobotSender.java)
-- [src/main/java/com/jimuqu/claw/web/DebugChatController.java](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/web/DebugChatController.java)
+- [src/main/java/com/jimuqu/claw/web/controller/DebugChatController.java](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/web/controller/DebugChatController.java)
 - [src/main/resources/app.yml](D:/IdeaProjects/SolonClaw/src/main/resources/app.yml)
 - [scripts/config.example.yml](D:/IdeaProjects/SolonClaw/scripts/config.example.yml)

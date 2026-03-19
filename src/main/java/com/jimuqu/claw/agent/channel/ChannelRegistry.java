@@ -1,7 +1,7 @@
 package com.jimuqu.claw.agent.channel;
 
-import com.jimuqu.claw.agent.model.ChannelType;
-import com.jimuqu.claw.agent.model.OutboundEnvelope;
+import com.jimuqu.claw.agent.model.enums.ChannelType;
+import com.jimuqu.claw.agent.model.envelope.OutboundEnvelope;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -48,3 +48,4 @@ public class ChannelRegistry {
         }
     }
 }
+
