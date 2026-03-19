@@ -26,7 +26,7 @@ class DingTalkChannelAdapterTest {
         SolonClawProperties.DingTalk properties = new SolonClawProperties.DingTalk();
         properties.setGroupAllowFrom(Collections.singletonList("cid-group"));
 
-        DingTalkChannelAdapter adapter = new DingTalkChannelAdapter(null, null, null, properties);
+        DingTalkChannelAdapter adapter = new DingTalkChannelAdapter(null, null, properties);
         InboundEnvelope inboundEnvelope = adapter.toInboundEnvelope(groupMessage("cid-group", "staff-1", "群消息"));
 
         assertEquals(ConversationType.GROUP, inboundEnvelope.getConversationType());
@@ -42,7 +42,7 @@ class DingTalkChannelAdapterTest {
         SolonClawProperties.DingTalk properties = new SolonClawProperties.DingTalk();
         properties.setAllowFrom(Collections.singletonList("staff-private"));
 
-        DingTalkChannelAdapter adapter = new DingTalkChannelAdapter(null, null, null, properties);
+        DingTalkChannelAdapter adapter = new DingTalkChannelAdapter(null, null, properties);
         InboundEnvelope inboundEnvelope = adapter.toInboundEnvelope(privateMessage("cid-private", "staff-private", "私聊消息"));
 
         assertEquals(ConversationType.PRIVATE, inboundEnvelope.getConversationType());
@@ -57,7 +57,7 @@ class DingTalkChannelAdapterTest {
     void allowsGroupMessageWhenAllowListIsEmpty() {
         SolonClawProperties.DingTalk properties = new SolonClawProperties.DingTalk();
 
-        DingTalkChannelAdapter adapter = new DingTalkChannelAdapter(null, null, null, properties);
+        DingTalkChannelAdapter adapter = new DingTalkChannelAdapter(null, null, properties);
         InboundEnvelope inboundEnvelope = adapter.toInboundEnvelope(groupMessage("cid-other", "staff-1", "未授权群"));
 
         assertNotNull(inboundEnvelope);
@@ -72,7 +72,7 @@ class DingTalkChannelAdapterTest {
         SolonClawProperties.DingTalk properties = new SolonClawProperties.DingTalk();
         properties.setGroupAllowFrom(Collections.singletonList("cid-group"));
 
-        DingTalkChannelAdapter adapter = new DingTalkChannelAdapter(null, null, null, properties);
+        DingTalkChannelAdapter adapter = new DingTalkChannelAdapter(null, null, properties);
 
         assertNull(adapter.toInboundEnvelope(groupMessage("cid-other", "staff-1", "未授权群")));
     }
