@@ -477,8 +477,11 @@ java -jar target/solonclaw.jar --env=dev
 7. 钉钉相关改动要同时考虑私聊、群聊、白名单、markdown 发送和回复路由
 8. 工具、子任务、通知、定时任务都应复用统一运行时，不要平行造轮子
 9. 工作区相关能力优先改 `AgentWorkspaceService / WorkspacePromptService / WorkspaceAgentTools`
-10. Git 提交信息使用中英双语描述，推荐格式：`增加了xx功能 (Add xx feature)`
-11. 提交代码时，默认按职责拆分 commit；优先拆成“提示词与上下文 / 运行时治理 / 配置默认值与注释 / 测试”这类最小修改单元，尽量做到一个 commit 只解决一类问题，避免把无关改动混在一起
+10. Git 提交信息默认使用 Conventional Commits 风格：`<type>(<scope>): <subject>`；注意冒号 `:` 后必须有一个空格
+11. `scope` 选填，表示 commit 作用范围；可以写模块名、目录名，或数据层 / 视图层 / runtime / workspace 这类职责范围
+12. `subject` 必填，用于对 commit 做简短描述；默认继续使用中英双语描述，例如：`feat(agent): 增加了子任务聚合能力 (Add child-run aggregation)`
+13. `type` 必填，可选值固定为：`feat` 新功能、`fix` 修复 bug、`docs` 文档注释、`style` 代码格式、`refactor` 重构优化、`perf` 性能优化、`test` 增加测试、`chore` 构建过程或辅助工具变动、`revert` 回退、`build` 打包
+14. 提交代码时，默认按职责拆分 commit；优先拆成“提示词与上下文 / 运行时治理 / 配置默认值与注释 / 测试”这类最小修改单元，尽量做到一个 commit 只解决一类问题，避免把无关改动混在一起
 
 ## PR 规范
 
