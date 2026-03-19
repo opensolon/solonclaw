@@ -139,7 +139,7 @@ public class WorkspaceJobService {
             if (replyTarget == null || StrUtil.isBlank(definition.getSessionKey()) || jobDispatcher == null) {
                 return;
             }
-            jobDispatcher.dispatch(definition.getSessionKey(), replyTarget, definition.getPrompt());
+            jobDispatcher.dispatch(definition.getSessionKey(), replyTarget, buildDispatchPrompt(definition));
             if (isOneShot(definition)) {
                 removeJob(definition.getName());
             }
@@ -156,9 +156,10 @@ public class WorkspaceJobService {
     }
 
     private Scheduled buildScheduled(JobDefinition definition) {
+        long initialDelay = Math.max(0L, definition.getInitialDelay());
         ScheduledAnno scheduled = new ScheduledAnno()
                 .name(definition.getName())
-                .initialDelay(definition.getInitialDelay())
+                .initialDelay(initialDelay)
                 .enable(definition.isEnabled());
 
         if (StrUtil.isNotBlank(definition.getZone())) {
@@ -171,9 +172,10 @@ public class WorkspaceJobService {
         } else if ("fixed_delay".equals(mode)) {
             scheduled.fixedDelay(parseLong(definition.getScheduleValue(), "fixedDelay"));
         } else if ("once_delay".equals(mode)) {
-            long delay = definition.getInitialDelay() > 0
-                    ? definition.getInitialDelay()
+            long delay = initialDelay > 0
+                    ? initialDelay
                     : parseLong(definition.getScheduleValue(), "onceDelay");
+            scheduled.initialDelay(delay);
             scheduled.fixedDelay(delay);
         } else if ("cron".equals(mode)) {
             scheduled.cron(definition.getScheduleValue());
@@ -182,6 +184,18 @@ public class WorkspaceJobService {
         }
 
         return scheduled;
+    }
+
+    private String buildDispatchPrompt(JobDefinition definition) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("[定时任务触发]").append('\n');
+        builder.append("任务名称: ").append(definition.getName()).append('\n');
+        builder.append("任务模式: ").append(definition.getMode()).append('\n');
+        builder.append("当前这次触发已经到执行时间。请你现在立刻完成下面的任务，并直接在当前会话给出结果。").append('\n');
+        builder.append("不要把这条消息再理解成“稍后执行”，也不要再次创建同一个定时任务，除非用户明确要求循环执行。").append('\n');
+        builder.append("任务内容:").append('\n');
+        builder.append(definition.getPrompt());
+        return builder.toString();
     }
 
     private long parseLong(String value, String fieldName) {
