@@ -2,6 +2,7 @@ target/
 !.mvn/wrapper/maven-wrapper.jar
 logs/
 workspace/
+src/main/resources/app-dev.yml
 
 ### STS ###
 .apt_generated
