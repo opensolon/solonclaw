@@ -112,7 +112,7 @@ public class SolonAiConversationAgent implements ConversationAgent {
         );
         return ReActAgent.of(chatModel)
                 .name(workspacePromptService.resolveAgentName())
-                .instruction(workspacePromptService.buildSystemPrompt())
+                .instruction(workspacePromptService.buildSystemPrompt(request))
                 .defaultToolAdd(runtimeTools)
                 .defaultToolAdd(jobTools)
                 .defaultSkillAdd(cliSkillProvider)

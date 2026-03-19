@@ -1,6 +1,7 @@
 package com.jimuqu.claw.agent.workspace;
 
 import cn.hutool.core.io.FileUtil;
+import com.jimuqu.claw.agent.runtime.ConversationExecutionRequest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -67,6 +68,45 @@ class WorkspacePromptServiceTest {
     }
 
     /**
+     * 验证子任务模式会收敛提示词上下文，只保留完成子任务所需的最小信息。
+     *
+     * @param tempDir 临时工作区
+     */
+    @Test
+    void childRunPromptUsesReducedWorkspaceContext(@TempDir Path tempDir) {
+        AgentWorkspaceService workspaceService = new AgentWorkspaceService(tempDir.toString());
+        WorkspacePromptService promptService = new WorkspacePromptService(workspaceService, "基础系统提示");
+
+        FileUtil.writeUtf8String("# AGENTS\nAGENTS-ONLY-CONTENT", workspaceService.fileInWorkspace(WorkspacePromptService.AGENTS_FILE));
+        FileUtil.writeUtf8String("# SOUL\nSOUL-ONLY-CONTENT", workspaceService.fileInWorkspace(WorkspacePromptService.SOUL_FILE));
+        FileUtil.writeUtf8String("# USER\nUSER-ONLY-CONTENT", workspaceService.fileInWorkspace(WorkspacePromptService.USER_FILE));
+        FileUtil.writeUtf8String("# TOOLS\nTOOLS-ONLY-CONTENT", workspaceService.fileInWorkspace(WorkspacePromptService.TOOLS_FILE));
+        FileUtil.writeUtf8String("# BOOTSTRAP\nBOOTSTRAP-ONLY-CONTENT", workspaceService.fileInWorkspace(WorkspacePromptService.BOOTSTRAP_FILE));
+        FileUtil.writeUtf8String("# MEMORY\nMEMORY-ONLY-CONTENT", workspaceService.fileInWorkspace(WorkspacePromptService.MEMORY_FILE));
+        LocalDate today = LocalDate.now();
+        FileUtil.writeUtf8String(
+                "# DAILY\nDAILY-ONLY-CONTENT",
+                workspaceService.fileInWorkspace("memory/" + DateTimeFormatter.ISO_LOCAL_DATE.format(today) + ".md")
+        );
+
+        ConversationExecutionRequest request = new ConversationExecutionRequest();
+        request.setChildRun(true);
+        request.setParentRunId("parent-run-1");
+
+        String prompt = promptService.buildSystemPrompt(request);
+
+        assertTrue(prompt.contains("## 子任务模式"));
+        assertTrue(prompt.contains("当前父运行: parent-run-1"));
+        assertTrue(prompt.contains("AGENTS-ONLY-CONTENT"));
+        assertTrue(prompt.contains("TOOLS-ONLY-CONTENT"));
+        assertFalse(prompt.contains("SOUL-ONLY-CONTENT"));
+        assertFalse(prompt.contains("USER-ONLY-CONTENT"));
+        assertFalse(prompt.contains("BOOTSTRAP-ONLY-CONTENT"));
+        assertFalse(prompt.contains("MEMORY-ONLY-CONTENT"));
+        assertFalse(prompt.contains("DAILY-ONLY-CONTENT"));
+    }
+
+    /**
      * 验证全新工作区会初始化内置模板，并包含首次对话引导文件。
      *
      * @param tempDir 临时工作区
@@ -99,5 +139,6 @@ class WorkspacePromptServiceTest {
 
         assertTrue(prompt.contains("你是在 SolonClaw 内运行的个人助理。"));
         assertTrue(prompt.contains("## 工具使用"));
+        assertTrue(prompt.contains("## 长任务与子任务"));
     }
 }

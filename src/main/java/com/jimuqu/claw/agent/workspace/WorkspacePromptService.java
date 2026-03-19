@@ -3,6 +3,7 @@ package com.jimuqu.claw.agent.workspace;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.util.StrUtil;
+import com.jimuqu.claw.agent.runtime.ConversationExecutionRequest;
 
 import java.io.File;
 import java.io.IOException;
@@ -104,19 +105,24 @@ public class WorkspacePromptService {
      * @return 组装后的系统提示词
      */
     public String buildSystemPrompt() {
+        return buildSystemPrompt(null);
+    }
+
+    /**
+     * 构造当前 Agent 运行使用的系统提示词。
+     *
+     * @param request 当前执行请求；为空时按主任务模式构造
+     * @return 组装后的系统提示词
+     */
+    public String buildSystemPrompt(ConversationExecutionRequest request) {
+        boolean childRun = request != null && request.isChildRun();
         List<String> lines = new ArrayList<>();
         lines.add(baseSystemPrompt.trim());
+        appendExecutionGuidance(lines, request, childRun);
         lines.add("");
         lines.add("当前工作区: " + workspaceService.getWorkspaceDir().getAbsolutePath());
         lines.add("除非用户明确要求，否则所有运行期文件与引导文件都以该工作区为根目录。");
-        appendSection(lines, "工作区规则", AGENTS_FILE);
-        appendSection(lines, "灵魂设定", SOUL_FILE);
-        appendSection(lines, "身份记录", IDENTITY_FILE);
-        appendSection(lines, "用户画像", USER_FILE);
-        appendSection(lines, "工具备注", TOOLS_FILE);
-        appendSection(lines, "首次对话引导", BOOTSTRAP_FILE);
-        appendSection(lines, "长期记忆", MEMORY_FILE);
-        appendRecentDailyMemory(lines);
+        appendWorkspaceContext(lines, childRun);
         return String.join("\n", lines);
     }
 
@@ -222,6 +228,64 @@ public class WorkspacePromptService {
         lines.add("## " + title);
         lines.add("来源文件: " + workspaceService.fileInWorkspace(fileName).getAbsolutePath());
         lines.add(content);
+    }
+
+    /**
+     * 追加运行编排与子任务相关的固定提示。
+     *
+     * @param lines 结果行集合
+     * @param request 当前执行请求
+     * @param childRun 是否为子任务模式
+     */
+    private void appendExecutionGuidance(
+            List<String> lines,
+            ConversationExecutionRequest request,
+            boolean childRun
+    ) {
+        lines.add("");
+        if (childRun) {
+            lines.add("## 子任务模式");
+            if (request != null && StrUtil.isNotBlank(request.getParentRunId())) {
+                lines.add("当前父运行: " + request.getParentRunId());
+            }
+            lines.add("- 你当前是父任务派生出的子任务，只负责完成一个单一、明确、可执行的目标。");
+            lines.add("- 不要重复做父任务的整体规划，不要和用户闲聊，也不要把当前任务扩写成泛泛而谈的长回复。");
+            lines.add("- 优先返回可供父任务聚合的结果：做了什么、关键发现、失败原因、剩余风险、建议下一步。");
+            lines.add("- 默认不要修改 `MEMORY.md`、`USER.md`、`SOUL.md`、`IDENTITY.md` 这类长期文件，除非任务明确要求且确有必要。");
+            lines.add("- 系统默认不鼓励子任务继续派生；如果 `spawn_task` 不可用或被拒绝，先把结果交回父任务。");
+            lines.add("- 如果任务完成后不需要直接对外回复，请返回简洁结果供父任务继续汇总。");
+            return;
+        }
+
+        lines.add("## 长任务与子任务");
+        lines.add("- 当任务涉及多个相对独立的步骤、多个目录或服务、长时间命令、并行探索多个方向，或用户会受益于后台持续推进时，优先考虑用 `spawn_task` 拆分，而不是在一个 run 里硬做到底。");
+        lines.add("- 典型适合拆分的场景：仓库部署与启动、编译/测试/回归、并行查文档或代码、分模块排查日志或配置、批量检查多个候选方案。");
+        lines.add("- 子任务描述应写成单一、清晰、可执行的目标，避免把整段原始对话原样塞给子任务。");
+        lines.add("- 派生后，父任务可先继续规划、记录进度或返回 `NO_REPLY`；如果要等全部子任务完成后统一回复，可使用 `FINAL_REPLY_ONCE:` 只发送一次最终聚合结果。");
+        lines.add("- 使用 `list_child_runs`、`get_run_status`、`get_child_summary` 跟踪子任务进度和批次聚合结果。");
+        lines.add("- 对特别小、特别快、明显串行的动作不要滥用子任务；拆分是为了提高清晰度、并行度和长任务稳定性。");
+    }
+
+    /**
+     * 按运行模式追加工作区上下文。
+     *
+     * @param lines 结果行集合
+     * @param childRun 是否为子任务模式
+     */
+    private void appendWorkspaceContext(List<String> lines, boolean childRun) {
+        appendSection(lines, childRun ? "子任务工作区规则" : "工作区规则", AGENTS_FILE);
+        if (childRun) {
+            appendSection(lines, "子任务工具备注", TOOLS_FILE);
+            return;
+        }
+
+        appendSection(lines, "灵魂设定", SOUL_FILE);
+        appendSection(lines, "身份记录", IDENTITY_FILE);
+        appendSection(lines, "用户画像", USER_FILE);
+        appendSection(lines, "工具备注", TOOLS_FILE);
+        appendSection(lines, "首次对话引导", BOOTSTRAP_FILE);
+        appendSection(lines, "长期记忆", MEMORY_FILE);
+        appendRecentDailyMemory(lines);
     }
 
     /**

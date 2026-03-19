@@ -16,6 +16,10 @@ public class ConversationExecutionRequest {
     private String currentMessage;
     /** 当前消息的触发类型。 */
     private InboundTriggerType currentMessageTriggerType = InboundTriggerType.USER;
+    /** 当前运行是否为父任务派生出的子任务。 */
+    private boolean childRun;
+    /** 当前子任务对应的父运行标识。 */
+    private String parentRunId;
     /** 历史消息列表。 */
     private List<ChatMessage> history = new ArrayList<>();
     /** 当前运行可用的子任务派生能力。 */
@@ -77,6 +81,42 @@ public class ConversationExecutionRequest {
      */
     public void setCurrentMessageTriggerType(InboundTriggerType currentMessageTriggerType) {
         this.currentMessageTriggerType = currentMessageTriggerType;
+    }
+
+    /**
+     * 返回当前运行是否为子任务。
+     *
+     * @return 若当前运行为子任务则返回 true
+     */
+    public boolean isChildRun() {
+        return childRun;
+    }
+
+    /**
+     * 设置当前运行是否为子任务。
+     *
+     * @param childRun 子任务标记
+     */
+    public void setChildRun(boolean childRun) {
+        this.childRun = childRun;
+    }
+
+    /**
+     * 返回父运行标识。
+     *
+     * @return 父运行标识
+     */
+    public String getParentRunId() {
+        return parentRunId;
+    }
+
+    /**
+     * 设置父运行标识。
+     *
+     * @param parentRunId 父运行标识
+     */
+    public void setParentRunId(String parentRunId) {
+        this.parentRunId = parentRunId;
     }
 
     /**

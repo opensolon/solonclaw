@@ -357,6 +357,8 @@ public class AgentRuntimeService {
             request.setSessionKey(inboundEnvelope.getSessionKey());
             request.setCurrentMessage(inboundEnvelope.getContent());
             request.setCurrentMessageTriggerType(inboundEnvelope.getTriggerType());
+            request.setChildRun(StrUtil.isNotBlank(run.getParentRunId()));
+            request.setParentRunId(run.getParentRunId());
             request.setHistory(runtimeStoreService.loadConversationHistoryBefore(inboundEnvelope.getSessionKey(), inboundEnvelope.getSessionVersion()));
             request.setSpawnTaskSupport((taskDescription, batchKey) -> spawnTask(runId, inboundEnvelope, taskDescription, batchKey));
             request.setRunQuerySupport(buildRunQuerySupport(inboundEnvelope.getSessionKey()));
