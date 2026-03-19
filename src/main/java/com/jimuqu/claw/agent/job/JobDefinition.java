@@ -1,6 +1,6 @@
 package com.jimuqu.claw.agent.job;
 
-import com.jimuqu.claw.agent.model.ReplyTarget;
+import com.jimuqu.claw.agent.model.route.ReplyTarget;
 
 /**
  * 定义一个可持久化的定时任务。
@@ -106,3 +106,4 @@ public class JobDefinition {
         this.updatedAt = updatedAt;
     }
 }
+

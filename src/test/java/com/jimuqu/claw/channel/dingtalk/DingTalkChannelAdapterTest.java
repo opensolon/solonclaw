@@ -2,8 +2,9 @@ package com.jimuqu.claw.channel.dingtalk;
 
 import com.dingtalk.open.app.api.models.bot.ChatbotMessage;
 import com.dingtalk.open.app.api.models.bot.MessageContent;
-import com.jimuqu.claw.agent.model.ConversationType;
-import com.jimuqu.claw.agent.model.InboundEnvelope;
+import com.jimuqu.claw.agent.model.enums.ConversationType;
+import com.jimuqu.claw.agent.model.envelope.InboundEnvelope;
+import com.jimuqu.claw.channel.dingtalk.adapter.DingTalkChannelAdapter;
 import com.jimuqu.claw.config.SolonClawProperties;
 import org.junit.jupiter.api.Test;
 
@@ -124,3 +125,4 @@ class DingTalkChannelAdapterTest {
         return message;
     }
 }
+

@@ -3,21 +3,21 @@ import cn.hutool.core.io.FileUtil;
 import com.jimuqu.claw.agent.channel.ChannelRegistry;
 import com.jimuqu.claw.agent.job.JobStoreService;
 import com.jimuqu.claw.agent.job.WorkspaceJobService;
-import com.jimuqu.claw.agent.runtime.AgentRuntimeService;
-import com.jimuqu.claw.agent.runtime.ConversationAgent;
-import com.jimuqu.claw.agent.runtime.ConversationScheduler;
-import com.jimuqu.claw.agent.runtime.HeartbeatService;
-import com.jimuqu.claw.agent.runtime.SolonAiConversationAgent;
+import com.jimuqu.claw.agent.runtime.impl.AgentRuntimeService;
+import com.jimuqu.claw.agent.runtime.api.ConversationAgent;
+import com.jimuqu.claw.agent.runtime.impl.ConversationScheduler;
+import com.jimuqu.claw.agent.runtime.impl.HeartbeatService;
+import com.jimuqu.claw.agent.runtime.impl.SolonAiConversationAgent;
 import com.jimuqu.claw.agent.store.RuntimeStoreService;
 import com.jimuqu.claw.agent.tool.JobTools;
 import com.jimuqu.claw.agent.tool.WorkspaceAgentTools;
 import com.jimuqu.claw.agent.workspace.AgentWorkspaceService;
 import com.jimuqu.claw.agent.workspace.WorkspacePromptService;
-import com.jimuqu.claw.channel.dingtalk.DingTalkAccessTokenService;
-import com.jimuqu.claw.channel.dingtalk.DingTalkChannelAdapter;
-import com.jimuqu.claw.channel.dingtalk.DingTalkRobotSender;
-import com.jimuqu.claw.channel.feishu.FeishuBotSender;
-import com.jimuqu.claw.channel.feishu.FeishuChannelAdapter;
+import com.jimuqu.claw.channel.dingtalk.service.DingTalkAccessTokenService;
+import com.jimuqu.claw.channel.dingtalk.adapter.DingTalkChannelAdapter;
+import com.jimuqu.claw.channel.dingtalk.sender.DingTalkRobotSender;
+import com.jimuqu.claw.channel.feishu.sender.FeishuBotSender;
+import com.jimuqu.claw.channel.feishu.adapter.FeishuChannelAdapter;
 import org.noear.solon.ai.skills.cli.CliSkillProvider;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.annotation.Bean;
@@ -342,3 +342,5 @@ public class SolonClawConfig {
         return new HeartbeatService(agentRuntimeService, runtimeStoreService, properties);
     }
 }
+
+

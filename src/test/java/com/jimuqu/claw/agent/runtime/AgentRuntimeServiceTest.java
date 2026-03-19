@@ -2,17 +2,22 @@ package com.jimuqu.claw.agent.runtime;
 
 import com.jimuqu.claw.agent.channel.ChannelAdapter;
 import com.jimuqu.claw.agent.channel.ChannelRegistry;
-import com.jimuqu.claw.agent.model.AgentRun;
-import com.jimuqu.claw.agent.model.ChannelType;
-import com.jimuqu.claw.agent.model.ConversationEvent;
-import com.jimuqu.claw.agent.model.ConversationType;
-import com.jimuqu.claw.agent.model.InboundEnvelope;
-import com.jimuqu.claw.agent.model.InboundTriggerType;
-import com.jimuqu.claw.agent.model.OutboundEnvelope;
-import com.jimuqu.claw.agent.model.ReplyTarget;
-import com.jimuqu.claw.agent.model.RunStatus;
+import com.jimuqu.claw.agent.model.run.AgentRun;
+import com.jimuqu.claw.agent.model.enums.ChannelType;
+import com.jimuqu.claw.agent.model.event.ConversationEvent;
+import com.jimuqu.claw.agent.model.enums.ConversationType;
+import com.jimuqu.claw.agent.model.envelope.InboundEnvelope;
+import com.jimuqu.claw.agent.model.enums.InboundTriggerType;
+import com.jimuqu.claw.agent.model.envelope.OutboundEnvelope;
+import com.jimuqu.claw.agent.model.route.ReplyTarget;
+import com.jimuqu.claw.agent.model.enums.RunStatus;
+import com.jimuqu.claw.agent.runtime.api.ConversationAgent;
+import com.jimuqu.claw.agent.runtime.impl.AgentRuntimeService;
+import com.jimuqu.claw.agent.runtime.impl.ConversationScheduler;
+import com.jimuqu.claw.agent.runtime.support.ConversationExecutionRequest;
+import com.jimuqu.claw.agent.runtime.support.NotificationResult;
 import com.jimuqu.claw.agent.store.RuntimeStoreService;
-import com.jimuqu.claw.agent.runtime.ParentRunChildrenSummary;
+import com.jimuqu.claw.agent.runtime.support.ParentRunChildrenSummary;
 import com.jimuqu.claw.config.SolonClawProperties;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -781,3 +786,5 @@ class AgentRuntimeServiceTest {
         }
     }
 }
+
+

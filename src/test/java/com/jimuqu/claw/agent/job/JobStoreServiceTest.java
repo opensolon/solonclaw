@@ -1,8 +1,8 @@
 package com.jimuqu.claw.agent.job;
 
-import com.jimuqu.claw.agent.model.ChannelType;
-import com.jimuqu.claw.agent.model.ConversationType;
-import com.jimuqu.claw.agent.model.ReplyTarget;
+import com.jimuqu.claw.agent.model.enums.ChannelType;
+import com.jimuqu.claw.agent.model.enums.ConversationType;
+import com.jimuqu.claw.agent.model.route.ReplyTarget;
 import com.jimuqu.claw.agent.workspace.AgentWorkspaceService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -40,3 +40,4 @@ class JobStoreServiceTest {
         assertTrue(storeService.getJobsFile().exists());
     }
 }
+

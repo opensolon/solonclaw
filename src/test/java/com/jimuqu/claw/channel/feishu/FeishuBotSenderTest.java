@@ -1,10 +1,12 @@
 package com.jimuqu.claw.channel.feishu;
 
 import com.alibaba.fastjson.JSONObject;
-import com.jimuqu.claw.agent.model.ChannelType;
-import com.jimuqu.claw.agent.model.ConversationType;
-import com.jimuqu.claw.agent.model.OutboundEnvelope;
-import com.jimuqu.claw.agent.model.ReplyTarget;
+import com.jimuqu.claw.agent.model.enums.ChannelType;
+import com.jimuqu.claw.agent.model.enums.ConversationType;
+import com.jimuqu.claw.agent.model.envelope.OutboundEnvelope;
+import com.jimuqu.claw.agent.model.route.ReplyTarget;
+import com.jimuqu.claw.channel.feishu.gateway.FeishuMessageGateway;
+import com.jimuqu.claw.channel.feishu.sender.FeishuBotSender;
 import com.jimuqu.claw.config.SolonClawProperties;
 import org.junit.jupiter.api.Test;
 
@@ -82,3 +84,4 @@ class FeishuBotSenderTest {
         }
     }
 }
+

@@ -1,8 +1,8 @@
 package com.jimuqu.claw.agent.job;
 
 import cn.hutool.core.util.StrUtil;
-import com.jimuqu.claw.agent.model.LatestReplyRoute;
-import com.jimuqu.claw.agent.model.ReplyTarget;
+import com.jimuqu.claw.agent.model.route.LatestReplyRoute;
+import com.jimuqu.claw.agent.model.route.ReplyTarget;
 import com.jimuqu.claw.agent.store.RuntimeStoreService;
 import org.noear.solon.scheduling.ScheduledAnno;
 import org.noear.solon.scheduling.ScheduledException;
@@ -219,3 +219,4 @@ public class WorkspaceJobService {
         return "once_delay".equals(definition.getMode());
     }
 }
+

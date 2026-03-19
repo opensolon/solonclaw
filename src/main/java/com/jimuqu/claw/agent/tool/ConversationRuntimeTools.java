@@ -1,13 +1,13 @@
 package com.jimuqu.claw.agent.tool;
 
 import cn.hutool.core.util.StrUtil;
-import com.jimuqu.claw.agent.model.AgentRun;
-import com.jimuqu.claw.agent.runtime.NotificationResult;
-import com.jimuqu.claw.agent.runtime.NotificationSupport;
-import com.jimuqu.claw.agent.runtime.ParentRunChildrenSummary;
-import com.jimuqu.claw.agent.runtime.SpawnTaskResult;
-import com.jimuqu.claw.agent.runtime.SpawnTaskSupport;
-import com.jimuqu.claw.agent.runtime.RunQuerySupport;
+import com.jimuqu.claw.agent.model.run.AgentRun;
+import com.jimuqu.claw.agent.runtime.support.NotificationResult;
+import com.jimuqu.claw.agent.runtime.api.NotificationSupport;
+import com.jimuqu.claw.agent.runtime.support.ParentRunChildrenSummary;
+import com.jimuqu.claw.agent.runtime.support.SpawnTaskResult;
+import com.jimuqu.claw.agent.runtime.api.SpawnTaskSupport;
+import com.jimuqu.claw.agent.runtime.api.RunQuerySupport;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.annotation.Param;
 
@@ -231,3 +231,5 @@ public class ConversationRuntimeTools {
         return text.substring(0, maxChars) + "...";
     }
 }
+
+

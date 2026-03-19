@@ -1,6 +1,7 @@
 package com.jimuqu.claw.channel.dingtalk;
 
 import com.alibaba.fastjson.JSONObject;
+import com.jimuqu.claw.channel.dingtalk.sender.DingTalkRobotSender;
 import com.jimuqu.claw.config.SolonClawProperties;
 import org.junit.jupiter.api.Test;
 

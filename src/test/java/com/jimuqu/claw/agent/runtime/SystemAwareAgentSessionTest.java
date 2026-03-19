@@ -1,5 +1,6 @@
 package com.jimuqu.claw.agent.runtime;
 
+import com.jimuqu.claw.agent.runtime.support.SystemAwareAgentSession;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.message.ChatMessage;
 

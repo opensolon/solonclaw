@@ -73,7 +73,13 @@
 
 ### 1. 统一消息模型
 
-位于 [src/main/java/com/jimuqu/claw/agent/model](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/agent/model)：
+位于 [src/main/java/com/jimuqu/claw/agent/model](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/agent/model) 及其子包：
+
+- [src/main/java/com/jimuqu/claw/agent/model/envelope](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/agent/model/envelope)
+- [src/main/java/com/jimuqu/claw/agent/model/event](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/agent/model/event)
+- [src/main/java/com/jimuqu/claw/agent/model/route](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/agent/model/route)
+- [src/main/java/com/jimuqu/claw/agent/model/run](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/agent/model/run)
+- [src/main/java/com/jimuqu/claw/agent/model/enums](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/agent/model/enums)
 
 - `InboundEnvelope`：标准化后的入站消息
 - `OutboundEnvelope`：标准化后的出站消息
@@ -303,8 +309,8 @@
 
 本地调试页相关文件：
 
-- [src/main/java/com/jimuqu/claw/web/DebugChatController.java](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/web/DebugChatController.java)
-- [src/main/java/com/jimuqu/claw/web/RootController.java](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/web/RootController.java)
+- [src/main/java/com/jimuqu/claw/web/controller/DebugChatController.java](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/web/controller/DebugChatController.java)
+- [src/main/java/com/jimuqu/claw/web/controller/RootController.java](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/web/controller/RootController.java)
 - [src/main/resources/static/index.html](D:/IdeaProjects/SolonClaw/src/main/resources/static/index.html)
 
 当前调试接口：
@@ -565,6 +571,6 @@ java -jar target/solonclaw.jar --env=dev
 - [src/main/java/com/jimuqu/claw/agent/job/WorkspaceJobService.java](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/agent/job/WorkspaceJobService.java)
 - [src/main/java/com/jimuqu/claw/channel/dingtalk/DingTalkChannelAdapter.java](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/channel/dingtalk/DingTalkChannelAdapter.java)
 - [src/main/java/com/jimuqu/claw/channel/dingtalk/DingTalkRobotSender.java](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/channel/dingtalk/DingTalkRobotSender.java)
-- [src/main/java/com/jimuqu/claw/web/DebugChatController.java](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/web/DebugChatController.java)
+- [src/main/java/com/jimuqu/claw/web/controller/DebugChatController.java](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/web/controller/DebugChatController.java)
 - [src/main/resources/app.yml](D:/IdeaProjects/SolonClaw/src/main/resources/app.yml)
 - [scripts/config.example.yml](D:/IdeaProjects/SolonClaw/scripts/config.example.yml)

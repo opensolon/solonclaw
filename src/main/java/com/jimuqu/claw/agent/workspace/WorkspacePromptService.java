@@ -3,7 +3,7 @@ package com.jimuqu.claw.agent.workspace;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.util.StrUtil;
-import com.jimuqu.claw.agent.runtime.ConversationExecutionRequest;
+import com.jimuqu.claw.agent.runtime.support.ConversationExecutionRequest;
 
 import java.io.File;
 import java.io.IOException;
@@ -377,3 +377,4 @@ public class WorkspacePromptService {
         return StrUtil.isNotBlank(name) && !name.startsWith("_");
     }
 }
+

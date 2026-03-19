@@ -6,8 +6,9 @@ import com.lark.oapi.service.im.v1.model.EventSender;
 import com.lark.oapi.service.im.v1.model.P2MessageReceiveV1;
 import com.lark.oapi.service.im.v1.model.P2MessageReceiveV1Data;
 import com.lark.oapi.service.im.v1.model.UserId;
-import com.jimuqu.claw.agent.model.ConversationType;
-import com.jimuqu.claw.agent.model.InboundEnvelope;
+import com.jimuqu.claw.agent.model.enums.ConversationType;
+import com.jimuqu.claw.agent.model.envelope.InboundEnvelope;
+import com.jimuqu.claw.channel.feishu.adapter.FeishuChannelAdapter;
 import com.jimuqu.claw.config.SolonClawProperties;
 import org.junit.jupiter.api.Test;
 
@@ -109,3 +110,4 @@ class FeishuChannelAdapterTest {
         return post.toJSONString();
     }
 }
+

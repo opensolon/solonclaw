@@ -1,7 +1,7 @@
 package com.jimuqu.claw.agent.workspace;
 
 import cn.hutool.core.io.FileUtil;
-import com.jimuqu.claw.agent.runtime.ConversationExecutionRequest;
+import com.jimuqu.claw.agent.runtime.support.ConversationExecutionRequest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -142,3 +142,4 @@ class WorkspacePromptServiceTest {
         assertTrue(prompt.contains("## 长任务与子任务"));
     }
 }
+
