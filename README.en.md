@@ -135,7 +135,7 @@ Current behavior:
 
 Requirements:
 
-- JDK `17`
+- JDK `8`
 - Maven `3.9+`
 - Ollama is recommended for local development
 

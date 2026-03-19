@@ -1,5 +1,6 @@
 package com.jimuqu.claw.web;
 
+import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import com.jimuqu.claw.agent.model.AgentRun;
 import com.jimuqu.claw.agent.model.RunEvent;
@@ -40,7 +41,7 @@ public class DebugChatController {
     public DebugChatResponse chat(Context ctx) throws Exception {
         DebugChatRequest request = JSONUtil.toBean(ctx.bodyNew(), DebugChatRequest.class);
         String sessionId = request.getSessionId();
-        if (sessionId == null || sessionId.isBlank()) {
+        if (StrUtil.isBlank(sessionId)) {
             sessionId = "default";
         }
 

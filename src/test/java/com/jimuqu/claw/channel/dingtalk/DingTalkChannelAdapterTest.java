@@ -7,7 +7,7 @@ import com.jimuqu.claw.agent.model.InboundEnvelope;
 import com.jimuqu.claw.config.SolonClawProperties;
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
+import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -23,7 +23,7 @@ class DingTalkChannelAdapterTest {
     @Test
     void mapsGroupMessageIntoGroupSession() {
         SolonClawProperties.DingTalk properties = new SolonClawProperties.DingTalk();
-        properties.setGroupAllowFrom(List.of("cid-group"));
+        properties.setGroupAllowFrom(Collections.singletonList("cid-group"));
 
         DingTalkChannelAdapter adapter = new DingTalkChannelAdapter(null, null, null, properties);
         InboundEnvelope inboundEnvelope = adapter.toInboundEnvelope(groupMessage("cid-group", "staff-1", "群消息"));
@@ -39,7 +39,7 @@ class DingTalkChannelAdapterTest {
     @Test
     void mapsPrivateMessageIntoPrivateSession() {
         SolonClawProperties.DingTalk properties = new SolonClawProperties.DingTalk();
-        properties.setAllowFrom(List.of("staff-private"));
+        properties.setAllowFrom(Collections.singletonList("staff-private"));
 
         DingTalkChannelAdapter adapter = new DingTalkChannelAdapter(null, null, null, properties);
         InboundEnvelope inboundEnvelope = adapter.toInboundEnvelope(privateMessage("cid-private", "staff-private", "私聊消息"));
@@ -69,7 +69,7 @@ class DingTalkChannelAdapterTest {
     @Test
     void rejectsMessageOutsideAllowListWhenConfigured() {
         SolonClawProperties.DingTalk properties = new SolonClawProperties.DingTalk();
-        properties.setGroupAllowFrom(List.of("cid-group"));
+        properties.setGroupAllowFrom(Collections.singletonList("cid-group"));
 
         DingTalkChannelAdapter adapter = new DingTalkChannelAdapter(null, null, null, properties);
 

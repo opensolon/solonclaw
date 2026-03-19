@@ -4,6 +4,7 @@ import com.jimuqu.claw.agent.tool.ConversationRuntimeTools;
 import com.jimuqu.claw.agent.tool.JobTools;
 import com.jimuqu.claw.agent.tool.WorkspaceAgentTools;
 import com.jimuqu.claw.agent.workspace.WorkspacePromptService;
+import cn.hutool.core.util.StrUtil;
 import org.noear.solon.ai.agent.AgentChunk;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.chat.ChatModel;
@@ -76,7 +77,7 @@ public class SolonAiConversationAgent implements ConversationAgent {
 
         AgentChunk finalChunk = stream.doOnNext(chunk -> {
             String content = chunk.getContent();
-            if (content != null && !content.isBlank() && !content.equals(latestChunk.get())) {
+            if (StrUtil.isNotBlank(content) && !content.equals(latestChunk.get())) {
                 latestChunk.set(content);
                 progressConsumer.accept(content);
             }

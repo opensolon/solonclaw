@@ -4,6 +4,7 @@ import com.jimuqu.claw.agent.workspace.AgentWorkspaceService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -25,7 +26,7 @@ class WorkspaceAgentToolsTest {
         String editResult = tools.editFile("notes/test.txt", "hello", "world");
         assertTrue(editResult.contains("已修改文件"));
 
-        String edited = Files.readString(tempDir.resolve("notes").resolve("test.txt"));
+        String edited = new String(Files.readAllBytes(tempDir.resolve("notes").resolve("test.txt")), StandardCharsets.UTF_8);
         assertTrue(edited.contains("world"));
     }
 

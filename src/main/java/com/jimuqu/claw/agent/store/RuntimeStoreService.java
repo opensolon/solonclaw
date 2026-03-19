@@ -22,6 +22,7 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -400,7 +401,7 @@ public class RuntimeStoreService {
     public List<RunEvent> getRunEvents(String runId, long afterSeq) {
         File file = runEventsFile(runId);
         if (!file.exists()) {
-            return List.of();
+            return Collections.emptyList();
         }
 
         List<RunEvent> events = new ArrayList<>();
@@ -722,7 +723,7 @@ public class RuntimeStoreService {
     public List<ConversationEvent> readConversationEvents(String sessionKey) {
         File file = conversationEventsFile(sessionKey);
         if (!file.exists()) {
-            return List.of();
+            return Collections.emptyList();
         }
 
         List<ConversationEvent> events = new ArrayList<>();

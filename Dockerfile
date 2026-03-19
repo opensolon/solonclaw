@@ -1,4 +1,4 @@
-FROM maven:3.9.9-eclipse-temurin-17 AS builder
+FROM maven:3.9.9-eclipse-temurin-8 AS builder
 
 WORKDIR /build
 
@@ -7,7 +7,7 @@ COPY src ./src
 
 RUN mvn -q clean package -DskipTests
 
-FROM eclipse-temurin:17-jre
+FROM eclipse-temurin:8-jre
 
 WORKDIR /app
 

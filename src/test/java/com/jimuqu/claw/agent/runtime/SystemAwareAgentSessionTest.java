@@ -3,6 +3,7 @@ package com.jimuqu.claw.agent.runtime;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.message.ChatMessage;
 
+import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -19,7 +20,7 @@ class SystemAwareAgentSessionTest {
         ChatMessage system = ChatMessage.ofSystem("child task completed");
         ChatMessage user = ChatMessage.ofUser("继续处理");
         ChatMessage assistant = ChatMessage.ofAssistant("收到");
-        session.addMessage(List.of(system, user, assistant));
+        session.addMessage(Arrays.asList(system, user, assistant));
 
         List<ChatMessage> history = session.getLatestMessages(10);
 

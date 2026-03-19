@@ -1,5 +1,6 @@
 package com.jimuqu.claw.channel.dingtalk;
 
+import cn.hutool.core.util.StrUtil;
 import com.aliyun.dingtalkoauth2_1_0.Client;
 import com.aliyun.dingtalkoauth2_1_0.models.GetAccessTokenRequest;
 import com.aliyun.dingtalkoauth2_1_0.models.GetAccessTokenResponse;
@@ -108,8 +109,8 @@ public class DingTalkAccessTokenService {
      */
     private boolean isConfigured() {
         return properties.isEnabled()
-                && notBlank(properties.getClientId())
-                && notBlank(properties.getClientSecret());
+                && StrUtil.isNotBlank(properties.getClientId())
+                && StrUtil.isNotBlank(properties.getClientSecret());
     }
 
     /**
@@ -167,17 +168,6 @@ public class DingTalkAccessTokenService {
             log.warn("Failed to refresh DingTalk access token: {}", exception.getMessage(), exception);
         }
     }
-
-    /**
-     * 判断字符串是否非空白。
-     *
-     * @param value 待检查文本
-     * @return 若非空白则返回 true
-     */
-    private boolean notBlank(String value) {
-        return value != null && !value.isBlank();
-    }
-
     /**
      * 保存 token 文本和值得过期时间。
      */

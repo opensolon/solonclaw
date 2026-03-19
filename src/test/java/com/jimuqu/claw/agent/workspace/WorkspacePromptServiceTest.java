@@ -25,14 +25,15 @@ class WorkspacePromptServiceTest {
         AgentWorkspaceService workspaceService = new AgentWorkspaceService(tempDir.toString());
         WorkspacePromptService promptService = new WorkspacePromptService(workspaceService, "基础系统提示");
 
-        FileUtil.writeUtf8String("""
----
-
-# IDENTITY.md - 我是谁？
-
-- **名称：** Xiaolongxia
-- **生物类型：** AI 助手
-""", workspaceService.fileInWorkspace(WorkspacePromptService.IDENTITY_FILE));
+        FileUtil.writeUtf8String(
+                "---\n"
+                        + "\n"
+                        + "# IDENTITY.md - 我是谁？\n"
+                        + "\n"
+                        + "- **名称：** Xiaolongxia\n"
+                        + "- **生物类型：** AI 助手\n",
+                workspaceService.fileInWorkspace(WorkspacePromptService.IDENTITY_FILE)
+        );
         FileUtil.writeUtf8String("# AGENTS\n先阅读 SOUL.md 和 USER.md。", workspaceService.fileInWorkspace(WorkspacePromptService.AGENTS_FILE));
         FileUtil.writeUtf8String("# SOUL\n回答简洁但不生硬。", workspaceService.fileInWorkspace(WorkspacePromptService.SOUL_FILE));
         FileUtil.writeUtf8String("# USER\n用户偏好中文回复。", workspaceService.fileInWorkspace(WorkspacePromptService.USER_FILE));
