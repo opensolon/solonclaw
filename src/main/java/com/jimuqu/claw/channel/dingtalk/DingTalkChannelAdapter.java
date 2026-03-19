@@ -1,5 +1,6 @@
 package com.jimuqu.claw.channel.dingtalk;
 
+import cn.hutool.core.util.StrUtil;
 import com.alibaba.fastjson.JSONObject;
 import com.dingtalk.open.app.api.OpenDingTalkClient;
 import com.dingtalk.open.app.api.OpenDingTalkStreamClientBuilder;
@@ -310,7 +311,7 @@ public class DingTalkChannelAdapter implements
      * @return 若为空白则返回 true
      */
     private boolean isBlank(String value) {
-        return value == null || value.isBlank();
+        return StrUtil.isBlank(value);
     }
 
     /**

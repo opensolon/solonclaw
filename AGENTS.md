@@ -20,7 +20,7 @@
 
 ## 当前技术栈
 
-- Java `17`
+- Java `8`
 - Solon `3.9.5`
 - `solon-web`
 - `solon-ai`

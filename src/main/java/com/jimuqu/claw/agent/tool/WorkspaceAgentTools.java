@@ -1,13 +1,14 @@
 package com.jimuqu.claw.agent.tool;
 
 import cn.hutool.core.io.FileUtil;
+import cn.hutool.core.io.IoUtil;
+import cn.hutool.core.util.StrUtil;
 import com.jimuqu.claw.agent.workspace.AgentWorkspaceService;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.annotation.Param;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -33,7 +34,7 @@ public class WorkspaceAgentTools {
             return "文件不存在: " + target;
         }
 
-        String content = Files.readString(target, StandardCharsets.UTF_8);
+        String content = FileUtil.readUtf8String(target.toFile());
         return truncate("文件内容如下:\n" + content);
     }
 
@@ -48,7 +49,7 @@ public class WorkspaceAgentTools {
             Files.createDirectories(parent);
         }
 
-        Files.writeString(target, content == null ? "" : content, StandardCharsets.UTF_8);
+        FileUtil.writeUtf8String(content == null ? "" : content, target.toFile());
         return "已写入文件: " + target;
     }
 
@@ -63,7 +64,7 @@ public class WorkspaceAgentTools {
             return "文件不存在: " + target;
         }
 
-        String source = Files.readString(target, StandardCharsets.UTF_8);
+        String source = FileUtil.readUtf8String(target.toFile());
         if (oldText == null || oldText.isEmpty()) {
             return "修改失败: oldText 不能为空";
         }
@@ -72,13 +73,13 @@ public class WorkspaceAgentTools {
         }
 
         String result = source.replace(oldText, newText == null ? "" : newText);
-        Files.writeString(target, result, StandardCharsets.UTF_8);
+        FileUtil.writeUtf8String(result, target.toFile());
         return "已修改文件: " + target;
     }
 
     @ToolMapping(name = "exec_command", description = "在工作区目录执行命令，返回标准输出与标准错误")
     public String execCommand(@Param(description = "要执行的命令文本") String command) throws Exception {
-        if (command == null || command.isBlank()) {
+        if (StrUtil.isBlank(command)) {
             return "执行失败: command 不能为空";
         }
 
@@ -96,7 +97,7 @@ public class WorkspaceAgentTools {
         }
 
         String output = outputFuture.get(5, TimeUnit.SECONDS);
-        String body = output == null || output.isBlank() ? "(无输出)" : output.trim();
+        String body = StrUtil.isBlank(output) ? "(无输出)" : output.trim();
         return truncate("exitCode=" + process.exitValue() + "\n" + body);
     }
 
@@ -111,14 +112,14 @@ public class WorkspaceAgentTools {
 
     private String readProcessOutput(Process process) {
         try (InputStream inputStream = process.getInputStream()) {
-            return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+            return IoUtil.read(inputStream, "UTF-8");
         } catch (IOException e) {
             return "读取命令输出失败: " + e.getMessage();
         }
     }
 
     private Path resolvePath(String pathText, boolean allowMissingLeaf) throws IOException {
-        if (pathText == null || pathText.isBlank()) {
+        if (StrUtil.isBlank(pathText)) {
             throw new IllegalArgumentException("filePath 不能为空");
         }
 

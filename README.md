@@ -191,7 +191,7 @@ workspace/
 
 ### 1. 环境要求
 
-- JDK `17`
+- JDK `8`
 - Maven `3.9+`
 - 推荐本地安装并启动 Ollama
 

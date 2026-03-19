@@ -1,5 +1,6 @@
 package com.jimuqu.claw.channel.dingtalk;
 
+import cn.hutool.core.util.StrUtil;
 import com.alibaba.fastjson.JSONObject;
 import com.aliyun.dingtalkrobot_1_0.Client;
 import com.aliyun.dingtalkrobot_1_0.models.BatchSendOTOHeaders;
@@ -13,6 +14,7 @@ import com.jimuqu.claw.config.SolonClawProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -68,7 +70,7 @@ public class DingTalkRobotSender {
      * @param content 文本内容
      */
     public void sendText(ReplyTarget replyTarget, String content) {
-        if (replyTarget == null || content == null || content.isBlank()) {
+        if (replyTarget == null || StrUtil.isBlank(content)) {
             return;
         }
 
@@ -77,7 +79,7 @@ public class DingTalkRobotSender {
             return;
         }
 
-        if (properties.getRobotCode() == null || properties.getRobotCode().isBlank()) {
+        if (StrUtil.isBlank(properties.getRobotCode())) {
             log.warn("Skip DingTalk send because robotCode is missing.");
             return;
         }
@@ -101,7 +103,7 @@ public class DingTalkRobotSender {
      * @throws Exception 发送异常
      */
     private void sendGroup(ReplyTarget replyTarget, String content) throws Exception {
-        if (replyTarget.getConversationId() == null || replyTarget.getConversationId().isBlank()) {
+        if (StrUtil.isBlank(replyTarget.getConversationId())) {
             log.warn("Skip DingTalk group send because conversationId is missing.");
             return;
         }
@@ -126,7 +128,7 @@ public class DingTalkRobotSender {
      * @throws Exception 发送异常
      */
     private void sendPrivate(ReplyTarget replyTarget, String content) throws Exception {
-        if (replyTarget.getUserId() == null || replyTarget.getUserId().isBlank()) {
+        if (StrUtil.isBlank(replyTarget.getUserId())) {
             log.warn("Skip DingTalk private send because userId is missing.");
             return;
         }
@@ -137,7 +139,7 @@ public class DingTalkRobotSender {
         BatchSendOTORequest request = new BatchSendOTORequest();
         request.setMsgKey(resolveMsgKey(content));
         request.setRobotCode(properties.getRobotCode());
-        request.setUserIds(List.of(replyTarget.getUserId()));
+        request.setUserIds(Collections.singletonList(replyTarget.getUserId()));
         request.setMsgParam(messageParam(content));
 
         robotClient.batchSendOTOWithOptions(request, headers, new RuntimeOptions());
@@ -183,7 +185,7 @@ public class DingTalkRobotSender {
      * @return 标题文本
      */
     String resolveMarkdownTitle(String content) {
-        if (content == null || content.isBlank()) {
+        if (StrUtil.isBlank(content)) {
             return "SolonClaw";
         }
 
@@ -197,7 +199,6 @@ public class DingTalkRobotSender {
 
         return "SolonClaw";
     }
-
     /**
      * 创建钉钉机器人客户端。
      *

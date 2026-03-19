@@ -131,7 +131,23 @@ public class ConversationScheduler {
      * @param activeCount 活跃任务数
      * @param queuedCount 排队任务数
      */
-    public record SessionState(int activeCount, int queuedCount) {
+    public static final class SessionState {
+        private final int activeCount;
+        private final int queuedCount;
+
+        public SessionState(int activeCount, int queuedCount) {
+            this.activeCount = activeCount;
+            this.queuedCount = queuedCount;
+        }
+
+        public int activeCount() {
+            return activeCount;
+        }
+
+        public int queuedCount() {
+            return queuedCount;
+        }
+
         /**
          * 判断当前会话是否繁忙。
          *

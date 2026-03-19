@@ -12,6 +12,7 @@ import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.annotation.Param;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 聚合基础工作区工具与运行时编排工具。
@@ -119,7 +120,7 @@ public class ConversationRuntimeTools {
         if (StrUtil.isNotBlank(batchKey)) {
             runs = runs.stream()
                     .filter(run -> StrUtil.equals(batchKey.trim(), run.getBatchKey()))
-                    .toList();
+                    .collect(Collectors.toList());
         }
         if (runs == null || runs.isEmpty()) {
             return "当前会话还没有子任务。";
