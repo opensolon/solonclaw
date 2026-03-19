@@ -142,17 +142,21 @@ public class SolonAiConversationAgent implements ConversationAgent {
                 request == null ? null : request.getRunQuerySupport(),
                 request == null ? null : request.getNotificationSupport()
         );
-        return ReActAgent.of(chatModel)
+        ReActAgent.Builder builder = ReActAgent.of(chatModel)
                 .name(workspacePromptService.resolveAgentName())
                 .instruction(workspacePromptService.buildSystemPrompt(request))
                 .defaultToolAdd(runtimeTools)
-                .defaultToolAdd(jobTools)
                 .defaultSkillAdd(cliSkillProvider)
                 .defaultInterceptorAdd(reActInterceptor)
                 .maxSteps(50)
                 .retryConfig(5, 1000L)
-                .sessionWindowSize(64)
-                .build();
+                .sessionWindowSize(64);
+
+        if (shouldEnableJobTools(request)) {
+            builder.defaultToolAdd(jobTools);
+        }
+
+        return builder.build();
     }
 
     /**
@@ -174,11 +178,46 @@ public class SolonAiConversationAgent implements ConversationAgent {
         }
 
         if (triggerType == InboundTriggerType.SYSTEM_SILENT) {
-            return "这是一次静默内部检查。请结合最新的 system 消息和既有上下文继续处理，不要把它当作用户新消息。"
-                    + "如果当前没有需要对外说明的事项，请返回简洁状态或 NO_REPLY。";
+            if (isScheduledReminderTrigger(currentMessage)) {
+                return "一个定时提醒已触发。提醒内容见最新的 system 消息。"
+                        + "请把这条提醒自然友好地告知用户，不要把它当作新的用户消息。"
+                        + "如果你已经通过 notify_user 发送了提醒，请返回 NO_REPLY。"
+                        + "如果你直接给出面向用户的提醒文案，运行时会代为发送一次。"
+                        + "除非用户明确要求，否则不要解释内部触发过程。";
+            }
+
+            return "这是一条内部事件，相关结果见最新的 system 消息。"
+                    + "请先在内部处理，不要把它当作新的用户消息。"
+                    + "除非用户明确要求，否则不要把这次内部处理过程转告用户。"
+                    + "如果没有需要面向用户的后续动作，请直接返回 NO_REPLY。";
         }
 
-        return "这是一次内部系统触发。请优先依据最新的 system 消息和既有上下文继续处理，不要把它当作用户新消息。";
+        return "这是一条内部系统事件，相关内容见最新的 system 消息。"
+                + "请结合既有上下文继续处理，不要把它当作新的用户消息。"
+                + "只有在确实需要用户看到结果时，才直接给出面向用户的最终回复。";
+    }
+
+    /**
+     * 静默系统触发只用于内部检查或定时任务执行，不应再次管理定时任务本身。
+     *
+     * @param request 当前执行请求
+     * @return 是否挂载定时任务管理工具
+     */
+    private boolean shouldEnableJobTools(ConversationExecutionRequest request) {
+        if (request == null) {
+            return true;
+        }
+        return request.getCurrentMessageTriggerType() != InboundTriggerType.SYSTEM_SILENT;
+    }
+
+    /**
+     * 判断当前静默事件是否为定时提醒触发。
+     *
+     * @param currentMessage 当前消息文本
+     * @return 若为定时提醒触发则返回 true
+     */
+    private boolean isScheduledReminderTrigger(String currentMessage) {
+        return StrUtil.contains(StrUtil.blankToDefault(currentMessage, ""), "[内部定时任务触发]");
     }
 }
 

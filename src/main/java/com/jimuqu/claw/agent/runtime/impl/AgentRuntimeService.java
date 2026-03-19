@@ -423,6 +423,7 @@ public class AgentRuntimeService {
             if (!suppressReply && finalReplyOnce && StrUtil.isNotBlank(childCompletionParentRunId)) {
                 runtimeStoreService.appendRunEvent(childCompletionParentRunId, "children_aggregated", "aggregateRunId=" + runId);
             }
+            boolean silentReminderDelivered = maybeDeliverSilentReminder(runId, inboundEnvelope, visibleResponse);
             log.info("Run {} succeeded for session {}", runId, inboundEnvelope.getSessionKey());
             handleChildRunCompletion(run);
 
@@ -437,6 +438,14 @@ public class AgentRuntimeService {
                 channelRegistry.send(outboundEnvelope);
                 log.info(
                         "Run {} reply dispatched. channelType={}, conversationType={}, conversationId={}",
+                        runId,
+                        inboundEnvelope.getReplyTarget().getChannelType(),
+                        inboundEnvelope.getReplyTarget().getConversationType(),
+                        inboundEnvelope.getReplyTarget().getConversationId()
+                );
+            } else if (silentReminderDelivered) {
+                log.info(
+                        "Run {} reminder dispatched via silent fallback. channelType={}, conversationType={}, conversationId={}",
                         runId,
                         inboundEnvelope.getReplyTarget().getChannelType(),
                         inboundEnvelope.getReplyTarget().getConversationType(),
@@ -915,6 +924,54 @@ public class AgentRuntimeService {
         String senderId = StrUtil.blankToDefault(inboundEnvelope.getSenderId(), "");
         String prefix = "child-complete:";
         return senderId.startsWith(prefix) ? senderId.substring(prefix.length()) : null;
+    }
+
+    /**
+     * 对定时提醒类的静默系统触发提供一次运行时兜底投递。
+     * 当模型没有显式调用 notify_user、但给出了面向用户的提醒文案时，由运行时代发一次。
+     *
+     * @param runId 运行任务标识
+     * @param inboundEnvelope 入站消息
+     * @param visibleResponse 模型最终可见回复
+     * @return 是否已通过兜底逻辑投递
+     */
+    private boolean maybeDeliverSilentReminder(String runId, InboundEnvelope inboundEnvelope, String visibleResponse) {
+        if (!isSilentReminderTrigger(inboundEnvelope)) {
+            return false;
+        }
+        if (StrUtil.isBlank(visibleResponse) || isNoReply(visibleResponse)) {
+            return false;
+        }
+        if (runtimeStoreService.hasRunEventType(runId, "notify")
+                || runtimeStoreService.hasRunEventType(runId, "notify_progress")) {
+            return false;
+        }
+        if (inboundEnvelope.getReplyTarget() == null || inboundEnvelope.getReplyTarget().isDebugWeb()) {
+            return false;
+        }
+
+        OutboundEnvelope outboundEnvelope = new OutboundEnvelope();
+        outboundEnvelope.setRunId(runId);
+        outboundEnvelope.setReplyTarget(inboundEnvelope.getReplyTarget());
+        outboundEnvelope.setContent(visibleResponse);
+        channelRegistry.send(outboundEnvelope);
+        runtimeStoreService.appendRunEvent(runId, "silent_notify_fallback", visibleResponse);
+        return true;
+    }
+
+    /**
+     * 判断当前静默系统消息是否来自定时提醒触发。
+     *
+     * @param inboundEnvelope 入站消息
+     * @return 若为定时提醒触发则返回 true
+     */
+    private boolean isSilentReminderTrigger(InboundEnvelope inboundEnvelope) {
+        return inboundEnvelope != null
+                && inboundEnvelope.getTriggerType() == InboundTriggerType.SYSTEM_SILENT
+                && StrUtil.contains(
+                StrUtil.blankToDefault(inboundEnvelope.getContent(), ""),
+                "[内部定时任务触发]"
+        );
     }
 
 }

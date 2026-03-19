@@ -282,7 +282,7 @@ public class SolonClawConfig {
                 channelRegistry,
                 properties
         );
-        workspaceJobService.setJobDispatcher(service::submitVisibleSystemMessage);
+        workspaceJobService.setJobDispatcher(service::submitSilentSystemMessage);
         return service;
     }
 

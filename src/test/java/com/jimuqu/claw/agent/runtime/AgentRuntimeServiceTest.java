@@ -363,6 +363,89 @@ class AgentRuntimeServiceTest {
     }
 
     /**
+     * 验证静默系统触发可主动通知用户，但不会把最终回答再次作为普通回复对外发送。
+     *
+     * @throws Exception 执行异常
+     */
+    @Test
+    void silentSystemMessageDoesNotDoubleSendAfterNotifyUser() throws Exception {
+        RuntimeStoreService store = new RuntimeStoreService(tempDir.toFile());
+        ConversationScheduler scheduler = new ConversationScheduler(1);
+        ChannelRegistry registry = new ChannelRegistry();
+        RecordingChannelAdapter adapter = new RecordingChannelAdapter();
+        registry.register(adapter);
+
+        ConversationAgent conversationAgent = (request, progressConsumer) -> {
+            assertEquals(InboundTriggerType.SYSTEM_SILENT, request.getCurrentMessageTriggerType());
+            NotificationResult result = request.getNotificationSupport().notifyUser("静默提醒", false);
+            assertTrue(result.isDelivered());
+            return "已发送提醒";
+        };
+
+        SolonClawProperties properties = new SolonClawProperties();
+        properties.getAgent().getScheduler().setMaxConcurrentPerConversation(1);
+        properties.getAgent().getScheduler().setAckWhenBusy(false);
+
+        try {
+            AgentRuntimeService runtimeService = new AgentRuntimeService(conversationAgent, store, scheduler, registry, properties);
+            ReplyTarget replyTarget = new ReplyTarget(ChannelType.DINGTALK, ConversationType.GROUP, "group-1", "user-1");
+            store.rememberReplyTarget("dingtalk:group:group-1", replyTarget);
+
+            String runId = runtimeService.submitSilentSystemMessage("dingtalk:group:group-1", replyTarget, "内部提醒");
+            assertNotNull(runId);
+            assertTrue(waitUntil(() -> adapter.messages.contains("静默提醒"), 5000));
+
+            assertEquals(1, adapter.outbounds.size());
+            assertEquals("静默提醒", adapter.outbounds.get(0).getContent());
+            assertTrue(store.readConversationEvents("dingtalk:group:group-1").isEmpty());
+        } finally {
+            scheduler.shutdown();
+        }
+    }
+
+    /**
+     * 验证定时提醒类的静默系统触发在未显式 notify_user 时，会把面向用户的提醒文案兜底发送一次。
+     *
+     * @throws Exception 执行异常
+     */
+    @Test
+    void silentReminderCanFallbackToSingleOutboundDelivery() throws Exception {
+        RuntimeStoreService store = new RuntimeStoreService(tempDir.toFile());
+        ConversationScheduler scheduler = new ConversationScheduler(1);
+        ChannelRegistry registry = new ChannelRegistry();
+        RecordingChannelAdapter adapter = new RecordingChannelAdapter();
+        registry.register(adapter);
+
+        ConversationAgent conversationAgent = (request, progressConsumer) -> {
+            assertEquals(InboundTriggerType.SYSTEM_SILENT, request.getCurrentMessageTriggerType());
+            return "活动一下胳膊吧，顺便转转脖子，休息一下眼睛。";
+        };
+
+        SolonClawProperties properties = new SolonClawProperties();
+        properties.getAgent().getScheduler().setMaxConcurrentPerConversation(1);
+        properties.getAgent().getScheduler().setAckWhenBusy(false);
+
+        try {
+            AgentRuntimeService runtimeService = new AgentRuntimeService(conversationAgent, store, scheduler, registry, properties);
+            ReplyTarget replyTarget = new ReplyTarget(ChannelType.DINGTALK, ConversationType.GROUP, "group-1", "user-1");
+            store.rememberReplyTarget("dingtalk:group:group-1", replyTarget);
+
+            String content = "[内部定时任务触发]\n"
+                    + "任务名称: 活动一下\n"
+                    + "提醒内容:\n提醒用户活动一下胳膊，伸展一下";
+            String runId = runtimeService.submitSilentSystemMessage("dingtalk:group:group-1", replyTarget, content);
+            assertNotNull(runId);
+            assertTrue(waitUntil(() -> adapter.messages.contains("活动一下胳膊吧，顺便转转脖子，休息一下眼睛。"), 5000));
+
+            assertEquals(1, adapter.outbounds.size());
+            assertEquals("活动一下胳膊吧，顺便转转脖子，休息一下眼睛。", adapter.outbounds.get(0).getContent());
+            assertTrue(store.hasRunEventType(runId, "silent_notify_fallback"));
+        } finally {
+            scheduler.shutdown();
+        }
+    }
+
+    /**
      * 验证可按父运行聚合多个子任务，并判断是否全部完成。
      *
      * @throws Exception 执行异常

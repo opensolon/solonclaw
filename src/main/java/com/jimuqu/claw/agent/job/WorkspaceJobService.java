@@ -139,7 +139,7 @@ public class WorkspaceJobService {
             if (replyTarget == null || StrUtil.isBlank(definition.getSessionKey()) || jobDispatcher == null) {
                 return;
             }
-            jobDispatcher.dispatch(definition.getSessionKey(), replyTarget, definition.getPrompt());
+            jobDispatcher.dispatch(definition.getSessionKey(), replyTarget, buildExecutionPrompt(definition));
             if (isOneShot(definition)) {
                 removeJob(definition.getName());
             }
@@ -217,6 +217,32 @@ public class WorkspaceJobService {
 
     private boolean isOneShot(JobDefinition definition) {
         return "once_delay".equals(definition.getMode());
+    }
+
+    /**
+     * 将定时任务执行包装成明确的内部事件，避免模型把触发内容误解为新的建任务请求。
+     *
+     * @param definition 定时任务定义
+     * @return 运行时提交给 Agent 的内部提示
+     */
+    private String buildExecutionPrompt(JobDefinition definition) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("[内部定时任务触发]").append('\n');
+        builder.append("任务名称: ").append(StrUtil.blankToDefault(definition.getName(), "(未命名)")).append('\n');
+        builder.append("调度模式: ").append(StrUtil.blankToDefault(definition.getMode(), "(未知)")).append('\n');
+        if (StrUtil.isNotBlank(definition.getScheduleValue())) {
+            builder.append("调度值: ").append(definition.getScheduleValue()).append('\n');
+        }
+        builder.append("提醒内容:").append('\n');
+        builder.append(StrUtil.blankToDefault(definition.getPrompt(), "(空)")).append('\n');
+        builder.append('\n');
+        builder.append("处理规则:").append('\n');
+        builder.append("- 这是一个已经存在的定时提醒正在触发，不是用户要求新建、修改、删除或查询定时任务。").append('\n');
+        builder.append("- 请把这条提醒自然、友好地告知用户。优先调用 notify_user 发送提醒；发送后返回 NO_REPLY。").append('\n');
+        builder.append("- 如果你直接产出了面向用户的提醒文案，运行时会代为发送一次；不要再重复解释内部触发过程。").append('\n');
+        builder.append("- 不要调用 add_job、remove_job、start_job、stop_job、list_jobs、get_job。").append('\n');
+        builder.append("- 如果本次无需对外提醒，也直接返回 NO_REPLY。");
+        return builder.toString();
     }
 }
 
