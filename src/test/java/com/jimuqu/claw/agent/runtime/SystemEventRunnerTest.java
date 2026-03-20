@@ -13,6 +13,7 @@ import com.jimuqu.claw.agent.model.run.AgentRun;
 import com.jimuqu.claw.agent.runtime.api.ConversationAgent;
 import com.jimuqu.claw.agent.runtime.impl.ConversationScheduler;
 import com.jimuqu.claw.agent.runtime.impl.SystemEventRunner;
+import com.jimuqu.claw.agent.runtime.support.DeliveryResult;
 import com.jimuqu.claw.agent.runtime.support.NotificationResult;
 import com.jimuqu.claw.agent.runtime.support.SystemEventRequest;
 import com.jimuqu.claw.agent.store.RuntimeStoreService;
@@ -202,9 +203,16 @@ class SystemEventRunnerTest {
         }
 
         @Override
-        public void send(OutboundEnvelope outboundEnvelope) {
+        public DeliveryResult send(OutboundEnvelope outboundEnvelope) {
             outbounds.add(outboundEnvelope);
             messages.add(outboundEnvelope.getContent());
+            DeliveryResult result = new DeliveryResult();
+            result.setDelivered(true);
+            result.setChannelType(channelType());
+            result.setOriginalLength(outboundEnvelope.getContent() == null ? 0 : outboundEnvelope.getContent().length());
+            result.setFinalLength(result.getOriginalLength());
+            result.setMessage("sent");
+            return result;
         }
     }
 }

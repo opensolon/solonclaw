@@ -18,6 +18,7 @@ import com.jimuqu.claw.agent.runtime.api.NotificationSupport;
 import com.jimuqu.claw.agent.runtime.api.RunQuerySupport;
 import com.jimuqu.claw.agent.runtime.api.SpawnTaskSupport;
 import com.jimuqu.claw.agent.runtime.support.ConversationExecutionRequest;
+import com.jimuqu.claw.agent.runtime.support.DeliveryResult;
 import com.jimuqu.claw.agent.runtime.support.NotificationResult;
 import com.jimuqu.claw.agent.runtime.support.ParentRunChildrenSummary;
 import com.jimuqu.claw.agent.runtime.support.SpawnTaskResult;
@@ -61,22 +62,6 @@ public class AgentRuntimeService {
         this.properties = properties;
     }
 
-    public String submitDebugMessage(String sessionId, String message) {
-        InboundEnvelope inboundEnvelope = new InboundEnvelope();
-        inboundEnvelope.setMessageId("debug-" + IdUtil.fastSimpleUUID());
-        inboundEnvelope.setChannelType(ChannelType.DEBUG_WEB);
-        inboundEnvelope.setChannelInstanceId("debug-web");
-        inboundEnvelope.setSenderId("debug-user");
-        inboundEnvelope.setConversationId(sessionId);
-        inboundEnvelope.setConversationType(ConversationType.PRIVATE);
-        inboundEnvelope.setContent(message);
-        inboundEnvelope.setReceivedAt(System.currentTimeMillis());
-        inboundEnvelope.setSessionKey("debug-web:" + sessionId);
-        inboundEnvelope.setReplyTarget(new ReplyTarget(ChannelType.DEBUG_WEB, ConversationType.PRIVATE, sessionId, "debug-user"));
-        inboundEnvelope.setSourceKind(RuntimeSourceKind.USER_MESSAGE);
-        return submitInbound(inboundEnvelope);
-    }
-
     public String submitInbound(InboundEnvelope inboundEnvelope) {
         if (inboundEnvelope == null) {
             return null;
@@ -104,7 +89,7 @@ public class AgentRuntimeService {
         inboundEnvelope.setHistoryAnchorVersion(nextConversationVersion);
         long version = runtimeStoreService.appendInboundConversationEvent(inboundEnvelope);
         inboundEnvelope.setSessionVersion(version);
-        if (inboundEnvelope.getReplyTarget() != null && !inboundEnvelope.getReplyTarget().isDebugWeb()) {
+        if (inboundEnvelope.getReplyTarget() != null) {
             runtimeStoreService.rememberReplyTarget(inboundEnvelope.getSessionKey(), inboundEnvelope.getReplyTarget());
         }
         log.info(
@@ -129,13 +114,13 @@ public class AgentRuntimeService {
 
         if (properties.getAgent().getScheduler().isAckWhenBusy()
                 && state.activeCount() > 0
-                && inboundEnvelope.getReplyTarget() != null
-                && !inboundEnvelope.getReplyTarget().isDebugWeb()) {
+                && inboundEnvelope.getReplyTarget() != null) {
             OutboundEnvelope ack = new OutboundEnvelope();
             ack.setRunId(run.getRunId());
             ack.setReplyTarget(inboundEnvelope.getReplyTarget());
             ack.setContent(state.queuedCount() > 0 ? "已收到，排队处理中。" : "已收到，正在并行处理中。");
-            channelRegistry.send(ack);
+            DeliveryResult deliveryResult = channelRegistry.send(ack);
+            recordDeliveryResult(run.getRunId(), deliveryResult);
         }
 
         conversationScheduler.submit(inboundEnvelope.getSessionKey(), () -> processRun(inboundEnvelope, run.getRunId()));
@@ -245,13 +230,13 @@ public class AgentRuntimeService {
             handleChildRunCompletion(run);
 
             if (!suppressReply
-                    && inboundEnvelope.getReplyTarget() != null
-                    && !inboundEnvelope.getReplyTarget().isDebugWeb()) {
+                    && inboundEnvelope.getReplyTarget() != null) {
                 OutboundEnvelope outboundEnvelope = new OutboundEnvelope();
                 outboundEnvelope.setRunId(runId);
                 outboundEnvelope.setReplyTarget(inboundEnvelope.getReplyTarget());
                 outboundEnvelope.setContent(visibleResponse);
-                channelRegistry.send(outboundEnvelope);
+                DeliveryResult deliveryResult = channelRegistry.send(outboundEnvelope);
+                recordDeliveryResult(runId, deliveryResult);
                 log.info(
                         "Run {} reply dispatched. channelType={}, conversationType={}, conversationId={}",
                         runId,
@@ -270,13 +255,13 @@ public class AgentRuntimeService {
             log.warn("Run {} failed for session {}: {}", runId, inboundEnvelope.getSessionKey(), throwable.getMessage(), throwable);
             handleChildRunCompletion(run);
 
-            if (inboundEnvelope.getReplyTarget() != null
-                    && !inboundEnvelope.getReplyTarget().isDebugWeb()) {
+            if (inboundEnvelope.getReplyTarget() != null) {
                 OutboundEnvelope outboundEnvelope = new OutboundEnvelope();
                 outboundEnvelope.setRunId(runId);
                 outboundEnvelope.setReplyTarget(inboundEnvelope.getReplyTarget());
                 outboundEnvelope.setContent("抱歉，这次处理失败了：" + throwable.getMessage());
-                channelRegistry.send(outboundEnvelope);
+                DeliveryResult deliveryResult = channelRegistry.send(outboundEnvelope);
+                recordDeliveryResult(runId, deliveryResult);
             }
         }
     }
@@ -557,11 +542,15 @@ public class AgentRuntimeService {
             outboundEnvelope.setReplyTarget(replyTarget);
             outboundEnvelope.setContent(message);
             outboundEnvelope.setProgress(progress);
-            channelRegistry.send(outboundEnvelope);
+            DeliveryResult deliveryResult = channelRegistry.send(outboundEnvelope);
+            recordDeliveryResult(runId, deliveryResult);
+            applyDeliveryResult(result, deliveryResult);
             runtimeStoreService.appendRunEvent(runId, progress ? "notify_progress" : "notify", message);
 
-            result.setDelivered(true);
-            result.setMessage("sent to " + replyTarget.getChannelType() + ":" + replyTarget.getConversationId());
+            result.setDelivered(deliveryResult.isDelivered());
+            if (StrUtil.isBlank(result.getMessage())) {
+                result.setMessage("sent to " + replyTarget.getChannelType() + ":" + replyTarget.getConversationId());
+            }
             return result;
         };
     }
@@ -569,8 +558,7 @@ public class AgentRuntimeService {
     private void dispatchProgressOutbound(String runId, InboundEnvelope inboundEnvelope, String progress) {
         if (StrUtil.isBlank(progress)
                 || inboundEnvelope == null
-                || inboundEnvelope.getReplyTarget() == null
-                || inboundEnvelope.getReplyTarget().isDebugWeb()) {
+                || inboundEnvelope.getReplyTarget() == null) {
             return;
         }
 
@@ -584,7 +572,8 @@ public class AgentRuntimeService {
         outboundEnvelope.setReplyTarget(inboundEnvelope.getReplyTarget());
         outboundEnvelope.setContent(progress);
         outboundEnvelope.setProgress(true);
-        channelRegistry.send(outboundEnvelope);
+        DeliveryResult deliveryResult = channelRegistry.send(outboundEnvelope);
+        recordDeliveryResult(runId, deliveryResult);
     }
 
     private boolean isNoReply(String response) {
@@ -619,12 +608,13 @@ public class AgentRuntimeService {
                 fallback
         );
 
-        if (inboundEnvelope.getReplyTarget() != null && !inboundEnvelope.getReplyTarget().isDebugWeb()) {
+        if (inboundEnvelope.getReplyTarget() != null) {
             OutboundEnvelope outboundEnvelope = new OutboundEnvelope();
             outboundEnvelope.setRunId(runId);
             outboundEnvelope.setReplyTarget(inboundEnvelope.getReplyTarget());
             outboundEnvelope.setContent(fallback);
-            channelRegistry.send(outboundEnvelope);
+            DeliveryResult deliveryResult = channelRegistry.send(outboundEnvelope);
+            recordDeliveryResult(runId, deliveryResult);
             log.info(
                     "Run {} empty response fallback dispatched. channelType={}, conversationType={}, conversationId={}",
                     runId,
@@ -632,6 +622,45 @@ public class AgentRuntimeService {
                     inboundEnvelope.getReplyTarget().getConversationType(),
                     inboundEnvelope.getReplyTarget().getConversationId()
             );
+        }
+    }
+
+    private void applyDeliveryResult(NotificationResult result, DeliveryResult deliveryResult) {
+        if (result == null || deliveryResult == null) {
+            return;
+        }
+        result.setTruncated(deliveryResult.isTruncated());
+        result.setSegmented(deliveryResult.isSegmented());
+        result.setSegmentCount(deliveryResult.getSegmentCount());
+        result.setOriginalLength(deliveryResult.getOriginalLength());
+        result.setFinalLength(deliveryResult.getFinalLength());
+        result.setChannelType(deliveryResult.getChannelType() == null ? null : deliveryResult.getChannelType().name());
+        result.setMessage(deliveryResult.getMessage());
+    }
+
+    private void recordDeliveryResult(String runId, DeliveryResult deliveryResult) {
+        if (deliveryResult == null) {
+            return;
+        }
+        StringBuilder message = new StringBuilder();
+        message.append("channel=").append(deliveryResult.getChannelType())
+                .append(", segmentCount=").append(deliveryResult.getSegmentCount())
+                .append(", originalLength=").append(deliveryResult.getOriginalLength())
+                .append(", finalLength=").append(deliveryResult.getFinalLength());
+        if (StrUtil.isNotBlank(deliveryResult.getMessage())) {
+            message.append(", detail=").append(deliveryResult.getMessage());
+        }
+
+        if (!deliveryResult.isDelivered()) {
+            runtimeStoreService.appendRunEvent(runId, "delivery_failed", message.toString());
+            return;
+        }
+        runtimeStoreService.appendRunEvent(runId, "delivery_sent", message.toString());
+        if (deliveryResult.isSegmented()) {
+            runtimeStoreService.appendRunEvent(runId, "delivery_segmented", message.toString());
+        }
+        if (deliveryResult.isTruncated()) {
+            runtimeStoreService.appendRunEvent(runId, "delivery_truncated", message.toString());
         }
     }
 }

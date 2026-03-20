@@ -14,6 +14,7 @@ import com.jimuqu.claw.agent.runtime.api.ConversationAgent;
 import com.jimuqu.claw.agent.runtime.api.NotificationSupport;
 import com.jimuqu.claw.agent.runtime.support.AgentTurnRequest;
 import com.jimuqu.claw.agent.runtime.support.ConversationExecutionRequest;
+import com.jimuqu.claw.agent.runtime.support.DeliveryResult;
 import com.jimuqu.claw.agent.runtime.support.NotificationResult;
 import com.jimuqu.claw.agent.store.RuntimeStoreService;
 import com.jimuqu.claw.config.SolonClawProperties;
@@ -139,7 +140,7 @@ public class IsolatedAgentRunService {
         }
 
         ReplyTarget replyTarget = resolveReplyTarget(request.getDeliveryMode(), request.getBoundReplyTarget());
-        if (replyTarget == null || replyTarget.isDebugWeb()) {
+        if (replyTarget == null) {
             runtimeStoreService.appendRunEvent(runId, "delivery_suppressed", visibleResponse);
             return false;
         }
@@ -148,9 +149,10 @@ public class IsolatedAgentRunService {
         outboundEnvelope.setRunId(runId);
         outboundEnvelope.setReplyTarget(replyTarget);
         outboundEnvelope.setContent(visibleResponse);
-        channelRegistry.send(outboundEnvelope);
+        DeliveryResult deliveryResult = channelRegistry.send(outboundEnvelope);
+        recordDeliveryResult(runId, deliveryResult);
         runtimeStoreService.appendRunEvent(runId, "delivery_fallback_sent", visibleResponse);
-        return true;
+        return deliveryResult.isDelivered();
     }
 
     private NotificationSupport buildNotificationSupport(AgentTurnRequest request, String runId) {
@@ -169,7 +171,7 @@ public class IsolatedAgentRunService {
             }
 
             ReplyTarget replyTarget = resolveReplyTarget(request.getDeliveryMode(), request.getBoundReplyTarget());
-            if (replyTarget == null || replyTarget.isDebugWeb()) {
+            if (replyTarget == null) {
                 result.setDelivered(false);
                 result.setMessage("当前 agentTurn 没有可用的 ReplyTarget");
                 return result;
@@ -180,11 +182,15 @@ public class IsolatedAgentRunService {
             outboundEnvelope.setReplyTarget(replyTarget);
             outboundEnvelope.setContent(message);
             outboundEnvelope.setProgress(progress);
-            channelRegistry.send(outboundEnvelope);
+            DeliveryResult deliveryResult = channelRegistry.send(outboundEnvelope);
+            recordDeliveryResult(runId, deliveryResult);
+            applyDeliveryResult(result, deliveryResult);
             runtimeStoreService.appendRunEvent(runId, progress ? "notify_progress" : "notify", message);
 
-            result.setDelivered(true);
-            result.setMessage("sent to " + replyTarget.getChannelType() + ":" + replyTarget.getConversationId());
+            result.setDelivered(deliveryResult.isDelivered());
+            if (StrUtil.isBlank(result.getMessage())) {
+                result.setMessage("sent to " + replyTarget.getChannelType() + ":" + replyTarget.getConversationId());
+            }
             return result;
         };
     }
@@ -258,14 +264,53 @@ public class IsolatedAgentRunService {
 
         if (request.getDeliveryMode() != JobDeliveryMode.NONE) {
             ReplyTarget replyTarget = resolveReplyTarget(request.getDeliveryMode(), request.getBoundReplyTarget());
-            if (replyTarget != null && !replyTarget.isDebugWeb()) {
+            if (replyTarget != null) {
                 OutboundEnvelope outboundEnvelope = new OutboundEnvelope();
                 outboundEnvelope.setRunId(runId);
                 outboundEnvelope.setReplyTarget(replyTarget);
                 outboundEnvelope.setContent(fallback);
-                channelRegistry.send(outboundEnvelope);
+                DeliveryResult deliveryResult = channelRegistry.send(outboundEnvelope);
+                recordDeliveryResult(runId, deliveryResult);
                 runtimeStoreService.appendRunEvent(runId, "delivery_fallback_sent", fallback);
             }
+        }
+    }
+
+    private void applyDeliveryResult(NotificationResult result, DeliveryResult deliveryResult) {
+        if (result == null || deliveryResult == null) {
+            return;
+        }
+        result.setTruncated(deliveryResult.isTruncated());
+        result.setSegmented(deliveryResult.isSegmented());
+        result.setSegmentCount(deliveryResult.getSegmentCount());
+        result.setOriginalLength(deliveryResult.getOriginalLength());
+        result.setFinalLength(deliveryResult.getFinalLength());
+        result.setChannelType(deliveryResult.getChannelType() == null ? null : deliveryResult.getChannelType().name());
+        result.setMessage(deliveryResult.getMessage());
+    }
+
+    private void recordDeliveryResult(String runId, DeliveryResult deliveryResult) {
+        if (deliveryResult == null) {
+            return;
+        }
+        StringBuilder message = new StringBuilder();
+        message.append("channel=").append(deliveryResult.getChannelType())
+                .append(", segmentCount=").append(deliveryResult.getSegmentCount())
+                .append(", originalLength=").append(deliveryResult.getOriginalLength())
+                .append(", finalLength=").append(deliveryResult.getFinalLength());
+        if (StrUtil.isNotBlank(deliveryResult.getMessage())) {
+            message.append(", detail=").append(deliveryResult.getMessage());
+        }
+        if (!deliveryResult.isDelivered()) {
+            runtimeStoreService.appendRunEvent(runId, "delivery_failed", message.toString());
+            return;
+        }
+        runtimeStoreService.appendRunEvent(runId, "delivery_sent", message.toString());
+        if (deliveryResult.isSegmented()) {
+            runtimeStoreService.appendRunEvent(runId, "delivery_segmented", message.toString());
+        }
+        if (deliveryResult.isTruncated()) {
+            runtimeStoreService.appendRunEvent(runId, "delivery_truncated", message.toString());
         }
     }
 }

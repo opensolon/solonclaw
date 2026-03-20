@@ -709,10 +709,6 @@ public class RuntimeStoreService {
             sessionLock.unlock();
         }
 
-        if (replyTarget.isDebugWeb()) {
-            return;
-        }
-
         File file = latestReplyTargetFile();
         ReentrantLock lock = lock(file);
         lock.lock();

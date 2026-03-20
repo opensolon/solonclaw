@@ -16,6 +16,7 @@ import com.jimuqu.claw.agent.runtime.impl.AgentRuntimeService;
 import com.jimuqu.claw.agent.runtime.impl.ConversationScheduler;
 import com.jimuqu.claw.agent.runtime.impl.SystemEventRunner;
 import com.jimuqu.claw.agent.runtime.support.ConversationExecutionRequest;
+import com.jimuqu.claw.agent.runtime.support.DeliveryResult;
 import com.jimuqu.claw.agent.runtime.support.NotificationResult;
 import com.jimuqu.claw.agent.runtime.support.ParentRunChildrenSummary;
 import com.jimuqu.claw.agent.store.RuntimeStoreService;
@@ -160,10 +161,12 @@ class AgentRuntimeServiceTest {
     }
 
     @Test
-    void debugMessageIsStillUserMessageAndDoesNotRememberExternalRoute() throws Exception {
+    void debugWebInboundIsHandledLikeNormalUserMessage() throws Exception {
         RuntimeStoreService store = new RuntimeStoreService(tempDir.toFile());
         ConversationScheduler scheduler = new ConversationScheduler(1);
         ChannelRegistry registry = new ChannelRegistry();
+        RecordingChannelAdapter debugAdapter = new RecordingChannelAdapter(ChannelType.DEBUG_WEB);
+        registry.register(debugAdapter);
         AtomicReference<ConversationExecutionRequest> lastRequest = new AtomicReference<ConversationExecutionRequest>();
         ConversationAgent conversationAgent = (request, progressConsumer) -> {
             lastRequest.set(request);
@@ -173,14 +176,29 @@ class AgentRuntimeServiceTest {
         AgentRuntimeService runtimeService = runtimeService(conversationAgent, store, scheduler, registry, properties);
 
         try {
-            String runId = runtimeService.submitDebugMessage("debug-1", "hello");
+            InboundEnvelope inboundEnvelope = new InboundEnvelope();
+            inboundEnvelope.setMessageId("debug-1");
+            inboundEnvelope.setChannelType(ChannelType.DEBUG_WEB);
+            inboundEnvelope.setChannelInstanceId("debug-web");
+            inboundEnvelope.setSenderId("debug-user");
+            inboundEnvelope.setConversationId("debug-1");
+            inboundEnvelope.setConversationType(ConversationType.PRIVATE);
+            inboundEnvelope.setContent("hello");
+            inboundEnvelope.setReplyTarget(new ReplyTarget(ChannelType.DEBUG_WEB, ConversationType.PRIVATE, "debug-1", "debug-user"));
+            inboundEnvelope.setReceivedAt(System.currentTimeMillis());
+            inboundEnvelope.setSessionKey("debug-web:debug-1");
+            inboundEnvelope.setSourceKind(RuntimeSourceKind.USER_MESSAGE);
+
+            String runId = runtimeService.submitInbound(inboundEnvelope);
             assertNotNull(runId);
             assertTrue(waitUntil(() -> {
                 AgentRun run = runtimeService.getRun(runId);
                 return run != null && run.getStatus() == RunStatus.SUCCEEDED;
             }, 5000));
             assertEquals(RuntimeSourceKind.USER_MESSAGE, lastRequest.get().getCurrentSourceKind());
-            assertNull(store.getLatestExternalRoute());
+            assertNotNull(store.getLatestExternalRoute());
+            assertEquals(ChannelType.DEBUG_WEB, store.getLatestExternalRoute().getReplyTarget().getChannelType());
+            assertEquals("debug-reply", debugAdapter.messages.get(0));
         } finally {
             scheduler.shutdown();
         }
@@ -235,8 +253,21 @@ class AgentRuntimeServiceTest {
             ChannelRegistry registry,
             SolonClawProperties properties
     ) {
-        SystemEventRunner systemEventRunner = new SystemEventRunner(conversationAgent, store, scheduler, registry, properties);
-        return new AgentRuntimeService(conversationAgent, store, scheduler, registry, systemEventRunner, properties);
+        SystemEventRunner systemEventRunner = new SystemEventRunner(
+                conversationAgent,
+                store,
+                scheduler,
+                registry,
+                properties
+        );
+        return new AgentRuntimeService(
+                conversationAgent,
+                store,
+                scheduler,
+                registry,
+                systemEventRunner,
+                properties
+        );
     }
 
     private InboundEnvelope inbound(String messageId, String content) {
@@ -269,18 +300,34 @@ class AgentRuntimeServiceTest {
     }
 
     private static class RecordingChannelAdapter implements ChannelAdapter {
+        private final ChannelType channelType;
         protected final List<String> messages = new CopyOnWriteArrayList<String>();
         protected final List<OutboundEnvelope> outbounds = new CopyOnWriteArrayList<OutboundEnvelope>();
 
-        @Override
-        public ChannelType channelType() {
-            return ChannelType.DINGTALK;
+        private RecordingChannelAdapter() {
+            this(ChannelType.DINGTALK);
+        }
+
+        private RecordingChannelAdapter(ChannelType channelType) {
+            this.channelType = channelType;
         }
 
         @Override
-        public void send(OutboundEnvelope outboundEnvelope) {
+        public ChannelType channelType() {
+            return channelType;
+        }
+
+        @Override
+        public DeliveryResult send(OutboundEnvelope outboundEnvelope) {
             outbounds.add(outboundEnvelope);
             messages.add(outboundEnvelope.getContent());
+            DeliveryResult result = new DeliveryResult();
+            result.setDelivered(true);
+            result.setChannelType(channelType());
+            result.setOriginalLength(outboundEnvelope.getContent() == null ? 0 : outboundEnvelope.getContent().length());
+            result.setFinalLength(result.getOriginalLength());
+            result.setMessage("sent");
+            return result;
         }
     }
 

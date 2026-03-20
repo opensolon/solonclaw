@@ -11,6 +11,7 @@ import com.aliyun.dingtalkrobot_1_0.models.OrgGroupSendRequest;
 import com.aliyun.teautil.models.RuntimeOptions;
 import com.jimuqu.claw.agent.model.enums.ConversationType;
 import com.jimuqu.claw.agent.model.route.ReplyTarget;
+import com.jimuqu.claw.agent.runtime.support.DeliveryResult;
 import com.jimuqu.claw.channel.dingtalk.service.DingTalkAccessTokenService;
 import com.jimuqu.claw.config.props.DingTalkProperties;
 import org.slf4j.Logger;
@@ -23,8 +24,8 @@ import java.util.regex.Pattern;
  * 基于钉钉机器人 OpenAPI 发送群聊和私聊消息。
  */
 public class DingTalkRobotSender {
-    private static final Pattern MARKDOWN_PREFIX = Pattern.compile("^[#>*`\\-\\s]+");
     private static final int MAX_MARKDOWN_TEXT_LENGTH = 5000;
+    private static final Pattern MARKDOWN_PREFIX = Pattern.compile("^[#>*`\\-\\s]+");
     private static final String TRUNCATED_SUFFIX = "\n\n[消息过长，已截断]";
     /** 日志记录器。 */
     private static final Logger log = LoggerFactory.getLogger(DingTalkRobotSender.class);
@@ -72,20 +73,32 @@ public class DingTalkRobotSender {
      * @param replyTarget 回复目标
      * @param content 文本内容
      */
-    public void sendText(ReplyTarget replyTarget, String content) {
+    public DeliveryResult sendText(ReplyTarget replyTarget, String content) {
+        DeliveryResult result = new DeliveryResult();
+        result.setChannelType(com.jimuqu.claw.agent.model.enums.ChannelType.DINGTALK);
+        result.setOriginalLength(content == null ? 0 : content.length());
         String normalizedContent = normalizeMarkdownContent(content);
         if (replyTarget == null || StrUtil.isBlank(normalizedContent)) {
-            return;
+            result.setDelivered(false);
+            result.setFinalLength(normalizedContent == null ? 0 : normalizedContent.length());
+            result.setMessage("empty content or missing replyTarget");
+            return result;
         }
 
         if (!accessTokenService.isReady()) {
             log.warn("Skip DingTalk send because access token is not ready.");
-            return;
+            result.setDelivered(false);
+            result.setFinalLength(normalizedContent.length());
+            result.setMessage("access token is not ready");
+            return result;
         }
 
         if (StrUtil.isBlank(properties.getRobotCode())) {
             log.warn("Skip DingTalk send because robotCode is missing.");
-            return;
+            result.setDelivered(false);
+            result.setFinalLength(normalizedContent.length());
+            result.setMessage("robotCode is missing");
+            return result;
         }
 
         try {
@@ -95,6 +108,7 @@ public class DingTalkRobotSender {
                         content == null ? 0 : content.length(),
                         normalizedContent.length()
                 );
+                result.setTruncated(true);
             }
 
             if (replyTarget.getConversationType() == ConversationType.GROUP) {
@@ -102,9 +116,16 @@ public class DingTalkRobotSender {
             } else {
                 sendPrivate(replyTarget, normalizedContent);
             }
+            result.setDelivered(true);
+            result.setFinalLength(normalizedContent.length());
+            result.setMessage("sent");
         } catch (Exception exception) {
             log.warn("Failed to send DingTalk message: {}", exception.getMessage(), exception);
+            result.setDelivered(false);
+            result.setFinalLength(normalizedContent.length());
+            result.setMessage(exception.getMessage());
         }
+        return result;
     }
 
     /**

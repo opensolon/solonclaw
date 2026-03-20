@@ -192,8 +192,20 @@ class WorkspaceJobServiceTest {
 
             ConversationAgent noopAgent = (request, progressConsumer) -> "noop";
             ChannelRegistry registry = new ChannelRegistry();
-            this.systemEventRunner = new CapturingSystemEventRunner(noopAgent, runtimeStoreService, scheduler, registry, properties);
-            this.isolatedAgentRunService = new CapturingIsolatedAgentRunService(noopAgent, runtimeStoreService, scheduler, registry, properties);
+            this.systemEventRunner = new CapturingSystemEventRunner(
+                    noopAgent,
+                    runtimeStoreService,
+                    scheduler,
+                    registry,
+                    properties
+            );
+            this.isolatedAgentRunService = new CapturingIsolatedAgentRunService(
+                    noopAgent,
+                    runtimeStoreService,
+                    scheduler,
+                    registry,
+                    properties
+            );
             this.workspaceJobService = new WorkspaceJobService(
                     jobManager,
                     jobStoreService,
@@ -215,7 +227,13 @@ class WorkspaceJobServiceTest {
                 ChannelRegistry channelRegistry,
                 SolonClawProperties properties
         ) {
-            super(conversationAgent, runtimeStoreService, conversationScheduler, channelRegistry, properties);
+            super(
+                    conversationAgent,
+                    runtimeStoreService,
+                    conversationScheduler,
+                    channelRegistry,
+                    properties
+            );
         }
 
         @Override
@@ -235,7 +253,13 @@ class WorkspaceJobServiceTest {
                 ChannelRegistry channelRegistry,
                 SolonClawProperties properties
         ) {
-            super(conversationAgent, runtimeStoreService, conversationScheduler, channelRegistry, properties);
+            super(
+                    conversationAgent,
+                    runtimeStoreService,
+                    conversationScheduler,
+                    channelRegistry,
+                    properties
+            );
         }
 
         @Override

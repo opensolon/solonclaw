@@ -14,6 +14,7 @@ import com.jimuqu.claw.agent.runtime.api.ConversationAgent;
 import com.jimuqu.claw.agent.runtime.impl.ConversationScheduler;
 import com.jimuqu.claw.agent.runtime.impl.IsolatedAgentRunService;
 import com.jimuqu.claw.agent.runtime.support.AgentTurnRequest;
+import com.jimuqu.claw.agent.runtime.support.DeliveryResult;
 import com.jimuqu.claw.agent.store.RuntimeStoreService;
 import com.jimuqu.claw.config.SolonClawProperties;
 import org.junit.jupiter.api.Test;
@@ -105,6 +106,7 @@ class IsolatedAgentRunServiceTest {
 
     private AgentTurnRequest request(JobDeliveryMode deliveryMode, ReplyTarget boundReplyTarget) {
         AgentTurnRequest request = new AgentTurnRequest();
+        request.setSourceKind(com.jimuqu.claw.agent.model.enums.RuntimeSourceKind.JOB_AGENT_TURN);
         request.setJobName("agent-job");
         request.setBoundSessionKey("dingtalk:group:group-1");
         request.setBoundReplyTarget(boundReplyTarget);
@@ -136,9 +138,16 @@ class IsolatedAgentRunServiceTest {
         }
 
         @Override
-        public void send(OutboundEnvelope outboundEnvelope) {
+        public DeliveryResult send(OutboundEnvelope outboundEnvelope) {
             outbounds.add(outboundEnvelope);
             messages.add(outboundEnvelope.getContent());
+            DeliveryResult result = new DeliveryResult();
+            result.setDelivered(true);
+            result.setChannelType(channelType());
+            result.setOriginalLength(outboundEnvelope.getContent() == null ? 0 : outboundEnvelope.getContent().length());
+            result.setFinalLength(result.getOriginalLength());
+            result.setMessage("sent");
+            return result;
         }
     }
 }

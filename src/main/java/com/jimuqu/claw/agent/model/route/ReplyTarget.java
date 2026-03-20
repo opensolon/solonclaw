@@ -42,13 +42,4 @@ public class ReplyTarget implements Serializable {
         this.conversationId = conversationId;
         this.userId = userId;
     }
-
-    /**
-     * 判断当前目标是否属于调试页渠道。
-     *
-     * @return 若为调试页则返回 true
-     */
-    public boolean isDebugWeb() {
-        return channelType == ChannelType.DEBUG_WEB;
-    }
 }
