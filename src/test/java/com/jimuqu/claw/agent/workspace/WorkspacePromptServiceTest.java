@@ -1,6 +1,7 @@
 package com.jimuqu.claw.agent.workspace;
 
 import cn.hutool.core.io.FileUtil;
+import com.jimuqu.claw.agent.model.enums.RuntimeSourceKind;
 import com.jimuqu.claw.agent.runtime.support.ConversationExecutionRequest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -102,6 +103,48 @@ class WorkspacePromptServiceTest {
         assertFalse(prompt.contains("SOUL-ONLY-CONTENT"));
         assertFalse(prompt.contains("USER-ONLY-CONTENT"));
         assertFalse(prompt.contains("BOOTSTRAP-ONLY-CONTENT"));
+        assertFalse(prompt.contains("MEMORY-ONLY-CONTENT"));
+        assertFalse(prompt.contains("DAILY-ONLY-CONTENT"));
+    }
+
+    /**
+     * 验证轻量上下文会收敛自动化任务的工作区注入，避免人格和 heartbeat 文件干扰任务执行。
+     *
+     * @param tempDir 临时工作区
+     */
+    @Test
+    void lightContextPromptUsesTaskFocusedContext(@TempDir Path tempDir) {
+        AgentWorkspaceService workspaceService = new AgentWorkspaceService(tempDir.toString());
+        WorkspacePromptService promptService = new WorkspacePromptService(workspaceService, "基础系统提示");
+
+        FileUtil.writeUtf8String("# AGENTS\nAGENTS-ONLY-CONTENT", workspaceService.fileInWorkspace(WorkspacePromptService.AGENTS_FILE));
+        FileUtil.writeUtf8String("# SOUL\nSOUL-ONLY-CONTENT", workspaceService.fileInWorkspace(WorkspacePromptService.SOUL_FILE));
+        FileUtil.writeUtf8String("# IDENTITY\nIDENTITY-ONLY-CONTENT", workspaceService.fileInWorkspace(WorkspacePromptService.IDENTITY_FILE));
+        FileUtil.writeUtf8String("# USER\nUSER-ONLY-CONTENT", workspaceService.fileInWorkspace(WorkspacePromptService.USER_FILE));
+        FileUtil.writeUtf8String("# TOOLS\nTOOLS-ONLY-CONTENT", workspaceService.fileInWorkspace(WorkspacePromptService.TOOLS_FILE));
+        FileUtil.writeUtf8String("# HEARTBEAT\nHEARTBEAT-ONLY-CONTENT", workspaceService.fileInWorkspace(WorkspacePromptService.HEARTBEAT_FILE));
+        FileUtil.writeUtf8String("# MEMORY\nMEMORY-ONLY-CONTENT", workspaceService.fileInWorkspace(WorkspacePromptService.MEMORY_FILE));
+        LocalDate today = LocalDate.now();
+        FileUtil.writeUtf8String(
+                "# DAILY\nDAILY-ONLY-CONTENT",
+                workspaceService.fileInWorkspace("memory/" + DateTimeFormatter.ISO_LOCAL_DATE.format(today) + ".md")
+        );
+
+        ConversationExecutionRequest request = new ConversationExecutionRequest();
+        request.setCurrentSourceKind(RuntimeSourceKind.JOB_AGENT_TURN);
+        request.setLightContext(true);
+
+        String prompt = promptService.buildSystemPrompt(request);
+
+        assertTrue(prompt.contains("## 自动化任务"));
+        assertTrue(prompt.contains("不要把当前任务改写成 heartbeat 检查"));
+        assertTrue(prompt.contains("## 轻量上下文"));
+        assertTrue(prompt.contains("TOOLS-ONLY-CONTENT"));
+        assertFalse(prompt.contains("AGENTS-ONLY-CONTENT"));
+        assertFalse(prompt.contains("SOUL-ONLY-CONTENT"));
+        assertFalse(prompt.contains("IDENTITY-ONLY-CONTENT"));
+        assertFalse(prompt.contains("USER-ONLY-CONTENT"));
+        assertFalse(prompt.contains("HEARTBEAT-ONLY-CONTENT"));
         assertFalse(prompt.contains("MEMORY-ONLY-CONTENT"));
         assertFalse(prompt.contains("DAILY-ONLY-CONTENT"));
     }

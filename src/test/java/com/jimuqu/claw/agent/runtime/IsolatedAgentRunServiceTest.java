@@ -23,6 +23,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -99,6 +100,39 @@ class IsolatedAgentRunServiceTest {
             assertNotNull(runId);
             assertTrue(waitUntil(() -> adapter.messages.contains("自动化结果"), 5000));
             assertEquals("group-last", adapter.outbounds.get(0).getReplyTarget().getConversationId());
+        } finally {
+            scheduler.shutdown();
+        }
+    }
+
+    @Test
+    void lightContextFlagPropagatesToExecutionRequest() throws Exception {
+        RuntimeStoreService store = new RuntimeStoreService(tempDir.toFile());
+        ConversationScheduler scheduler = new ConversationScheduler(1);
+        ChannelRegistry registry = new ChannelRegistry();
+        RecordingChannelAdapter adapter = new RecordingChannelAdapter();
+        registry.register(adapter);
+        SolonClawProperties properties = new SolonClawProperties();
+        AtomicReference<com.jimuqu.claw.agent.runtime.support.ConversationExecutionRequest> capturedRequest =
+                new AtomicReference<com.jimuqu.claw.agent.runtime.support.ConversationExecutionRequest>();
+        ConversationAgent conversationAgent = (request, progressConsumer) -> {
+            capturedRequest.set(request);
+            return "自动化结果";
+        };
+        IsolatedAgentRunService service = new IsolatedAgentRunService(conversationAgent, store, scheduler, registry, properties);
+
+        try {
+            AgentTurnRequest request = request(JobDeliveryMode.NONE, null);
+            request.getAgentTurn().setLightContext(true);
+
+            String runId = service.submit(request);
+            assertNotNull(runId);
+            assertTrue(waitUntil(() -> {
+                AgentRun run = store.getRun(runId);
+                return run != null && run.getStatus() == RunStatus.SUCCEEDED;
+            }, 5000));
+            assertNotNull(capturedRequest.get());
+            assertTrue(capturedRequest.get().isLightContext());
         } finally {
             scheduler.shutdown();
         }

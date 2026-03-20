@@ -83,6 +83,7 @@ public class IsolatedAgentRunService {
             executionRequest.setSessionKey(run.getSessionKey());
             executionRequest.setCurrentMessage(request.getAgentTurn().getMessage());
             executionRequest.setCurrentSourceKind(RuntimeSourceKind.JOB_AGENT_TURN);
+            executionRequest.setLightContext(request.getAgentTurn().isLightContext());
             executionRequest.setNotificationSupport(buildNotificationSupport(request, runId));
 
             final String[] latestProgress = {""};

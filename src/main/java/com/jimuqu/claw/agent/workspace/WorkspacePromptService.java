@@ -3,6 +3,7 @@ package com.jimuqu.claw.agent.workspace;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.util.StrUtil;
+import com.jimuqu.claw.agent.model.enums.RuntimeSourceKind;
 import com.jimuqu.claw.agent.runtime.support.ConversationExecutionRequest;
 
 import java.io.File;
@@ -118,13 +119,14 @@ public class WorkspacePromptService {
      */
     public String buildSystemPrompt(ConversationExecutionRequest request) {
         boolean childRun = request != null && request.isChildRun();
+        boolean lightContext = request != null && request.isLightContext();
         List<String> lines = new ArrayList<>();
         lines.add(baseSystemPrompt.trim());
-        appendExecutionGuidance(lines, request, childRun);
+        appendExecutionGuidance(lines, request, childRun, lightContext);
         lines.add("");
         lines.add("当前工作区: " + workspaceService.getWorkspaceDir().getAbsolutePath());
         lines.add("除非用户明确要求，否则所有运行期文件与引导文件都以该工作区为根目录。");
-        appendWorkspaceContext(lines, childRun);
+        appendWorkspaceContext(lines, childRun, lightContext);
         return String.join("\n", lines);
     }
 
@@ -243,8 +245,10 @@ public class WorkspacePromptService {
     private void appendExecutionGuidance(
             List<String> lines,
             ConversationExecutionRequest request,
-            boolean childRun
+            boolean childRun,
+            boolean lightContext
     ) {
+        RuntimeSourceKind sourceKind = request == null ? RuntimeSourceKind.USER_MESSAGE : request.getCurrentSourceKind();
         lines.add("");
         if (childRun) {
             lines.add("## 子任务模式");
@@ -258,6 +262,20 @@ public class WorkspacePromptService {
             lines.add("- 系统默认不鼓励子任务继续派生；如果 `spawn_task` 不可用或被拒绝，先把结果交回父任务。");
             lines.add("- 如果任务完成后不需要直接对外回复，请返回简洁结果供父任务继续汇总。");
             return;
+        }
+
+        if (sourceKind == RuntimeSourceKind.JOB_AGENT_TURN) {
+            lines.add("## 自动化任务");
+            lines.add("- 当前运行来自自动化 agent turn，目标是直接完成本次任务并返回执行结果。");
+            lines.add("- 不要把当前任务改写成 heartbeat 检查、状态巡检或待办扫描，除非任务描述明确要求。");
+            lines.add("- 不要因为工作区里存在 `HEARTBEAT.md` 就主动读取它；只有任务明确要求检查心跳或待办时才读取。");
+            lines.add("- 如果任务要求提醒或通知用户，直接产出提醒内容或调用 `notify_user`，不要先回“状态正常”。");
+        }
+        if (lightContext) {
+            lines.add("## 轻量上下文");
+            lines.add("- 当前运行启用了轻量上下文，应优先依据当前任务描述完成工作。");
+            lines.add("- 除非任务明确要求，不要读取或引用 `AGENTS.md`、`SOUL.md`、`IDENTITY.md`、`USER.md`、`HEARTBEAT.md`、`MEMORY.md` 或 daily memory。");
+            lines.add("- 只有在完成任务确实需要额外背景时，才主动读取相关工作区文件。");
         }
 
         lines.add("## 长任务与子任务");
@@ -275,7 +293,12 @@ public class WorkspacePromptService {
      * @param lines 结果行集合
      * @param childRun 是否为子任务模式
      */
-    private void appendWorkspaceContext(List<String> lines, boolean childRun) {
+    private void appendWorkspaceContext(List<String> lines, boolean childRun, boolean lightContext) {
+        if (lightContext) {
+            appendSection(lines, "轻量工具备注", TOOLS_FILE);
+            return;
+        }
+
         appendSection(lines, childRun ? "子任务工作区规则" : "工作区规则", AGENTS_FILE);
         if (childRun) {
             appendSection(lines, "子任务工具备注", TOOLS_FILE);

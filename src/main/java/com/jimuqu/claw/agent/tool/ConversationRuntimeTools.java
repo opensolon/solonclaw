@@ -67,7 +67,7 @@ public class ConversationRuntimeTools {
         return workspaceAgentTools.editFile(filePath, oldText, newText);
     }
 
-    @ToolMapping(name = "notify_user", description = "向当前会话已绑定的用户主动发送通知；只发送，不接收")
+    @ToolMapping(name = "notify_user", description = "向当前会话已绑定的用户主动发送通知；")
     public String notifyUser(
             @Param(description = "通知内容") String message,
             @Param(description = "是否标记为进度通知，可填 true/false") Boolean progress
@@ -85,7 +85,7 @@ public class ConversationRuntimeTools {
                 : "通知失败: " + result.getMessage();
     }
 
-    @ToolMapping(name = "spawn_task", description = "默认用于长任务、复杂任务和可并行任务的首选拆分方式。适合仓库克隆、编译、部署、排查、并行探索等场景；子任务完成后会自动以内部事件回流父会话，便于继续汇总与追踪进度")
+    @ToolMapping(name = "spawn_task", description = "当你无法立刻直接回答时，优先用它创建子 Agent 去完成具体执行、检查、搜索或分析。适合长任务、复杂任务和可并行任务；子任务完成后会自动以内部事件回流父会话，便于继续汇总与追踪进度")
     public String spawnTask(
             @Param(description = "子任务描述，建议写成单一、清晰、可执行的目标；不要直接复述整段对话") String taskDescription,
             @Param(description = "可选的批次键/计划键；同一批长任务或同一阶段的子任务可复用同一个 batchKey，方便后续统一汇总") String batchKey

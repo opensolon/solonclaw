@@ -27,6 +27,8 @@ public class ConversationExecutionRequest implements Serializable {
     private String currentMessage;
     /** 当前消息的来源类型。 */
     private RuntimeSourceKind currentSourceKind = RuntimeSourceKind.USER_MESSAGE;
+    /** 当前运行是否启用轻量上下文。 */
+    private boolean lightContext;
     /** 当前运行是否为父任务派生出的子任务。 */
     private boolean childRun;
     /** 当前子任务对应的父运行标识。 */
