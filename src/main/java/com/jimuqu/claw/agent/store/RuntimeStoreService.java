@@ -8,9 +8,9 @@ import com.jimuqu.claw.agent.model.run.AgentRun;
 import com.jimuqu.claw.agent.model.event.ChildRunCompletedData;
 import com.jimuqu.claw.agent.model.event.ChildRunSpawnedData;
 import com.jimuqu.claw.agent.model.enums.ChannelType;
+import com.jimuqu.claw.agent.model.enums.RuntimeSourceKind;
 import com.jimuqu.claw.agent.model.event.ConversationEvent;
 import com.jimuqu.claw.agent.model.envelope.InboundEnvelope;
-import com.jimuqu.claw.agent.model.enums.InboundTriggerType;
 import com.jimuqu.claw.agent.model.route.LatestReplyRoute;
 import com.jimuqu.claw.agent.model.route.ReplyTarget;
 import com.jimuqu.claw.agent.model.event.RunEvent;
@@ -116,6 +116,7 @@ public class RuntimeStoreService {
         ConversationEvent event = new ConversationEvent();
         event.setSessionKey(inboundEnvelope.getSessionKey());
         event.setEventType(resolveInboundEventType(inboundEnvelope));
+        event.setSourceKind(inboundEnvelope.getSourceKind());
         event.setSourceMessageId(inboundEnvelope.getMessageId());
         event.setSourceUserVersion(resolveInboundSourceUserVersion(inboundEnvelope));
         event.setRole(resolveInboundEventRole(inboundEnvelope));
@@ -134,11 +135,19 @@ public class RuntimeStoreService {
      * @param content 回复内容
      * @return 新事件版本号
      */
-    public long appendAssistantConversationEvent(String sessionKey, String runId, String sourceMessageId, long sourceUserVersion, String content) {
+    public long appendAssistantConversationEvent(
+            String sessionKey,
+            String runId,
+            String sourceMessageId,
+            long sourceUserVersion,
+            RuntimeSourceKind sourceKind,
+            String content
+    ) {
         ConversationEvent event = new ConversationEvent();
         event.setSessionKey(sessionKey);
         event.setEventType("assistant_reply");
         event.setRunId(runId);
+        event.setSourceKind(sourceKind);
         event.setSourceMessageId(sourceMessageId);
         event.setSourceUserVersion(sourceUserVersion);
         event.setRole("assistant");
@@ -160,6 +169,7 @@ public class RuntimeStoreService {
         event.setSessionKey(sessionKey);
         event.setEventType("system_event");
         event.setRunId(runId);
+        event.setSourceKind(RuntimeSourceKind.CHILD_CONTINUATION);
         event.setRole("system");
         event.setContent(content);
         event.setCreatedAt(System.currentTimeMillis());
@@ -187,6 +197,7 @@ public class RuntimeStoreService {
         event.setSessionKey(sessionKey);
         event.setEventType("child_run_spawned");
         event.setRunId(parentRunId);
+        event.setSourceKind(RuntimeSourceKind.CHILD_CONTINUATION);
         event.setSourceUserVersion(sourceUserVersion);
         event.setRole("system");
         event.setContent("子任务已创建");
@@ -219,6 +230,7 @@ public class RuntimeStoreService {
         event.setSessionKey(sessionKey);
         event.setEventType("child_run_completed");
         event.setRunId(parentRunId);
+        event.setSourceKind(RuntimeSourceKind.CHILD_CONTINUATION);
         event.setSourceUserVersion(sourceUserVersion);
         event.setRole("system");
         event.setContent("子任务已完成");
@@ -378,6 +390,10 @@ public class RuntimeStoreService {
         try {
             RunEvent runEvent = new RunEvent();
             runEvent.setRunId(runId);
+            AgentRun agentRun = getRun(runId);
+            if (agentRun != null) {
+                runEvent.setSourceKind(agentRun.getSourceKind());
+            }
             runEvent.setEventType(eventType);
             runEvent.setMessage(message);
             runEvent.setCreatedAt(System.currentTimeMillis());
@@ -693,10 +709,6 @@ public class RuntimeStoreService {
             sessionLock.unlock();
         }
 
-        if (replyTarget.isDebugWeb()) {
-            return;
-        }
-
         File file = latestReplyTargetFile();
         ReentrantLock lock = lock(file);
         lock.lock();
@@ -887,8 +899,8 @@ public class RuntimeStoreService {
      * @return 会话事件类型
      */
     private String resolveInboundEventType(InboundEnvelope inboundEnvelope) {
-        InboundTriggerType triggerType = inboundEnvelope == null ? null : inboundEnvelope.getTriggerType();
-        if (triggerType == null || triggerType == InboundTriggerType.USER) {
+        RuntimeSourceKind sourceKind = inboundEnvelope == null ? null : inboundEnvelope.getSourceKind();
+        if (sourceKind == null || sourceKind == RuntimeSourceKind.USER_MESSAGE) {
             return "user_message";
         }
         return "system_event";
@@ -901,8 +913,8 @@ public class RuntimeStoreService {
      * @return 会话事件角色
      */
     private String resolveInboundEventRole(InboundEnvelope inboundEnvelope) {
-        InboundTriggerType triggerType = inboundEnvelope == null ? null : inboundEnvelope.getTriggerType();
-        if (triggerType == null || triggerType == InboundTriggerType.USER) {
+        RuntimeSourceKind sourceKind = inboundEnvelope == null ? null : inboundEnvelope.getSourceKind();
+        if (sourceKind == null || sourceKind == RuntimeSourceKind.USER_MESSAGE) {
             return "user";
         }
         return "system";
@@ -915,8 +927,8 @@ public class RuntimeStoreService {
      * @return 历史锚点版本
      */
     private long resolveInboundSourceUserVersion(InboundEnvelope inboundEnvelope) {
-        InboundTriggerType triggerType = inboundEnvelope == null ? null : inboundEnvelope.getTriggerType();
-        if (triggerType == null || triggerType == InboundTriggerType.USER) {
+        RuntimeSourceKind sourceKind = inboundEnvelope == null ? null : inboundEnvelope.getSourceKind();
+        if (sourceKind == null || sourceKind == RuntimeSourceKind.USER_MESSAGE) {
             return 0L;
         }
         return inboundEnvelope.getHistoryAnchorVersion();

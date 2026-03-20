@@ -2,7 +2,7 @@ package com.jimuqu.claw.agent.model.envelope;
 
 import com.jimuqu.claw.agent.model.enums.ChannelType;
 import com.jimuqu.claw.agent.model.enums.ConversationType;
-import com.jimuqu.claw.agent.model.enums.InboundTriggerType;
+import com.jimuqu.claw.agent.model.enums.RuntimeSourceKind;
 import com.jimuqu.claw.agent.model.route.ReplyTarget;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -17,6 +17,7 @@ import java.util.List;
 @Data
 @NoArgsConstructor
 public class InboundEnvelope implements Serializable {
+    /** 序列化版本号。 */
     private static final long serialVersionUID = 1L;
 
     /** 上游消息唯一标识。 */
@@ -43,14 +44,8 @@ public class InboundEnvelope implements Serializable {
     private String sessionKey;
     /** 会话事件版本号。 */
     private long sessionVersion;
-    /** 当前入站触发类型。 */
-    private InboundTriggerType triggerType = InboundTriggerType.USER;
+    /** 当前入站来源类型。 */
+    private RuntimeSourceKind sourceKind = RuntimeSourceKind.USER_MESSAGE;
     /** 当前运行关联到的历史锚点版本。 */
     private long historyAnchorVersion;
-    /** 是否允许将最终回复回发到外部渠道。 */
-    private boolean externalReplyEnabled = true;
-    /** 是否将当前入站消息写入会话历史。 */
-    private boolean persistInboundConversationEvent = true;
-    /** 是否将本次运行产生的助手回复写入会话历史。 */
-    private boolean persistAssistantConversationEvent = true;
 }

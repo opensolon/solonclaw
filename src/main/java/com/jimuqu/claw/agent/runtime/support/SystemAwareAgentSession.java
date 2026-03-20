@@ -13,6 +13,11 @@ public class SystemAwareAgentSession extends InMemoryChatSession implements Agen
     /** 当前执行快照。 */
     private volatile FlowContext snapshot;
 
+    @Override
+    public FlowContext getContext() {
+        return snapshot;
+    }
+
     /**
      * 创建带默认窗口大小的会话。
      *

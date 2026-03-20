@@ -1,6 +1,7 @@
 package com.jimuqu.claw.agent.model.run;
 
 import com.jimuqu.claw.agent.model.enums.RunStatus;
+import com.jimuqu.claw.agent.model.enums.RuntimeSourceKind;
 import com.jimuqu.claw.agent.model.route.ReplyTarget;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -13,6 +14,7 @@ import java.io.Serializable;
 @Data
 @NoArgsConstructor
 public class AgentRun implements Serializable {
+    /** 序列化版本号。 */
     private static final long serialVersionUID = 1L;
 
     /** 运行任务唯一标识。 */
@@ -21,6 +23,8 @@ public class AgentRun implements Serializable {
     private String sessionKey;
     /** 来源消息标识。 */
     private String sourceMessageId;
+    /** 运行来源类型。 */
+    private RuntimeSourceKind sourceKind = RuntimeSourceKind.USER_MESSAGE;
     /** 来源用户消息版本号。 */
     private long sourceUserVersion;
     /** 父运行任务标识；为空表示根运行。 */
@@ -33,6 +37,8 @@ public class AgentRun implements Serializable {
     private String taskDescription;
     /** 当前运行所属的子任务批次键。 */
     private String batchKey;
+    /** 当前运行关联的业务运行标识，例如 continuation 对应的父运行。 */
+    private String relatedRunId;
     /** 原路回复目标。 */
     private ReplyTarget replyTarget;
     /** 当前运行状态。 */

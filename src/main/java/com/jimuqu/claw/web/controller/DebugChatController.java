@@ -2,6 +2,11 @@ package com.jimuqu.claw.web.controller;
 
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
+import com.jimuqu.claw.agent.model.envelope.InboundEnvelope;
+import com.jimuqu.claw.agent.model.enums.ChannelType;
+import com.jimuqu.claw.agent.model.enums.ConversationType;
+import com.jimuqu.claw.agent.model.enums.RuntimeSourceKind;
+import com.jimuqu.claw.agent.model.route.ReplyTarget;
 import com.jimuqu.claw.agent.model.run.AgentRun;
 import com.jimuqu.claw.agent.model.event.RunEvent;
 import com.jimuqu.claw.agent.runtime.impl.AgentRuntimeService;
@@ -50,7 +55,19 @@ public class DebugChatController {
             sessionId = "default";
         }
 
-        String runId = agentRuntimeService.submitDebugMessage(sessionId, request.getMessage());
+        InboundEnvelope inboundEnvelope = new InboundEnvelope();
+        inboundEnvelope.setMessageId("debug-" + java.util.UUID.randomUUID().toString().replace("-", ""));
+        inboundEnvelope.setChannelType(ChannelType.DEBUG_WEB);
+        inboundEnvelope.setChannelInstanceId("debug-web");
+        inboundEnvelope.setSenderId("debug-user");
+        inboundEnvelope.setConversationId(sessionId);
+        inboundEnvelope.setConversationType(ConversationType.PRIVATE);
+        inboundEnvelope.setContent(request.getMessage());
+        inboundEnvelope.setReceivedAt(System.currentTimeMillis());
+        inboundEnvelope.setSessionKey("debug-web:" + sessionId);
+        inboundEnvelope.setReplyTarget(new ReplyTarget(ChannelType.DEBUG_WEB, ConversationType.PRIVATE, sessionId, "debug-user"));
+        inboundEnvelope.setSourceKind(RuntimeSourceKind.USER_MESSAGE);
+        String runId = agentRuntimeService.submitInbound(inboundEnvelope);
         return new DebugChatResponse(runId, "debug-web:" + sessionId, "queued");
     }
 

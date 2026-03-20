@@ -1,4 +1,5 @@
 package com.jimuqu.claw.config;
+
 import cn.hutool.core.io.FileUtil;
 import com.jimuqu.claw.agent.channel.ChannelRegistry;
 import com.jimuqu.claw.agent.job.JobStoreService;
@@ -7,7 +8,10 @@ import com.jimuqu.claw.agent.runtime.impl.AgentRuntimeService;
 import com.jimuqu.claw.agent.runtime.api.ConversationAgent;
 import com.jimuqu.claw.agent.runtime.impl.ConversationScheduler;
 import com.jimuqu.claw.agent.runtime.impl.HeartbeatService;
+import com.jimuqu.claw.agent.runtime.impl.IsolatedAgentRunService;
+import com.jimuqu.claw.agent.runtime.impl.ReActLoggingInterceptor;
 import com.jimuqu.claw.agent.runtime.impl.SolonAiConversationAgent;
+import com.jimuqu.claw.agent.runtime.impl.SystemEventRunner;
 import com.jimuqu.claw.agent.store.RuntimeStoreService;
 import com.jimuqu.claw.agent.tool.JobTools;
 import com.jimuqu.claw.constitution.BlacklistInterceptor;
@@ -21,6 +25,7 @@ import com.jimuqu.claw.channel.dingtalk.adapter.DingTalkChannelAdapter;
 import com.jimuqu.claw.channel.dingtalk.sender.DingTalkRobotSender;
 import com.jimuqu.claw.channel.feishu.sender.FeishuBotSender;
 import com.jimuqu.claw.channel.feishu.adapter.FeishuChannelAdapter;
+import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.skills.cli.CliSkillProvider;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.annotation.Bean;
@@ -114,17 +119,25 @@ public class SolonClawConfig {
      *
      * @param jobManager 任务管理器
      * @param jobStoreService 定时任务存储服务
-     * @param runtimeStoreService 运行时存储服务
-     * @param agentRuntimeService Agent 运行时服务
      * @return 工作区定时任务服务
      */
     @Bean(initMethod = "restorePersistedJobs")
     public WorkspaceJobService workspaceJobService(
             IJobManager jobManager,
             JobStoreService jobStoreService,
-            RuntimeStoreService runtimeStoreService
+            RuntimeStoreService runtimeStoreService,
+            SystemEventRunner systemEventRunner,
+            IsolatedAgentRunService isolatedAgentRunService,
+            SolonClawProperties properties
     ) {
-        return new WorkspaceJobService(jobManager, jobStoreService, runtimeStoreService);
+        return new WorkspaceJobService(
+                jobManager,
+                jobStoreService,
+                runtimeStoreService,
+                systemEventRunner,
+                isolatedAgentRunService,
+                properties
+        );
     }
 
     /**
@@ -134,8 +147,13 @@ public class SolonClawConfig {
      * @return 定时任务工具
      */
     @Bean
-    public JobTools jobTools(WorkspaceJobService workspaceJobService) {
-        return new JobTools(workspaceJobService);
+    public JobTools jobTools(
+            WorkspaceJobService workspaceJobService,
+            SolonAiConversationAgent conversationAgent
+    ) {
+        JobTools jobTools = new JobTools(workspaceJobService);
+        conversationAgent.setJobTools(jobTools);
+        return jobTools;
     }
 
     /**
@@ -174,6 +192,16 @@ public class SolonClawConfig {
     }
 
     /**
+     * 创建 ReAct 运行日志拦截器。
+     *
+     * @return ReAct 日志拦截器
+     */
+    @Bean
+    public ReActInterceptor reActLoggingInterceptor() {
+        return new ReActLoggingInterceptor();
+    }
+
+    /**
      * 创建黑名单拦截器。
      * 始终创建，空黑名单不会拦截任何命令。
      */
@@ -181,7 +209,7 @@ public class SolonClawConfig {
     public HITLInterceptor blacklistInterceptor(SolonClawProperties properties) {
         BlacklistProperties blacklistProps = properties.getAgent().getBlacklist();
         BlacklistInterceptor strategy = new BlacklistInterceptor(
-                blacklistProps.isEnabled() ? blacklistProps : null
+                blacklistProps != null && blacklistProps.isEnabled() ? blacklistProps : null
         );
         return new HITLInterceptor().onTool("bash", strategy);
     }
@@ -194,12 +222,12 @@ public class SolonClawConfig {
      * @return 会话执行 Agent
      */
     @Bean
-    public ConversationAgent conversationAgent(
+    public SolonAiConversationAgent conversationAgent(
             ChatModel chatModel,
             WorkspacePromptService workspacePromptService,
             WorkspaceAgentTools workspaceAgentTools,
             CliSkillProvider cliSkillProvider,
-            JobTools jobTools,
+            ReActInterceptor reActLoggingInterceptor,
             HITLInterceptor blacklistInterceptor
     ) {
         return new SolonAiConversationAgent(
@@ -207,7 +235,7 @@ public class SolonClawConfig {
                 workspacePromptService,
                 workspaceAgentTools,
                 cliSkillProvider,
-                jobTools,
+                reActLoggingInterceptor,
                 blacklistInterceptor
         );
     }
@@ -220,6 +248,40 @@ public class SolonClawConfig {
     @Bean
     public ChannelRegistry channelRegistry() {
         return new ChannelRegistry();
+    }
+
+    @Bean(initMethod = "start", destroyMethod = "stop")
+    public SystemEventRunner systemEventRunner(
+            ConversationAgent conversationAgent,
+            RuntimeStoreService runtimeStoreService,
+            ConversationScheduler conversationScheduler,
+            ChannelRegistry channelRegistry,
+            SolonClawProperties properties
+    ) {
+        return new SystemEventRunner(
+                conversationAgent,
+                runtimeStoreService,
+                conversationScheduler,
+                channelRegistry,
+                properties
+        );
+    }
+
+    @Bean
+    public IsolatedAgentRunService isolatedAgentRunService(
+            ConversationAgent conversationAgent,
+            RuntimeStoreService runtimeStoreService,
+            ConversationScheduler conversationScheduler,
+            ChannelRegistry channelRegistry,
+            SolonClawProperties properties
+    ) {
+        return new IsolatedAgentRunService(
+                conversationAgent,
+                runtimeStoreService,
+                conversationScheduler,
+                channelRegistry,
+                properties
+        );
     }
 
     /**
@@ -276,18 +338,17 @@ public class SolonClawConfig {
             RuntimeStoreService runtimeStoreService,
             ConversationScheduler conversationScheduler,
             ChannelRegistry channelRegistry,
-            WorkspaceJobService workspaceJobService,
+            SystemEventRunner systemEventRunner,
             SolonClawProperties properties
     ) {
-        AgentRuntimeService service = new AgentRuntimeService(
+        return new AgentRuntimeService(
                 conversationAgent,
                 runtimeStoreService,
                 conversationScheduler,
                 channelRegistry,
+                systemEventRunner,
                 properties
         );
-        workspaceJobService.setJobDispatcher(service::submitVisibleSystemMessage);
-        return service;
     }
 
     /**
@@ -344,18 +405,18 @@ public class SolonClawConfig {
     /**
      * 创建心跳服务。
      *
-     * @param agentRuntimeService Agent 运行时服务
+     * @param systemEventRunner 系统事件执行器
      * @param runtimeStoreService 运行时存储服务
      * @param properties 项目配置
      * @return 心跳服务
      */
     @Bean(initMethod = "start", destroyMethod = "stop")
     public HeartbeatService heartbeatService(
-            AgentRuntimeService agentRuntimeService,
+            SystemEventRunner systemEventRunner,
             RuntimeStoreService runtimeStoreService,
             SolonClawProperties properties
     ) {
-        return new HeartbeatService(agentRuntimeService, runtimeStoreService, properties);
+        return new HeartbeatService(systemEventRunner, runtimeStoreService, properties);
     }
 }
 

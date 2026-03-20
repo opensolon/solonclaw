@@ -1,6 +1,7 @@
 package com.jimuqu.claw.agent.runtime.impl;
 
-import com.jimuqu.claw.agent.model.enums.InboundTriggerType;
+import cn.hutool.core.util.StrUtil;
+import com.jimuqu.claw.agent.model.enums.RuntimeSourceKind;
 import com.jimuqu.claw.agent.runtime.api.ConversationAgent;
 import com.jimuqu.claw.agent.runtime.support.ConversationExecutionRequest;
 import com.jimuqu.claw.agent.runtime.support.SystemAwareAgentSession;
@@ -9,13 +10,16 @@ import com.jimuqu.claw.agent.tool.ConversationRuntimeTools;
 import com.jimuqu.claw.agent.tool.JobTools;
 import com.jimuqu.claw.agent.tool.WorkspaceAgentTools;
 import com.jimuqu.claw.agent.workspace.WorkspacePromptService;
-import cn.hutool.core.util.StrUtil;
+import lombok.Setter;
 import org.noear.solon.ai.agent.AgentChunk;
 import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.skills.cli.CliSkillProvider;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 
 import java.util.concurrent.atomic.AtomicReference;
@@ -25,49 +29,66 @@ import java.util.function.Consumer;
  * 基于 Solon AI ReActAgent 的会话执行实现。
  */
 public class SolonAiConversationAgent implements ConversationAgent {
-    /** 聊天模型。 */
+
+    private static final Logger log = LoggerFactory.getLogger(SolonAiConversationAgent.class);
+    /**
+     * 聊天模型。
+     */
     private final ChatModel chatModel;
-    /** 工作区提示词服务。 */
+    /**
+     * 工作区提示词服务。
+     */
     private final WorkspacePromptService workspacePromptService;
-    /** 工作区工具集。 */
+    /**
+     * 工作区工具集。
+     */
     private final WorkspaceAgentTools workspaceAgentTools;
-    /** CLI 技能提供者。 */
+    /**
+     * CLI 技能提供者。
+     */
     private final CliSkillProvider cliSkillProvider;
-    /** 定时任务工具。 */
-    private final JobTools jobTools;
+    /**
+     * 定时任务工具。
+     */
+    @Setter
+    private JobTools jobTools;
+    /**
+     * ReAct 运行日志拦截器。
+     */
+    private final ReActInterceptor reActInterceptor;
     /** 黑名单拦截器（可选）。 */
     private final HITLInterceptor blacklistInterceptor;
 
     /**
      * 创建基于聊天模型的会话执行 Agent。
      *
-     * @param chatModel 聊天模型
+     * @param chatModel              聊天模型
      * @param workspacePromptService 工作区提示词服务
-     * @param workspaceAgentTools 工作区工具集
-     * @param cliSkillProvider CLI 技能提供者
-     * @param jobTools 定时任务工具
-     * @param blacklistInterceptor 黑名单拦截器，为 null 时不启用
+     * @param workspaceAgentTools    工作区工具集
+     * @param cliSkillProvider       CLI 技能提供者
+     * @param reActInterceptor       ReAct 运行日志拦截器
+     * @param blacklistInterceptor   黑名单拦截器，为 null 时不启用
      */
     public SolonAiConversationAgent(
             ChatModel chatModel,
             WorkspacePromptService workspacePromptService,
             WorkspaceAgentTools workspaceAgentTools,
             CliSkillProvider cliSkillProvider,
-            JobTools jobTools,
+            ReActInterceptor reActInterceptor,
             HITLInterceptor blacklistInterceptor
     ) {
         this.chatModel = chatModel;
         this.workspacePromptService = workspacePromptService;
         this.workspaceAgentTools = workspaceAgentTools;
         this.cliSkillProvider = cliSkillProvider;
-        this.jobTools = jobTools;
+        this.reActInterceptor = reActInterceptor;
         this.blacklistInterceptor = blacklistInterceptor;
     }
 
     /**
      * 执行一次对话请求。
      *
-     * @param request 会话执行请求
+     * @param request          会话执行请求
      * @param progressConsumer 进度回调
      * @return 最终回复内容
      * @throws Throwable 流式执行过程中的异常
@@ -83,23 +104,30 @@ public class SolonAiConversationAgent implements ConversationAgent {
         VisibleProgressAccumulator progressAccumulator = new VisibleProgressAccumulator();
 
         String prompt = resolvePrompt(request, session);
+
         Flux<AgentChunk> stream = buildAgent(request)
                 .prompt(prompt)
                 .session(session)
                 .stream();
 
-        AgentChunk finalChunk = stream.doOnNext(chunk -> {
-            ChatMessage message = chunk.getMessage();
-            String content = message.getContent();
-            boolean thinking = message.isThinking();
-            boolean toolCalls = message.isToolCalls();
+        AgentChunk finalChunk;
+        try {
+            finalChunk = stream.doOnNext(chunk -> {
+                ChatMessage message = chunk.getMessage();
+                String content = message.getContent();
+                boolean thinking = message.isThinking();
+                boolean toolCalls = message.isToolCalls();
 
-            String visibleProgress = progressAccumulator.append(content, thinking, toolCalls);
-            if (StrUtil.isNotBlank(visibleProgress) && !visibleProgress.equals(latestChunk.get())) {
-                latestChunk.set(visibleProgress);
-                progressConsumer.accept(visibleProgress);
-            }
-        }).blockLast();
+                String visibleProgress = progressAccumulator.append(content, thinking, toolCalls);
+                if (StrUtil.isNotBlank(visibleProgress) && !visibleProgress.equals(latestChunk.get())) {
+                    latestChunk.set(visibleProgress);
+                    progressConsumer.accept(visibleProgress);
+                }
+            }).blockLast();
+        } catch (Exception e) {
+            log.error("Failed to execute conversation: {}", e.getMessage(), e);
+            return "执行会话失败：" + e.getMessage();
+        }
 
         if (finalChunk == null) {
             return latestChunk.get();
@@ -124,8 +152,8 @@ public class SolonAiConversationAgent implements ConversationAgent {
                 .name(workspacePromptService.resolveAgentName())
                 .instruction(workspacePromptService.buildSystemPrompt(request))
                 .defaultToolAdd(runtimeTools)
-                .defaultToolAdd(jobTools)
                 .defaultSkillAdd(cliSkillProvider)
+                .defaultInterceptorAdd(reActInterceptor)
                 .maxSteps(50)
                 .retryConfig(5, 1000L)
                 .sessionWindowSize(64);
@@ -133,35 +161,64 @@ public class SolonAiConversationAgent implements ConversationAgent {
         if (blacklistInterceptor != null) {
             builder.defaultInterceptorAdd(blacklistInterceptor);
         }
+        if (jobTools != null && shouldEnableJobTools(request)) {
+            builder.defaultToolAdd(jobTools);
+        }
 
         return builder.build();
     }
 
     /**
-     * 为不同类型的触发生成合适的当前轮次提示。
+     * 静默系统触发只用于内部检查或定时任务执行，不应再次管理定时任务本身。
+     *
+     * @param request 当前执行请求
+     * @return 是否挂载定时任务管理工具
+     */
+    private boolean shouldEnableJobTools(ConversationExecutionRequest request) {
+        if (request == null) {
+            return true;
+        }
+        return request.getCurrentSourceKind() == RuntimeSourceKind.USER_MESSAGE;
+    }
+
+    /**
+     * 为不同来源类型生成合适的当前轮次提示。
      *
      * @param request 当前执行请求
      * @param session 会话上下文
      * @return 当前轮次提示
      */
     private String resolvePrompt(ConversationExecutionRequest request, SystemAwareAgentSession session) {
-        InboundTriggerType triggerType = request == null ? InboundTriggerType.USER : request.getCurrentMessageTriggerType();
+        RuntimeSourceKind sourceKind = request == null ? RuntimeSourceKind.USER_MESSAGE : request.getCurrentSourceKind();
         String currentMessage = request == null ? null : request.getCurrentMessage();
-        if (triggerType == null || triggerType == InboundTriggerType.USER) {
+        if (sourceKind == RuntimeSourceKind.USER_MESSAGE) {
             return currentMessage;
         }
 
-        if (currentMessage != null && currentMessage.trim().length() > 0) {
+        if (StrUtil.isNotBlank(currentMessage)) {
             session.addMessage(ChatMessage.ofSystem(currentMessage));
         }
 
-        if (triggerType == InboundTriggerType.SYSTEM_SILENT) {
-            return "这是一次静默内部检查。请结合最新的 system 消息和既有上下文继续处理，不要把它当作用户新消息。"
-                    + "如果当前没有需要对外说明的事项，请返回简洁状态或 NO_REPLY。";
+        if (sourceKind == RuntimeSourceKind.JOB_SYSTEM_EVENT) {
+            return "一条定时任务事件已触发，具体内容见最新的 system 消息。"
+                    + "请直接处理这条内部事件；如果需要提醒用户，就生成一条自然友好的提醒文本，"
+                    + "或显式调用 notify_user。不要解释内部机制。";
+        }
+        if (sourceKind == RuntimeSourceKind.HEARTBEAT_EVENT) {
+            return "这是一条心跳内部检查事件，相关内容见最新的 system 消息。"
+                    + "请先在内部处理；如果没有明确的用户可见动作，请直接返回 NO_REPLY。";
+        }
+        if (sourceKind == RuntimeSourceKind.CHILD_CONTINUATION) {
+            return "一条子任务 continuation 事件已到达，结构化结果见最新的 system 消息。"
+                    + "请结合当前会话上下文继续聚合处理；如果还不能给用户最终答复，请返回 NO_REPLY。"
+                    + "如果需要最终聚合回复，请使用 FINAL_REPLY_ONCE: 前缀。";
+        }
+        if (sourceKind == RuntimeSourceKind.JOB_AGENT_TURN) {
+            return "这是一次隔离的自动化 agent turn。请根据当前任务描述完成工作。"
+                    + "不要把它当作新的用户对话，也不要解释内部调度过程。";
         }
 
-        return "这是一次内部系统触发。请优先依据最新的 system 消息和既有上下文继续处理，不要把它当作用户新消息。";
+        return currentMessage;
     }
 }
-
 
