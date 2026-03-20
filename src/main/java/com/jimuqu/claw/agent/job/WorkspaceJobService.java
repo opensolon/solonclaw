@@ -48,16 +48,22 @@ public class WorkspaceJobService {
 
     public void restorePersistedJobs() {
         for (JobDefinition definition : jobStoreService.loadAll()) {
+            normalizeDefinition(definition);
             registerJob(definition);
+            jobStoreService.save(definition);
         }
     }
 
     public List<JobDefinition> listJobs() {
-        return jobStoreService.loadAll();
+        List<JobDefinition> definitions = jobStoreService.loadAll();
+        for (JobDefinition definition : definitions) {
+            normalizeDefinition(definition);
+        }
+        return definitions;
     }
 
     public JobDefinition getJob(String name) {
-        return jobStoreService.get(name);
+        return normalizeDefinition(jobStoreService.get(name));
     }
 
     public JobDefinition addSystemJob(
@@ -153,6 +159,16 @@ public class WorkspaceJobService {
         return definition;
     }
 
+    public JobDefinition addJob(String name, String mode, String scheduleValue, String prompt, long initialDelay, String zone) {
+        if (StrUtil.isBlank(prompt)) {
+            throw new IllegalArgumentException("prompt 不能为空");
+        }
+
+        AgentTurnSpec agentTurnSpec = new AgentTurnSpec();
+        agentTurnSpec.setMessage(prompt.trim());
+        return addAgentJob(name, mode, scheduleValue, agentTurnSpec, initialDelay, zone, null);
+    }
+
     public JobDefinition removeJob(String name) {
         JobDefinition definition = requireDefinition(name);
         if (jobManager.jobExists(definition.getName())) {
@@ -198,10 +214,66 @@ public class WorkspaceJobService {
     }
 
     private JobDefinition requireDefinition(String name) {
-        JobDefinition definition = jobStoreService.get(name);
+        JobDefinition definition = normalizeDefinition(jobStoreService.get(name));
         if (definition == null) {
             throw new IllegalArgumentException("定时任务不存在: " + name);
         }
+        return definition;
+    }
+
+    private JobDefinition normalizeDefinition(JobDefinition definition) {
+        if (definition == null) {
+            return null;
+        }
+
+        boolean legacyPromptJob = definition.getPayloadKind() == null && StrUtil.isNotBlank(definition.getPrompt());
+        if (legacyPromptJob) {
+            definition.setPayloadKind(JobPayloadKind.AGENT_TURN);
+            definition.setSessionTarget(JobSessionTarget.ISOLATED);
+            definition.setWakeMode(JobWakeMode.NOW);
+            definition.setDeliveryMode(JobDeliveryMode.BOUND_REPLY_TARGET);
+        }
+
+        if (definition.getPayloadKind() == JobPayloadKind.SYSTEM_EVENT) {
+            if (definition.getSessionTarget() == null) {
+                definition.setSessionTarget(JobSessionTarget.MAIN);
+            }
+            if (definition.getWakeMode() == null) {
+                definition.setWakeMode(properties.getAgent().getJobs().getDefaultWakeMode());
+            }
+            if (definition.getDeliveryMode() == null) {
+                definition.setDeliveryMode(JobDeliveryMode.NONE);
+            }
+        }
+
+        if (definition.getPayloadKind() == JobPayloadKind.AGENT_TURN) {
+            if (definition.getSessionTarget() == null) {
+                definition.setSessionTarget(JobSessionTarget.ISOLATED);
+            }
+            if (definition.getWakeMode() == null) {
+                definition.setWakeMode(JobWakeMode.NOW);
+            }
+            if (definition.getDeliveryMode() == null) {
+                definition.setDeliveryMode(properties.getAgent().getJobs().getDefaultDeliveryMode());
+            }
+            if (definition.getAgentTurn() == null) {
+                definition.setAgentTurn(new AgentTurnSpec());
+            }
+            if (StrUtil.isBlank(definition.getAgentTurn().getMessage()) && StrUtil.isNotBlank(definition.getPrompt())) {
+                definition.getAgentTurn().setMessage(definition.getPrompt().trim());
+            }
+            if (definition.getAgentTurn().getTimeoutSeconds() == null) {
+                definition.getAgentTurn().setTimeoutSeconds(properties.getAgent().getAgentTurn().getDefaultTimeoutSeconds());
+            }
+        }
+
+        if (StrUtil.isBlank(definition.getBoundSessionKey()) && StrUtil.isNotBlank(definition.getSessionKey())) {
+            definition.setBoundSessionKey(definition.getSessionKey().trim());
+        }
+        if (definition.getBoundReplyTarget() == null && definition.getReplyTarget() != null) {
+            definition.setBoundReplyTarget(definition.getReplyTarget());
+        }
+
         return definition;
     }
 
@@ -257,9 +329,10 @@ public class WorkspaceJobService {
     }
 
     private Scheduled buildScheduled(JobDefinition definition) {
+        long initialDelay = Math.max(0L, definition.getInitialDelay());
         ScheduledAnno scheduled = new ScheduledAnno()
                 .name(definition.getName())
-                .initialDelay(definition.getInitialDelay())
+                .initialDelay(initialDelay)
                 .enable(definition.isEnabled());
 
         if (StrUtil.isNotBlank(definition.getZone())) {
@@ -272,9 +345,10 @@ public class WorkspaceJobService {
         } else if ("fixed_delay".equals(mode)) {
             scheduled.fixedDelay(parseLong(definition.getScheduleValue(), "fixedDelay"));
         } else if ("once_delay".equals(mode)) {
-            long delay = definition.getInitialDelay() > 0
-                    ? definition.getInitialDelay()
+            long delay = initialDelay > 0
+                    ? initialDelay
                     : parseLong(definition.getScheduleValue(), "onceDelay");
+            scheduled.initialDelay(delay);
             scheduled.fixedDelay(delay);
         } else if ("cron".equals(mode)) {
             scheduled.cron(definition.getScheduleValue());

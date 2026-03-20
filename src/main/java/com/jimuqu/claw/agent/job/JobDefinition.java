@@ -28,6 +28,15 @@ public class JobDefinition implements Serializable {
     private ReplyTarget boundReplyTarget;
     private String systemEventText;
     private AgentTurnSpec agentTurn = new AgentTurnSpec();
+    /** 兼容旧版 add_job 持久化字段。 */
+    @Deprecated
+    private String prompt;
+    /** 兼容旧版 add_job 持久化字段。 */
+    @Deprecated
+    private String sessionKey;
+    /** 兼容旧版 add_job 持久化字段。 */
+    @Deprecated
+    private ReplyTarget replyTarget;
     private long createdAt;
     private long updatedAt;
 }

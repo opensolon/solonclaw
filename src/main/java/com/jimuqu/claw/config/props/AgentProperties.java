@@ -29,4 +29,6 @@ public class AgentProperties implements Serializable {
     private JobsProperties jobs = new JobsProperties();
     /** 隔离 agent turn 配置。 */
     private AgentTurnProperties agentTurn = new AgentTurnProperties();
+    /** 黑名单配置。 */
+    private BlacklistProperties blacklist = new BlacklistProperties();
 }

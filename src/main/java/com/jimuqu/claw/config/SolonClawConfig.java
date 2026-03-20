@@ -1,4 +1,5 @@
 package com.jimuqu.claw.config;
+
 import cn.hutool.core.io.FileUtil;
 import com.jimuqu.claw.agent.channel.ChannelRegistry;
 import com.jimuqu.claw.agent.job.JobStoreService;
@@ -13,6 +14,9 @@ import com.jimuqu.claw.agent.runtime.impl.SolonAiConversationAgent;
 import com.jimuqu.claw.agent.runtime.impl.SystemEventRunner;
 import com.jimuqu.claw.agent.store.RuntimeStoreService;
 import com.jimuqu.claw.agent.tool.JobTools;
+import com.jimuqu.claw.constitution.BlacklistInterceptor;
+import com.jimuqu.claw.config.props.BlacklistProperties;
+import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
 import com.jimuqu.claw.agent.tool.WorkspaceAgentTools;
 import com.jimuqu.claw.agent.workspace.AgentWorkspaceService;
 import com.jimuqu.claw.agent.workspace.WorkspacePromptService;
@@ -198,6 +202,19 @@ public class SolonClawConfig {
     }
 
     /**
+     * 创建黑名单拦截器。
+     * 始终创建，空黑名单不会拦截任何命令。
+     */
+    @Bean
+    public HITLInterceptor blacklistInterceptor(SolonClawProperties properties) {
+        BlacklistProperties blacklistProps = properties.getAgent().getBlacklist();
+        BlacklistInterceptor strategy = new BlacklistInterceptor(
+                blacklistProps != null && blacklistProps.isEnabled() ? blacklistProps : null
+        );
+        return new HITLInterceptor().onTool("bash", strategy);
+    }
+
+    /**
      * 创建会话执行 Agent。
      *
      * @param chatModel 聊天模型
@@ -210,14 +227,16 @@ public class SolonClawConfig {
             WorkspacePromptService workspacePromptService,
             WorkspaceAgentTools workspaceAgentTools,
             CliSkillProvider cliSkillProvider,
-            ReActInterceptor reActLoggingInterceptor
+            ReActInterceptor reActLoggingInterceptor,
+            HITLInterceptor blacklistInterceptor
     ) {
         return new SolonAiConversationAgent(
                 chatModel,
                 workspacePromptService,
                 workspaceAgentTools,
                 cliSkillProvider,
-                reActLoggingInterceptor
+                reActLoggingInterceptor,
+                blacklistInterceptor
         );
     }
 
@@ -386,7 +405,7 @@ public class SolonClawConfig {
     /**
      * 创建心跳服务。
      *
-     * @param agentRuntimeService Agent 运行时服务
+     * @param systemEventRunner 系统事件执行器
      * @param runtimeStoreService 运行时存储服务
      * @param properties 项目配置
      * @return 心跳服务

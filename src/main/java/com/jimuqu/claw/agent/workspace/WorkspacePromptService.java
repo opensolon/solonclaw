@@ -68,6 +68,8 @@ public class WorkspacePromptService {
     static final String IDENTITY_FILE = "IDENTITY.md";
     /** 长期记忆文件名。 */
     static final String MEMORY_FILE = "MEMORY.md";
+    /** 治理规则文件名。 */
+    static final String GOVERNANCE_FILE = "GOVERNANCE.md";
     /** 每日记忆目录名。 */
     static final String DAILY_MEMORY_DIR = "memory";
     /** 每日记忆文件名格式。 */
@@ -174,6 +176,7 @@ public class WorkspacePromptService {
         writeTemplateIfMissing(USER_FILE);
         writeTemplateIfMissing(HEARTBEAT_FILE);
         writeTemplateIfMissing(MEMORY_FILE);
+        writeTemplateIfMissing(GOVERNANCE_FILE);
 
         if (brandNewWorkspace) {
             writeTemplateIfMissing(BOOTSTRAP_FILE);
@@ -283,6 +286,7 @@ public class WorkspacePromptService {
         appendSection(lines, "身份记录", IDENTITY_FILE);
         appendSection(lines, "用户画像", USER_FILE);
         appendSection(lines, "工具备注", TOOLS_FILE);
+        appendSection(lines, "治理规则", GOVERNANCE_FILE);
         appendSection(lines, "首次对话引导", BOOTSTRAP_FILE);
         appendSection(lines, "长期记忆", MEMORY_FILE);
         appendRecentDailyMemory(lines);

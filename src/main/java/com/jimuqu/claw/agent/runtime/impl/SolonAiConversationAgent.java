@@ -14,6 +14,7 @@ import lombok.Setter;
 import org.noear.solon.ai.agent.AgentChunk;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
+import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.skills.cli.CliSkillProvider;
@@ -55,6 +56,8 @@ public class SolonAiConversationAgent implements ConversationAgent {
      * ReAct 运行日志拦截器。
      */
     private final ReActInterceptor reActInterceptor;
+    /** 黑名单拦截器（可选）。 */
+    private final HITLInterceptor blacklistInterceptor;
 
     /**
      * 创建基于聊天模型的会话执行 Agent。
@@ -63,20 +66,23 @@ public class SolonAiConversationAgent implements ConversationAgent {
      * @param workspacePromptService 工作区提示词服务
      * @param workspaceAgentTools    工作区工具集
      * @param cliSkillProvider       CLI 技能提供者
-     * @param jobTools               定时任务工具
+     * @param reActInterceptor       ReAct 运行日志拦截器
+     * @param blacklistInterceptor   黑名单拦截器，为 null 时不启用
      */
     public SolonAiConversationAgent(
             ChatModel chatModel,
             WorkspacePromptService workspacePromptService,
             WorkspaceAgentTools workspaceAgentTools,
             CliSkillProvider cliSkillProvider,
-            ReActInterceptor reActInterceptor
+            ReActInterceptor reActInterceptor,
+            HITLInterceptor blacklistInterceptor
     ) {
         this.chatModel = chatModel;
         this.workspacePromptService = workspacePromptService;
         this.workspaceAgentTools = workspaceAgentTools;
         this.cliSkillProvider = cliSkillProvider;
         this.reActInterceptor = reActInterceptor;
+        this.blacklistInterceptor = blacklistInterceptor;
     }
 
     /**
@@ -152,6 +158,9 @@ public class SolonAiConversationAgent implements ConversationAgent {
                 .retryConfig(5, 1000L)
                 .sessionWindowSize(64);
 
+        if (blacklistInterceptor != null) {
+            builder.defaultInterceptorAdd(blacklistInterceptor);
+        }
         if (jobTools != null && shouldEnableJobTools(request)) {
             builder.defaultToolAdd(jobTools);
         }

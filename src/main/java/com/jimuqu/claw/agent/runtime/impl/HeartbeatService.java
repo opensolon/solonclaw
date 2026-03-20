@@ -36,7 +36,7 @@ public class HeartbeatService {
     /**
      * 创建心跳服务。
      *
-     * @param agentRuntimeService Agent 运行时服务
+     * @param systemEventRunner 系统事件执行器
      * @param runtimeStoreService 运行时存储服务
      * @param properties 项目配置
      */
@@ -106,7 +106,7 @@ public class HeartbeatService {
             return;
         }
 
-        String content = FileUtil.readUtf8String(heartbeatFile).trim();
+        String content = normalizeHeartbeatContent(FileUtil.readUtf8String(heartbeatFile));
         if (StrUtil.isBlank(content)) {
             return;
         }
@@ -125,6 +125,26 @@ public class HeartbeatService {
         request.setAllowNotifyUser(true);
         request.setWakeImmediately(true);
         systemEventRunner.submit(request);
+    }
+
+    private String normalizeHeartbeatContent(String rawContent) {
+        if (StrUtil.isBlank(rawContent)) {
+            return "";
+        }
+
+        String[] lines = rawContent.replace("\r\n", "\n").replace('\r', '\n').split("\n");
+        StringBuilder builder = new StringBuilder();
+        for (String line : lines) {
+            String trimmed = StrUtil.trim(line);
+            if (StrUtil.isBlank(trimmed) || StrUtil.startWith(trimmed, "#")) {
+                continue;
+            }
+            if (builder.length() > 0) {
+                builder.append('\n');
+            }
+            builder.append(line.trim());
+        }
+        return builder.toString().trim();
     }
 }
 
