@@ -23,4 +23,6 @@ public class AgentProperties implements Serializable {
     private SubtasksProperties subtasks = new SubtasksProperties();
     /** 心跳配置。 */
     private HeartbeatProperties heartbeat = new HeartbeatProperties();
+    /** 黑名单配置。 */
+    private BlacklistProperties blacklist = new BlacklistProperties();
 }

@@ -12,6 +12,7 @@ import com.jimuqu.claw.agent.workspace.WorkspacePromptService;
 import cn.hutool.core.util.StrUtil;
 import org.noear.solon.ai.agent.AgentChunk;
 import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.skills.cli.CliSkillProvider;
@@ -34,6 +35,8 @@ public class SolonAiConversationAgent implements ConversationAgent {
     private final CliSkillProvider cliSkillProvider;
     /** 定时任务工具。 */
     private final JobTools jobTools;
+    /** 黑名单拦截器（可选）。 */
+    private final HITLInterceptor blacklistInterceptor;
 
     /**
      * 创建基于聊天模型的会话执行 Agent。
@@ -43,19 +46,22 @@ public class SolonAiConversationAgent implements ConversationAgent {
      * @param workspaceAgentTools 工作区工具集
      * @param cliSkillProvider CLI 技能提供者
      * @param jobTools 定时任务工具
+     * @param blacklistInterceptor 黑名单拦截器，为 null 时不启用
      */
     public SolonAiConversationAgent(
             ChatModel chatModel,
             WorkspacePromptService workspacePromptService,
             WorkspaceAgentTools workspaceAgentTools,
             CliSkillProvider cliSkillProvider,
-            JobTools jobTools
+            JobTools jobTools,
+            HITLInterceptor blacklistInterceptor
     ) {
         this.chatModel = chatModel;
         this.workspacePromptService = workspacePromptService;
         this.workspaceAgentTools = workspaceAgentTools;
         this.cliSkillProvider = cliSkillProvider;
         this.jobTools = jobTools;
+        this.blacklistInterceptor = blacklistInterceptor;
     }
 
     /**
@@ -114,7 +120,7 @@ public class SolonAiConversationAgent implements ConversationAgent {
                 request == null ? null : request.getRunQuerySupport(),
                 request == null ? null : request.getNotificationSupport()
         );
-        return ReActAgent.of(chatModel)
+        ReActAgent.Builder builder = ReActAgent.of(chatModel)
                 .name(workspacePromptService.resolveAgentName())
                 .instruction(workspacePromptService.buildSystemPrompt(request))
                 .defaultToolAdd(runtimeTools)
@@ -122,8 +128,13 @@ public class SolonAiConversationAgent implements ConversationAgent {
                 .defaultSkillAdd(cliSkillProvider)
                 .maxSteps(50)
                 .retryConfig(5, 1000L)
-                .sessionWindowSize(64)
-                .build();
+                .sessionWindowSize(64);
+
+        if (blacklistInterceptor != null) {
+            builder.defaultInterceptorAdd(blacklistInterceptor);
+        }
+
+        return builder.build();
     }
 
     /**
