@@ -4,23 +4,25 @@ import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import com.jimuqu.claw.agent.channel.ChannelAdapter;
 import com.jimuqu.claw.agent.channel.ChannelRegistry;
-import com.jimuqu.claw.agent.model.run.AgentRun;
+import com.jimuqu.claw.agent.model.envelope.InboundEnvelope;
+import com.jimuqu.claw.agent.model.envelope.OutboundEnvelope;
 import com.jimuqu.claw.agent.model.enums.ChannelType;
 import com.jimuqu.claw.agent.model.enums.ConversationType;
-import com.jimuqu.claw.agent.model.envelope.InboundEnvelope;
-import com.jimuqu.claw.agent.model.enums.InboundTriggerType;
-import com.jimuqu.claw.agent.model.envelope.OutboundEnvelope;
-import com.jimuqu.claw.agent.model.route.ReplyTarget;
-import com.jimuqu.claw.agent.model.event.RunEvent;
+import com.jimuqu.claw.agent.model.enums.RuntimeSourceKind;
 import com.jimuqu.claw.agent.model.enums.RunStatus;
+import com.jimuqu.claw.agent.model.event.RunEvent;
+import com.jimuqu.claw.agent.model.route.ReplyTarget;
+import com.jimuqu.claw.agent.model.run.AgentRun;
 import com.jimuqu.claw.agent.runtime.api.ConversationAgent;
 import com.jimuqu.claw.agent.runtime.api.NotificationSupport;
 import com.jimuqu.claw.agent.runtime.api.RunQuerySupport;
 import com.jimuqu.claw.agent.runtime.api.SpawnTaskSupport;
 import com.jimuqu.claw.agent.runtime.support.ConversationExecutionRequest;
+import com.jimuqu.claw.agent.runtime.support.DeliveryResult;
 import com.jimuqu.claw.agent.runtime.support.NotificationResult;
 import com.jimuqu.claw.agent.runtime.support.ParentRunChildrenSummary;
 import com.jimuqu.claw.agent.runtime.support.SpawnTaskResult;
+import com.jimuqu.claw.agent.runtime.support.SystemEventRequest;
 import com.jimuqu.claw.agent.store.RuntimeStoreService;
 import com.jimuqu.claw.config.SolonClawProperties;
 import org.slf4j.Logger;
@@ -29,212 +31,48 @@ import org.slf4j.LoggerFactory;
 import java.util.List;
 
 /**
- * 协调消息入站、任务调度、状态落盘和出站发送的核心运行时服务。
+ * 处理用户消息主链，并为子任务与查询提供运行时能力。
  */
 public class AgentRuntimeService {
-    /** 父会话可用来抑制中间回复的保留字。 */
     public static final String NO_REPLY = "NO_REPLY";
-    /** 父会话可用来声明“仅发送一次最终汇总”的保留前缀。 */
     public static final String FINAL_REPLY_ONCE_PREFIX = "FINAL_REPLY_ONCE:";
-    /** 日志记录器。 */
+
     private static final Logger log = LoggerFactory.getLogger(AgentRuntimeService.class);
-    /** 会话执行 Agent。 */
+
     private final ConversationAgent conversationAgent;
-    /** 运行时存储服务。 */
     private final RuntimeStoreService runtimeStoreService;
-    /** 会话调度器。 */
     private final ConversationScheduler conversationScheduler;
-    /** 渠道注册表。 */
     private final ChannelRegistry channelRegistry;
-    /** 项目配置。 */
+    private final SystemEventRunner systemEventRunner;
     private final SolonClawProperties properties;
 
-    /**
-     * 创建 Agent 运行时服务。
-     *
-     * @param conversationAgent 会话执行 Agent
-     * @param runtimeStoreService 运行时存储服务
-     * @param conversationScheduler 会话调度器
-     * @param channelRegistry 渠道注册表
-     * @param properties 项目配置
-     */
     public AgentRuntimeService(
             ConversationAgent conversationAgent,
             RuntimeStoreService runtimeStoreService,
             ConversationScheduler conversationScheduler,
             ChannelRegistry channelRegistry,
+            SystemEventRunner systemEventRunner,
             SolonClawProperties properties
     ) {
         this.conversationAgent = conversationAgent;
         this.runtimeStoreService = runtimeStoreService;
         this.conversationScheduler = conversationScheduler;
         this.channelRegistry = channelRegistry;
+        this.systemEventRunner = systemEventRunner;
         this.properties = properties;
     }
 
-    /**
-     * 向调试页渠道提交一条消息。
-     *
-     * @param sessionId 调试会话标识
-     * @param message 文本消息
-     * @return 运行任务标识
-     */
-    public String submitDebugMessage(String sessionId, String message) {
-        InboundEnvelope inboundEnvelope = new InboundEnvelope();
-        inboundEnvelope.setMessageId("debug-" + IdUtil.fastSimpleUUID());
-        inboundEnvelope.setChannelType(ChannelType.DEBUG_WEB);
-        inboundEnvelope.setChannelInstanceId("debug-web");
-        inboundEnvelope.setSenderId("debug-user");
-        inboundEnvelope.setConversationId(sessionId);
-        inboundEnvelope.setConversationType(ConversationType.PRIVATE);
-        inboundEnvelope.setContent(message);
-        inboundEnvelope.setReceivedAt(System.currentTimeMillis());
-        inboundEnvelope.setSessionKey("debug-web:" + sessionId);
-        inboundEnvelope.setReplyTarget(new ReplyTarget(ChannelType.DEBUG_WEB, ConversationType.PRIVATE, sessionId, "debug-user"));
-        inboundEnvelope.setTriggerType(InboundTriggerType.USER);
-        return submitInbound(inboundEnvelope);
-    }
-
-    /**
-     * 向指定外部路由提交一条系统消息。
-     *
-     * @param sessionKey 会话键
-     * @param replyTarget 回复目标
-     * @param content 文本内容
-     * @return 运行任务标识
-     */
-    public String submitSystemMessage(String sessionKey, ReplyTarget replyTarget, String content) {
-        return submitVisibleSystemMessage(sessionKey, replyTarget, content, "system");
-    }
-
-    /**
-     * 向指定外部路由提交一条可见系统消息。
-     *
-     * @param sessionKey 会话键
-     * @param replyTarget 回复目标
-     * @param content 文本内容
-     * @return 运行任务标识
-     */
-    public String submitVisibleSystemMessage(String sessionKey, ReplyTarget replyTarget, String content) {
-        return submitVisibleSystemMessage(sessionKey, replyTarget, content, "system");
-    }
-
-    /**
-     * 向指定外部路由提交一条仅用于内部处理的静默系统消息。
-     *
-     * @param sessionKey 会话键
-     * @param replyTarget 回复目标
-     * @param content 文本内容
-     * @return 运行任务标识
-     */
-    public String submitSilentSystemMessage(String sessionKey, ReplyTarget replyTarget, String content) {
-        return submitSilentSystemMessage(sessionKey, replyTarget, content, "system");
-    }
-
-    /**
-     * 向指定外部路由提交一条带自定义发送者的系统消息。
-     *
-     * @param sessionKey 会话键
-     * @param replyTarget 回复目标
-     * @param content 文本内容
-     * @param senderId 发送者标识
-     * @return 运行任务标识
-     */
-    public String submitSystemMessage(String sessionKey, ReplyTarget replyTarget, String content, String senderId) {
-        return submitVisibleSystemMessage(sessionKey, replyTarget, content, senderId);
-    }
-
-    /**
-     * 向指定外部路由提交一条带自定义发送者的可见系统消息。
-     *
-     * @param sessionKey 会话键
-     * @param replyTarget 回复目标
-     * @param content 文本内容
-     * @param senderId 发送者标识
-     * @return 运行任务标识
-     */
-    public String submitVisibleSystemMessage(String sessionKey, ReplyTarget replyTarget, String content, String senderId) {
-        return submitSystemMessage(
-                sessionKey,
-                replyTarget,
-                content,
-                senderId,
-                InboundTriggerType.SYSTEM_VISIBLE,
-                true,
-                true,
-                true
-        );
-    }
-
-    /**
-     * 向指定外部路由提交一条仅用于内部处理的静默系统消息。
-     *
-     * @param sessionKey 会话键
-     * @param replyTarget 回复目标
-     * @param content 文本内容
-     * @param senderId 发送者标识
-     * @return 运行任务标识
-     */
-    public String submitSilentSystemMessage(String sessionKey, ReplyTarget replyTarget, String content, String senderId) {
-        return submitSystemMessage(
-                sessionKey,
-                replyTarget,
-                content,
-                senderId,
-                InboundTriggerType.SYSTEM_SILENT,
-                false,
-                false,
-                false
-        );
-    }
-
-    /**
-     * 统一构造系统入站消息。
-     *
-     * @param sessionKey 会话键
-     * @param replyTarget 回复目标
-     * @param content 文本内容
-     * @param senderId 发送者标识
-     * @param externalReplyEnabled 是否允许外部回发
-     * @param persistInboundConversationEvent 是否写入入站会话事件
-     * @param persistAssistantConversationEvent 是否写入助手回复会话事件
-     * @return 运行任务标识
-     */
-    private String submitSystemMessage(
-            String sessionKey,
-            ReplyTarget replyTarget,
-            String content,
-            String senderId,
-            InboundTriggerType triggerType,
-            boolean externalReplyEnabled,
-            boolean persistInboundConversationEvent,
-            boolean persistAssistantConversationEvent
-    ) {
-        InboundEnvelope inboundEnvelope = new InboundEnvelope();
-        inboundEnvelope.setMessageId("system-" + IdUtil.fastSimpleUUID());
-        inboundEnvelope.setChannelType(ChannelType.SYSTEM);
-        inboundEnvelope.setChannelInstanceId("system");
-        inboundEnvelope.setSenderId(StrUtil.blankToDefault(senderId, "system"));
-        inboundEnvelope.setConversationId(replyTarget == null ? sessionKey : replyTarget.getConversationId());
-        inboundEnvelope.setConversationType(replyTarget == null ? ConversationType.PRIVATE : replyTarget.getConversationType());
-        inboundEnvelope.setContent(content);
-        inboundEnvelope.setReceivedAt(System.currentTimeMillis());
-        inboundEnvelope.setSessionKey(sessionKey);
-        inboundEnvelope.setReplyTarget(replyTarget);
-        inboundEnvelope.setTriggerType(triggerType);
-        inboundEnvelope.setExternalReplyEnabled(externalReplyEnabled);
-        inboundEnvelope.setPersistInboundConversationEvent(persistInboundConversationEvent);
-        inboundEnvelope.setPersistAssistantConversationEvent(persistAssistantConversationEvent);
-        return submitInbound(inboundEnvelope);
-    }
-
-    /**
-     * 提交一条标准化后的入站消息。
-     *
-     * @param inboundEnvelope 入站消息
-     * @return 新建运行任务标识；若命中去重则返回 null
-     */
     public String submitInbound(InboundEnvelope inboundEnvelope) {
+        if (inboundEnvelope == null) {
+            return null;
+        }
+        if (inboundEnvelope.getSourceKind() == null) {
+            inboundEnvelope.setSourceKind(RuntimeSourceKind.USER_MESSAGE);
+        }
+        if (inboundEnvelope.getSourceKind() != RuntimeSourceKind.USER_MESSAGE) {
+            throw new IllegalArgumentException("AgentRuntimeService 只接收 USER_MESSAGE");
+        }
+
         if (!runtimeStoreService.registerInbound(inboundEnvelope.getChannelType(), inboundEnvelope.getMessageId())) {
             log.info(
                     "Ignore duplicated inbound message. channelType={}, messageId={}",
@@ -248,16 +86,14 @@ public class AgentRuntimeService {
 
         long latestConversationVersion = runtimeStoreService.getLatestConversationVersion(inboundEnvelope.getSessionKey());
         long nextConversationVersion = latestConversationVersion + 1L;
-        inboundEnvelope.setHistoryAnchorVersion(resolveHistoryAnchorVersion(inboundEnvelope, nextConversationVersion));
-        long version = inboundEnvelope.isPersistInboundConversationEvent()
-                ? runtimeStoreService.appendInboundConversationEvent(inboundEnvelope)
-                : nextConversationVersion;
+        inboundEnvelope.setHistoryAnchorVersion(nextConversationVersion);
+        long version = runtimeStoreService.appendInboundConversationEvent(inboundEnvelope);
         inboundEnvelope.setSessionVersion(version);
-        if (inboundEnvelope.getChannelType() != ChannelType.SYSTEM) {
+        if (inboundEnvelope.getReplyTarget() != null) {
             runtimeStoreService.rememberReplyTarget(inboundEnvelope.getSessionKey(), inboundEnvelope.getReplyTarget());
         }
         log.info(
-                "Accepted inbound message. channelType={}, sessionKey={}, messageId={}, sessionVersion={}",
+                "Accepted inbound user message. channelType={}, sessionKey={}, messageId={}, sessionVersion={}",
                 inboundEnvelope.getChannelType(),
                 inboundEnvelope.getSessionKey(),
                 inboundEnvelope.getMessageId(),
@@ -268,69 +104,41 @@ public class AgentRuntimeService {
         run.setRunId(runtimeStoreService.newRunId());
         run.setSessionKey(inboundEnvelope.getSessionKey());
         run.setSourceMessageId(inboundEnvelope.getMessageId());
+        run.setSourceKind(RuntimeSourceKind.USER_MESSAGE);
         run.setSourceUserVersion(inboundEnvelope.getHistoryAnchorVersion());
         run.setReplyTarget(inboundEnvelope.getReplyTarget());
         run.setStatus(RunStatus.QUEUED);
         run.setCreatedAt(System.currentTimeMillis());
         runtimeStoreService.saveRun(run);
         runtimeStoreService.appendRunEvent(run.getRunId(), "status", "queued");
-        log.info("Created run {} for session {}", run.getRunId(), run.getSessionKey());
 
         if (properties.getAgent().getScheduler().isAckWhenBusy()
                 && state.activeCount() > 0
-                && inboundEnvelope.isExternalReplyEnabled()
-                && inboundEnvelope.getReplyTarget() != null
-                && !inboundEnvelope.getReplyTarget().isDebugWeb()) {
+                && inboundEnvelope.getReplyTarget() != null) {
             OutboundEnvelope ack = new OutboundEnvelope();
             ack.setRunId(run.getRunId());
             ack.setReplyTarget(inboundEnvelope.getReplyTarget());
             ack.setContent(state.queuedCount() > 0 ? "已收到，排队处理中。" : "已收到，正在并行处理中。");
-            channelRegistry.send(ack);
+            DeliveryResult deliveryResult = channelRegistry.send(ack);
+            recordDeliveryResult(run.getRunId(), deliveryResult);
         }
 
         conversationScheduler.submit(inboundEnvelope.getSessionKey(), () -> processRun(inboundEnvelope, run.getRunId()));
         return run.getRunId();
     }
 
-    /**
-     * 查询单个运行任务。
-     *
-     * @param runId 运行任务标识
-     * @return 运行任务
-     */
     public AgentRun getRun(String runId) {
         return runtimeStoreService.getRun(runId);
     }
 
-    /**
-     * 查询某个运行任务的增量事件。
-     *
-     * @param runId 运行任务标识
-     * @param afterSeq 起始序号
-     * @return 运行事件列表
-     */
     public List<RunEvent> getRunEvents(String runId, long afterSeq) {
         return runtimeStoreService.getRunEvents(runId, afterSeq);
     }
 
-    /**
-     * 查询某个父运行下的子任务列表。
-     *
-     * @param parentRunId 父运行标识
-     * @param batchKey 批次键；为空时返回全部
-     * @return 子任务列表
-     */
     public List<AgentRun> listChildRuns(String parentRunId, String batchKey) {
         return runtimeStoreService.listChildRunsByParentRun(parentRunId, StrUtil.blankToDefault(StrUtil.trim(batchKey), null));
     }
 
-    /**
-     * 聚合某个父运行下的子任务状态。
-     *
-     * @param parentRunId 父运行标识
-     * @param batchKey 批次键；为空时聚合全部
-     * @return 聚合结果；若不存在则返回 null
-     */
     public ParentRunChildrenSummary getChildSummary(String parentRunId, String batchKey) {
         if (StrUtil.isBlank(parentRunId)) {
             return null;
@@ -342,12 +150,6 @@ public class AgentRuntimeService {
         return summary.getTotalChildren() == 0 ? null : summary;
     }
 
-    /**
-     * 执行一次真正的运行任务处理。
-     *
-     * @param inboundEnvelope 入站消息
-     * @param runId 运行任务标识
-     */
     private void processRun(InboundEnvelope inboundEnvelope, String runId) {
         AgentRun run = runtimeStoreService.getRun(runId);
         if (run == null) {
@@ -364,10 +166,13 @@ public class AgentRuntimeService {
             ConversationExecutionRequest request = new ConversationExecutionRequest();
             request.setSessionKey(inboundEnvelope.getSessionKey());
             request.setCurrentMessage(inboundEnvelope.getContent());
-            request.setCurrentMessageTriggerType(inboundEnvelope.getTriggerType());
+            request.setCurrentSourceKind(run.getSourceKind());
             request.setChildRun(StrUtil.isNotBlank(run.getParentRunId()));
             request.setParentRunId(run.getParentRunId());
-            request.setHistory(runtimeStoreService.loadConversationHistoryBefore(inboundEnvelope.getSessionKey(), inboundEnvelope.getSessionVersion()));
+            request.setHistory(runtimeStoreService.loadConversationHistoryBefore(
+                    inboundEnvelope.getSessionKey(),
+                    inboundEnvelope.getSessionVersion()
+            ));
             request.setSpawnTaskSupport(buildSpawnTaskSupport(runId, run, inboundEnvelope));
             request.setRunQuerySupport(buildRunQuerySupport(inboundEnvelope.getSessionKey()));
             request.setNotificationSupport(buildNotificationSupport(inboundEnvelope.getSessionKey(), runId));
@@ -378,22 +183,22 @@ public class AgentRuntimeService {
                 runtimeStoreService.appendRunEvent(runId, "progress", progress);
                 dispatchProgressOutbound(runId, inboundEnvelope, progress);
             });
-            AgentRun latestRun = runtimeStoreService.getRun(runId);
-            if (latestRun != null) {
-                run = latestRun;
-            }
-
             if (StrUtil.isBlank(response)) {
                 response = latestProgress[0];
             }
-            String childCompletionParentRunId = resolveChildCompletionParentRunId(inboundEnvelope);
-            boolean finalReplyOnce = isFinalReplyOnce(response);
+
+            run = runtimeStoreService.getRun(runId);
+            if (run == null) {
+                return;
+            }
+
             String visibleResponse = normalizeVisibleResponse(response);
+            if (StrUtil.isBlank(visibleResponse)) {
+                handleEmptyUserResponse(run, inboundEnvelope, runId);
+                return;
+            }
+            boolean suppressReply = isNoReply(response);
             run.setFinalResponse(visibleResponse);
-            boolean suppressReply = isNoReply(response)
-                    || (finalReplyOnce
-                    && StrUtil.isNotBlank(childCompletionParentRunId)
-                    && runtimeStoreService.hasRunEventType(childCompletionParentRunId, "children_aggregated"));
 
             if (run.getStatus() == RunStatus.WAITING_CHILDREN) {
                 run.setFinishedAt(System.currentTimeMillis());
@@ -404,12 +209,13 @@ public class AgentRuntimeService {
                 return;
             }
 
-            if (!suppressReply && inboundEnvelope.isPersistAssistantConversationEvent()) {
+            if (!suppressReply) {
                 runtimeStoreService.appendAssistantConversationEvent(
                         inboundEnvelope.getSessionKey(),
                         runId,
                         inboundEnvelope.getMessageId(),
-                        resolveAssistantSourceUserVersion(inboundEnvelope),
+                        inboundEnvelope.getHistoryAnchorVersion(),
+                        run.getSourceKind(),
                         visibleResponse
                 );
             }
@@ -420,21 +226,17 @@ public class AgentRuntimeService {
             runtimeStoreService.saveRun(run);
             runtimeStoreService.appendRunEvent(runId, "reply", visibleResponse);
             runtimeStoreService.appendRunEvent(runId, "status", "succeeded");
-            if (!suppressReply && finalReplyOnce && StrUtil.isNotBlank(childCompletionParentRunId)) {
-                runtimeStoreService.appendRunEvent(childCompletionParentRunId, "children_aggregated", "aggregateRunId=" + runId);
-            }
             log.info("Run {} succeeded for session {}", runId, inboundEnvelope.getSessionKey());
             handleChildRunCompletion(run);
 
             if (!suppressReply
-                    && inboundEnvelope.isExternalReplyEnabled()
-                    && inboundEnvelope.getReplyTarget() != null
-                    && !inboundEnvelope.getReplyTarget().isDebugWeb()) {
+                    && inboundEnvelope.getReplyTarget() != null) {
                 OutboundEnvelope outboundEnvelope = new OutboundEnvelope();
                 outboundEnvelope.setRunId(runId);
                 outboundEnvelope.setReplyTarget(inboundEnvelope.getReplyTarget());
                 outboundEnvelope.setContent(visibleResponse);
-                channelRegistry.send(outboundEnvelope);
+                DeliveryResult deliveryResult = channelRegistry.send(outboundEnvelope);
+                recordDeliveryResult(runId, deliveryResult);
                 log.info(
                         "Run {} reply dispatched. channelType={}, conversationType={}, conversationId={}",
                         runId,
@@ -453,26 +255,17 @@ public class AgentRuntimeService {
             log.warn("Run {} failed for session {}: {}", runId, inboundEnvelope.getSessionKey(), throwable.getMessage(), throwable);
             handleChildRunCompletion(run);
 
-            if (inboundEnvelope.isExternalReplyEnabled()
-                    && inboundEnvelope.getReplyTarget() != null
-                    && !inboundEnvelope.getReplyTarget().isDebugWeb()) {
+            if (inboundEnvelope.getReplyTarget() != null) {
                 OutboundEnvelope outboundEnvelope = new OutboundEnvelope();
                 outboundEnvelope.setRunId(runId);
                 outboundEnvelope.setReplyTarget(inboundEnvelope.getReplyTarget());
                 outboundEnvelope.setContent("抱歉，这次处理失败了：" + throwable.getMessage());
-                channelRegistry.send(outboundEnvelope);
+                DeliveryResult deliveryResult = channelRegistry.send(outboundEnvelope);
+                recordDeliveryResult(runId, deliveryResult);
             }
         }
     }
 
-    /**
-     * 从父运行中派生一个独立子任务运行。
-     *
-     * @param parentRunId 父运行任务标识
-     * @param parentInbound 父运行入站消息
-     * @param taskDescription 子任务描述
-     * @return 子任务创建结果
-     */
     private SpawnTaskResult spawnTask(String parentRunId, InboundEnvelope parentInbound, String taskDescription, String batchKey) {
         if (StrUtil.isBlank(taskDescription)) {
             throw new IllegalArgumentException("taskDescription 不能为空");
@@ -490,7 +283,7 @@ public class AgentRuntimeService {
         InboundEnvelope childInbound = new InboundEnvelope();
         childInbound.setMessageId(childMessageId);
         childInbound.setChannelType(ChannelType.SYSTEM);
-        childInbound.setChannelInstanceId("system");
+        childInbound.setChannelInstanceId("subtask");
         childInbound.setSenderId("parent-run:" + parentRunId);
         childInbound.setConversationId(childSessionKey);
         childInbound.setConversationType(ConversationType.PRIVATE);
@@ -498,17 +291,18 @@ public class AgentRuntimeService {
         childInbound.setReceivedAt(now);
         childInbound.setSessionKey(childSessionKey);
         childInbound.setReplyTarget(null);
-        childInbound.setTriggerType(InboundTriggerType.SYSTEM_VISIBLE);
+        childInbound.setSourceKind(RuntimeSourceKind.USER_MESSAGE);
 
         long version = runtimeStoreService.appendInboundConversationEvent(childInbound);
         childInbound.setSessionVersion(version);
-        childInbound.setHistoryAnchorVersion(resolveHistoryAnchorVersion(childInbound, version));
+        childInbound.setHistoryAnchorVersion(version);
 
         AgentRun childRun = new AgentRun();
         childRun.setRunId(runtimeStoreService.newRunId());
         childRun.setSessionKey(childSessionKey);
         childRun.setSourceMessageId(childMessageId);
-        childRun.setSourceUserVersion(childInbound.getHistoryAnchorVersion());
+        childRun.setSourceKind(RuntimeSourceKind.USER_MESSAGE);
+        childRun.setSourceUserVersion(version);
         childRun.setStatus(RunStatus.QUEUED);
         childRun.setCreatedAt(now);
         childRun.setParentRunId(parentRunId);
@@ -535,13 +329,6 @@ public class AgentRuntimeService {
                 parentRun.getSourceUserVersion(),
                 childRun
         );
-        log.info(
-                "Spawned child run {} for parent run {}. parentSession={}, childSession={}",
-                childRun.getRunId(),
-                parentRunId,
-                parentInbound.getSessionKey(),
-                childSessionKey
-        );
 
         conversationScheduler.submit(childSessionKey, () -> processRun(childInbound, childRun.getRunId()));
 
@@ -553,11 +340,6 @@ public class AgentRuntimeService {
         return result;
     }
 
-    /**
-     * 在子运行结束后，向父会话回写内部事件并触发 continuation run。
-     *
-     * @param run 已完成的运行任务
-     */
     private void handleChildRunCompletion(AgentRun run) {
         if (run == null || StrUtil.isBlank(run.getParentRunId()) || StrUtil.isBlank(run.getParentSessionKey())) {
             return;
@@ -571,69 +353,35 @@ public class AgentRuntimeService {
                 : runtimeStoreService.summarizeChildRuns(run.getParentRunId(), run.getBatchKey());
         appendParentChildCompletionEvents(run, overallSummary, batchSummary);
 
-        String internalMessage = buildChildCompletionMessage(run, overallSummary, batchSummary);
         runtimeStoreService.appendChildRunCompletedEvent(run.getParentSessionKey(), run.getParentRunId(), sourceUserVersion, run);
-        String continuationRunId = submitSystemMessage(
-                run.getParentSessionKey(),
-                run.getParentReplyTarget(),
-                internalMessage,
-                "child-complete:" + run.getParentRunId()
-        );
+        SystemEventRequest request = new SystemEventRequest();
+        request.setSourceKind(RuntimeSourceKind.CHILD_CONTINUATION);
+        request.setSessionKey(run.getParentSessionKey());
+        request.setReplyTarget(run.getParentReplyTarget());
+        request.setPolicy(com.jimuqu.claw.agent.model.enums.SystemEventPolicy.AGGREGATE_ONLY);
+        request.setContent(buildChildCompletionMessage(run, overallSummary, batchSummary));
+        request.setSourceUserVersion(sourceUserVersion);
+        request.setRelatedRunId(run.getParentRunId());
+        request.setAllowNotifyUser(false);
+        String continuationRunId = systemEventRunner.submit(request);
         runtimeStoreService.appendRunEvent(
                 run.getParentRunId(),
-                "child_continuation_submitted",
+                "child_continuation_triggered",
                 "childRunId=" + run.getRunId()
                         + ", continuationRunId=" + continuationRunId
                         + ", pendingChildren=" + (overallSummary == null ? 0 : overallSummary.getPendingChildren())
         );
     }
 
-    /**
-     * 计算当前入站消息对应的历史锚点版本。
-     *
-     * @param inboundEnvelope 入站消息
-     * @param version 当前入站事件版本
-     * @return 历史锚点版本
-     */
-    private long resolveHistoryAnchorVersion(InboundEnvelope inboundEnvelope, long version) {
-        if (inboundEnvelope.getHistoryAnchorVersion() > 0) {
-            return inboundEnvelope.getHistoryAnchorVersion();
-        }
-        if (inboundEnvelope.getTriggerType() == null || inboundEnvelope.getTriggerType() == InboundTriggerType.USER) {
-            return version;
-        }
-        return runtimeStoreService.getLatestUserConversationVersion(inboundEnvelope.getSessionKey());
-    }
-
-    /**
-     * 计算助手回复事件要挂载到的来源用户版本。
-     *
-     * @param inboundEnvelope 入站消息
-     * @return 来源用户版本
-     */
-    private long resolveAssistantSourceUserVersion(InboundEnvelope inboundEnvelope) {
-        if (inboundEnvelope.getHistoryAnchorVersion() > 0) {
-            return inboundEnvelope.getHistoryAnchorVersion();
-        }
-        return inboundEnvelope.getSessionVersion();
-    }
-
-    /**
-     * 构造子运行完成后回流父会话的内部消息。
-     *
-     * @param run 子运行
-     * @return 内部消息文本
-     */
     private String buildChildCompletionMessage(
             AgentRun run,
             ParentRunChildrenSummary overallSummary,
             ParentRunChildrenSummary batchSummary
     ) {
         StringBuilder builder = new StringBuilder();
-        builder.append("[内部事件] 子任务已完成").append('\n');
+        builder.append("[子任务 continuation 事件]").append('\n');
         builder.append("父运行ID: ").append(run.getParentRunId()).append('\n');
         builder.append("子运行ID: ").append(run.getRunId()).append('\n');
-        builder.append("子会话: ").append(run.getSessionKey()).append('\n');
         builder.append("状态: ").append(run.getStatus()).append('\n');
         if (StrUtil.isNotBlank(run.getTaskDescription())) {
             builder.append("任务: ").append(run.getTaskDescription()).append('\n');
@@ -660,25 +408,9 @@ public class AgentRuntimeService {
         } else {
             builder.append("错误:\n").append(StrUtil.blankToDefault(run.getErrorMessage(), "(未知错误)"));
         }
-        builder.append("\n\n请基于已有上下文继续处理。");
-        if (overallSummary != null && overallSummary.getPendingChildren() > 0) {
-            builder.append("\n- 仍有子任务未完成时，优先返回 NO_REPLY，避免过早对外回复。");
-            builder.append("\n- 若需要了解进度，可用 get_child_summary 或 list_child_runs 查看当前状态。");
-        } else {
-            builder.append("\n- 如果现在需要统一对外回复，优先使用 FINAL_REPLY_ONCE: 前缀给出最终聚合结果。");
-            builder.append("\n- 如果只需要结束内部编排、不需要外发，请返回 NO_REPLY。");
-        }
-        return builder.toString();
+        return builder.toString().trim();
     }
 
-    /**
-     * 为当前运行构造子任务派生能力，并在子任务场景下应用默认的防扇出限制。
-     *
-     * @param runId 当前运行标识
-     * @param run 当前运行对象
-     * @param inboundEnvelope 当前入站消息
-     * @return 子任务派生能力
-     */
     private SpawnTaskSupport buildSpawnTaskSupport(String runId, AgentRun run, InboundEnvelope inboundEnvelope) {
         if (run == null) {
             return null;
@@ -698,13 +430,6 @@ public class AgentRuntimeService {
         };
     }
 
-    /**
-     * 在父运行上追加与子任务完成相关的结构化调试事件。
-     *
-     * @param childRun 已完成的子任务
-     * @param overallSummary 父运行下的全部子任务汇总
-     * @param batchSummary 当前批次汇总
-     */
     private void appendParentChildCompletionEvents(
             AgentRun childRun,
             ParentRunChildrenSummary overallSummary,
@@ -750,12 +475,6 @@ public class AgentRuntimeService {
         }
     }
 
-    /**
-     * 为当前会话构造任务状态查询能力。
-     *
-     * @param sessionKey 会话键
-     * @return 查询能力
-     */
     private RunQuerySupport buildRunQuerySupport(String sessionKey) {
         return new RunQuerySupport() {
             @Override
@@ -800,13 +519,6 @@ public class AgentRuntimeService {
         };
     }
 
-    /**
-     * 为当前会话构造主动通知能力。
-     *
-     * @param sessionKey 会话键
-     * @param runId 当前运行标识
-     * @return 通知能力
-     */
     private NotificationSupport buildNotificationSupport(String sessionKey, String runId) {
         return (message, progress) -> {
             NotificationResult result = new NotificationResult();
@@ -830,28 +542,23 @@ public class AgentRuntimeService {
             outboundEnvelope.setReplyTarget(replyTarget);
             outboundEnvelope.setContent(message);
             outboundEnvelope.setProgress(progress);
-            channelRegistry.send(outboundEnvelope);
+            DeliveryResult deliveryResult = channelRegistry.send(outboundEnvelope);
+            recordDeliveryResult(runId, deliveryResult);
+            applyDeliveryResult(result, deliveryResult);
             runtimeStoreService.appendRunEvent(runId, progress ? "notify_progress" : "notify", message);
 
-            result.setDelivered(true);
-            result.setMessage("sent to " + replyTarget.getChannelType() + ":" + replyTarget.getConversationId());
+            result.setDelivered(deliveryResult.isDelivered());
+            if (StrUtil.isBlank(result.getMessage())) {
+                result.setMessage("sent to " + replyTarget.getChannelType() + ":" + replyTarget.getConversationId());
+            }
             return result;
         };
     }
 
-    /**
-     * 若当前渠道支持进度更新，则将运行中的增量内容透传到外部渠道。
-     *
-     * @param runId 运行任务标识
-     * @param inboundEnvelope 当前入站消息
-     * @param progress 增量内容
-     */
     private void dispatchProgressOutbound(String runId, InboundEnvelope inboundEnvelope, String progress) {
         if (StrUtil.isBlank(progress)
                 || inboundEnvelope == null
-                || !inboundEnvelope.isExternalReplyEnabled()
-                || inboundEnvelope.getReplyTarget() == null
-                || inboundEnvelope.getReplyTarget().isDebugWeb()) {
+                || inboundEnvelope.getReplyTarget() == null) {
             return;
         }
 
@@ -865,35 +572,14 @@ public class AgentRuntimeService {
         outboundEnvelope.setReplyTarget(inboundEnvelope.getReplyTarget());
         outboundEnvelope.setContent(progress);
         outboundEnvelope.setProgress(true);
-        channelRegistry.send(outboundEnvelope);
+        DeliveryResult deliveryResult = channelRegistry.send(outboundEnvelope);
+        recordDeliveryResult(runId, deliveryResult);
     }
 
-    /**
-     * 判断当前回复是否表示“不要对外回复”。
-     *
-     * @param response 最终回复
-     * @return 若为 NO_REPLY 则返回 true
-     */
     private boolean isNoReply(String response) {
         return StrUtil.equalsIgnoreCase(StrUtil.trim(response), NO_REPLY);
     }
 
-    /**
-     * 判断当前回复是否声明为“仅发送一次的最终汇总”。
-     *
-     * @param response 最终回复
-     * @return 若命中最终汇总前缀则返回 true
-     */
-    private boolean isFinalReplyOnce(String response) {
-        return StrUtil.startWithIgnoreCase(StrUtil.trim(response), FINAL_REPLY_ONCE_PREFIX);
-    }
-
-    /**
-     * 移除运行时保留前缀，得到真正对模型历史和外部渠道可见的回复文本。
-     *
-     * @param response 原始回复
-     * @return 可见回复
-     */
     private String normalizeVisibleResponse(String response) {
         String trimmed = StrUtil.trim(response);
         if (StrUtil.startWithIgnoreCase(trimmed, FINAL_REPLY_ONCE_PREFIX)) {
@@ -902,21 +588,79 @@ public class AgentRuntimeService {
         return response;
     }
 
-    /**
-     * 若当前入站消息是子任务完成 continuation，则解析其父运行标识。
-     *
-     * @param inboundEnvelope 入站消息
-     * @return 父运行标识；否则返回 null
-     */
-    private String resolveChildCompletionParentRunId(InboundEnvelope inboundEnvelope) {
-        if (inboundEnvelope == null || inboundEnvelope.getChannelType() != ChannelType.SYSTEM) {
-            return null;
+    private void handleEmptyUserResponse(AgentRun run, InboundEnvelope inboundEnvelope, String runId) {
+        String fallback = "这次处理没有拿到有效结果，可能是模型响应超时或解析异常。请再试一次。";
+        run.setStatus(RunStatus.FAILED);
+        run.setFinishedAt(System.currentTimeMillis());
+        run.setErrorMessage("模型未返回有效结果");
+        run.setFinalResponse(fallback);
+        runtimeStoreService.saveRun(run);
+        runtimeStoreService.appendRunEvent(runId, "llm_empty_response", fallback);
+        runtimeStoreService.appendRunEvent(runId, "reply", fallback);
+        runtimeStoreService.appendRunEvent(runId, "status", "failed");
+
+        runtimeStoreService.appendAssistantConversationEvent(
+                inboundEnvelope.getSessionKey(),
+                runId,
+                inboundEnvelope.getMessageId(),
+                inboundEnvelope.getHistoryAnchorVersion(),
+                RuntimeSourceKind.USER_MESSAGE,
+                fallback
+        );
+
+        if (inboundEnvelope.getReplyTarget() != null) {
+            OutboundEnvelope outboundEnvelope = new OutboundEnvelope();
+            outboundEnvelope.setRunId(runId);
+            outboundEnvelope.setReplyTarget(inboundEnvelope.getReplyTarget());
+            outboundEnvelope.setContent(fallback);
+            DeliveryResult deliveryResult = channelRegistry.send(outboundEnvelope);
+            recordDeliveryResult(runId, deliveryResult);
+            log.info(
+                    "Run {} empty response fallback dispatched. channelType={}, conversationType={}, conversationId={}",
+                    runId,
+                    inboundEnvelope.getReplyTarget().getChannelType(),
+                    inboundEnvelope.getReplyTarget().getConversationType(),
+                    inboundEnvelope.getReplyTarget().getConversationId()
+            );
         }
-        String senderId = StrUtil.blankToDefault(inboundEnvelope.getSenderId(), "");
-        String prefix = "child-complete:";
-        return senderId.startsWith(prefix) ? senderId.substring(prefix.length()) : null;
     }
 
+    private void applyDeliveryResult(NotificationResult result, DeliveryResult deliveryResult) {
+        if (result == null || deliveryResult == null) {
+            return;
+        }
+        result.setTruncated(deliveryResult.isTruncated());
+        result.setSegmented(deliveryResult.isSegmented());
+        result.setSegmentCount(deliveryResult.getSegmentCount());
+        result.setOriginalLength(deliveryResult.getOriginalLength());
+        result.setFinalLength(deliveryResult.getFinalLength());
+        result.setChannelType(deliveryResult.getChannelType() == null ? null : deliveryResult.getChannelType().name());
+        result.setMessage(deliveryResult.getMessage());
+    }
+
+    private void recordDeliveryResult(String runId, DeliveryResult deliveryResult) {
+        if (deliveryResult == null) {
+            return;
+        }
+        StringBuilder message = new StringBuilder();
+        message.append("channel=").append(deliveryResult.getChannelType())
+                .append(", segmentCount=").append(deliveryResult.getSegmentCount())
+                .append(", originalLength=").append(deliveryResult.getOriginalLength())
+                .append(", finalLength=").append(deliveryResult.getFinalLength());
+        if (StrUtil.isNotBlank(deliveryResult.getMessage())) {
+            message.append(", detail=").append(deliveryResult.getMessage());
+        }
+
+        if (!deliveryResult.isDelivered()) {
+            runtimeStoreService.appendRunEvent(runId, "delivery_failed", message.toString());
+            return;
+        }
+        runtimeStoreService.appendRunEvent(runId, "delivery_sent", message.toString());
+        if (deliveryResult.isSegmented()) {
+            runtimeStoreService.appendRunEvent(runId, "delivery_segmented", message.toString());
+        }
+        if (deliveryResult.isTruncated()) {
+            runtimeStoreService.appendRunEvent(runId, "delivery_truncated", message.toString());
+        }
+    }
 }
-
-

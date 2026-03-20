@@ -14,6 +14,7 @@ import java.util.List;
 @Data
 @NoArgsConstructor
 public class DebugRunEventsResponse implements Serializable {
+    /** 序列化版本号。 */
     private static final long serialVersionUID = 1L;
 
     /** 本次返回的事件列表。 */

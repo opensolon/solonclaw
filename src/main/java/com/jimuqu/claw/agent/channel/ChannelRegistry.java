@@ -2,6 +2,7 @@ package com.jimuqu.claw.agent.channel;
 
 import com.jimuqu.claw.agent.model.enums.ChannelType;
 import com.jimuqu.claw.agent.model.envelope.OutboundEnvelope;
+import com.jimuqu.claw.agent.runtime.support.DeliveryResult;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -37,15 +38,22 @@ public class ChannelRegistry {
      *
      * @param outboundEnvelope 出站消息
      */
-    public void send(OutboundEnvelope outboundEnvelope) {
+    public DeliveryResult send(OutboundEnvelope outboundEnvelope) {
+        DeliveryResult result = new DeliveryResult();
         if (outboundEnvelope == null || outboundEnvelope.getReplyTarget() == null) {
-            return;
+            result.setDelivered(false);
+            result.setMessage("missing reply target");
+            return result;
         }
 
         ChannelAdapter adapter = adapters.get(outboundEnvelope.getReplyTarget().getChannelType());
         if (adapter != null) {
-            adapter.send(outboundEnvelope);
+            return adapter.send(outboundEnvelope);
         }
+        result.setDelivered(false);
+        result.setChannelType(outboundEnvelope.getReplyTarget().getChannelType());
+        result.setMessage("channel adapter not found");
+        return result;
     }
 }
 

@@ -27,6 +27,38 @@ class DingTalkRobotSenderTest {
 
         assertEquals("SolonClaw", sender.resolveMarkdownTitle("   "));
     }
+
+    @Test
+    void truncatesMarkdownPayloadWhenCharacterCountExceedsLimit() throws Exception {
+        DingTalkRobotSender sender = new DingTalkRobotSender(null, new DingTalkProperties(), null);
+        String content = repeat("a", 7000);
+
+        String payload = sender.markdownMessageParam(content);
+        JSONObject json = JSONObject.parseObject(payload);
+        String text = json.getString("text");
+
+        assertTrue(text.contains("已截断"));
+        assertTrue(text.length() <= 5000);
+    }
+
+    @Test
+    void truncatesMarkdownPayloadBySimpleLengthLimit() throws Exception {
+        DingTalkRobotSender sender = new DingTalkRobotSender(null, new DingTalkProperties(), null);
+        String content = repeat("中", 6500);
+
+        String normalized = sender.normalizeMarkdownContent(content);
+
+        assertTrue(normalized.contains("已截断"));
+        assertTrue(normalized.length() <= 5000);
+    }
+
+    private String repeat(String value, int count) {
+        StringBuilder builder = new StringBuilder(value.length() * count);
+        for (int i = 0; i < count; i++) {
+            builder.append(value);
+        }
+        return builder.toString();
+    }
 }
 
 

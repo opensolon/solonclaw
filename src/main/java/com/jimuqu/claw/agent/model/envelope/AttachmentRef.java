@@ -13,6 +13,7 @@ import java.io.Serializable;
 @NoArgsConstructor
 @AllArgsConstructor
 public class AttachmentRef implements Serializable {
+    /** 序列化版本号。 */
     private static final long serialVersionUID = 1L;
 
     /** 附件类别，例如图片、音频或文件。 */

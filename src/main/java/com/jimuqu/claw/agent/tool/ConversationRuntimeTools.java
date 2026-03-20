@@ -85,10 +85,10 @@ public class ConversationRuntimeTools {
                 : "通知失败: " + result.getMessage();
     }
 
-    @ToolMapping(name = "spawn_task", description = "派生一个独立子运行处理较大任务；子运行完成后会以内部事件回流父会话")
+    @ToolMapping(name = "spawn_task", description = "默认用于长任务、复杂任务和可并行任务的首选拆分方式。适合仓库克隆、编译、部署、排查、并行探索等场景；子任务完成后会自动以内部事件回流父会话，便于继续汇总与追踪进度")
     public String spawnTask(
-            @Param(description = "子任务描述，建议写成清晰的执行目标") String taskDescription,
-            @Param(description = "可选的批次键/计划键；同一批任务可复用同一个 batchKey") String batchKey
+            @Param(description = "子任务描述，建议写成单一、清晰、可执行的目标；不要直接复述整段对话") String taskDescription,
+            @Param(description = "可选的批次键/计划键；同一批长任务或同一阶段的子任务可复用同一个 batchKey，方便后续统一汇总") String batchKey
     ) {
         if (spawnTaskSupport == null) {
             return "当前运行不支持 spawn_task";
@@ -105,7 +105,7 @@ public class ConversationRuntimeTools {
         }
     }
 
-    @ToolMapping(name = "list_child_runs", description = "查看当前会话最近的子任务列表，返回 runId、状态、任务描述和结果摘要")
+    @ToolMapping(name = "list_child_runs", description = "查看当前会话最近的子任务列表。适合在长任务拆分后追踪后台进度，返回 runId、状态、任务描述和结果摘要")
     public String listChildRuns(
             @Param(description = "最大返回条数，默认 5") Integer limit,
             @Param(description = "可选批次键；传入后仅查看该批次的子任务") String batchKey
@@ -145,7 +145,7 @@ public class ConversationRuntimeTools {
         return builder.toString().trim();
     }
 
-    @ToolMapping(name = "get_run_status", description = "查看指定 runId 的状态；若不传 runId，则默认查看最近一个子任务")
+    @ToolMapping(name = "get_run_status", description = "查看指定 runId 的状态。适合在长任务执行过程中追踪某个关键子任务；若不传 runId，则默认查看最近一个子任务")
     public String getRunStatus(
             @Param(description = "运行任务标识，可为空；为空时默认查看最近一个子任务") String runId
     ) {
@@ -177,7 +177,7 @@ public class ConversationRuntimeTools {
         return builder.toString().trim();
     }
 
-    @ToolMapping(name = "get_child_summary", description = "聚合查看某个父运行下的全部子任务状态；不传 parentRunId 时默认查看最近一个有子任务的父运行")
+    @ToolMapping(name = "get_child_summary", description = "聚合查看某个父运行下的全部子任务状态。适合在父任务需要统一汇总前，快速判断整批长任务是否都已完成；不传 parentRunId 时默认查看最近一个有子任务的父运行")
     public String getChildSummary(
             @Param(description = "父运行标识，可为空；为空时默认查看最近一个有子任务的父运行") String parentRunId,
             @Param(description = "可选批次键；传入后仅聚合该批次的子任务") String batchKey

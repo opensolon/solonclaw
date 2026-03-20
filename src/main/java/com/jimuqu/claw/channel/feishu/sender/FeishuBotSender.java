@@ -4,7 +4,9 @@ import cn.hutool.core.util.StrUtil;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.jimuqu.claw.agent.model.envelope.OutboundEnvelope;
+import com.jimuqu.claw.agent.model.enums.ChannelType;
 import com.jimuqu.claw.agent.model.route.ReplyTarget;
+import com.jimuqu.claw.agent.runtime.support.DeliveryResult;
 import com.jimuqu.claw.channel.feishu.gateway.FeishuMessageGateway;
 import com.jimuqu.claw.channel.feishu.gateway.FeishuSdkMessageGateway;
 import com.jimuqu.claw.config.props.FeishuProperties;
@@ -52,20 +54,31 @@ public class FeishuBotSender {
      *
      * @param outboundEnvelope 出站消息
      */
-    public void send(OutboundEnvelope outboundEnvelope) {
+    public DeliveryResult send(OutboundEnvelope outboundEnvelope) {
+        DeliveryResult result = new DeliveryResult();
+        result.setChannelType(ChannelType.FEISHU);
+        result.setOriginalLength(outboundEnvelope == null || outboundEnvelope.getContent() == null ? 0 : outboundEnvelope.getContent().length());
         if (outboundEnvelope == null || outboundEnvelope.getReplyTarget() == null) {
-            return;
+            result.setDelivered(false);
+            result.setMessage("missing reply target");
+            return result;
         }
 
         String content = normalizeContent(outboundEnvelope);
         if (StrUtil.isBlank(content)) {
-            return;
+            result.setDelivered(false);
+            result.setFinalLength(content == null ? 0 : content.length());
+            result.setMessage("empty content");
+            return result;
         }
 
         ReplyTarget replyTarget = outboundEnvelope.getReplyTarget();
         if (StrUtil.isBlank(replyTarget.getConversationId())) {
             log.warn("Skip Feishu send because conversationId is missing.");
-            return;
+            result.setDelivered(false);
+            result.setFinalLength(content.length());
+            result.setMessage("conversationId is missing");
+            return result;
         }
 
         try {
@@ -73,12 +86,22 @@ public class FeishuBotSender {
             String cardContent = cardMessageParam(content);
             if (outboundEnvelope.isProgress() && properties.isStreamingReply()) {
                 sendProgress(runId, replyTarget, cardContent);
-                return;
+                result.setDelivered(true);
+                result.setFinalLength(content.length());
+                result.setMessage("streaming progress sent");
+                return result;
             }
             sendFinal(runId, replyTarget, cardContent);
+            result.setDelivered(true);
+            result.setFinalLength(content.length());
+            result.setMessage("sent");
         } catch (Exception exception) {
             log.warn("Failed to send Feishu message: {}", exception.getMessage(), exception);
+            result.setDelivered(false);
+            result.setFinalLength(content.length());
+            result.setMessage(exception.getMessage());
         }
+        return result;
     }
 
     /**
@@ -176,6 +199,7 @@ public class FeishuBotSender {
         }
         return builder.toString().trim();
     }
+
 }
 
 

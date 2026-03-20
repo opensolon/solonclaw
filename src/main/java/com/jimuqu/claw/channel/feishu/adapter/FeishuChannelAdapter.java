@@ -18,6 +18,7 @@ import com.jimuqu.claw.agent.model.envelope.InboundEnvelope;
 import com.jimuqu.claw.agent.model.envelope.OutboundEnvelope;
 import com.jimuqu.claw.agent.model.route.ReplyTarget;
 import com.jimuqu.claw.agent.runtime.impl.AgentRuntimeService;
+import com.jimuqu.claw.agent.runtime.support.DeliveryResult;
 import com.jimuqu.claw.channel.feishu.sender.FeishuBotSender;
 import com.jimuqu.claw.config.props.FeishuProperties;
 import org.slf4j.Logger;
@@ -124,8 +125,8 @@ public class FeishuChannelAdapter implements ChannelAdapter {
     }
 
     @Override
-    public void send(OutboundEnvelope outboundEnvelope) {
-        feishuBotSender.send(outboundEnvelope);
+    public DeliveryResult send(OutboundEnvelope outboundEnvelope) {
+        return feishuBotSender.send(outboundEnvelope);
     }
 
     /**

@@ -13,6 +13,7 @@ import java.io.Serializable;
 @NoArgsConstructor
 @AllArgsConstructor
 public class DebugChatResponse implements Serializable {
+    /** 序列化版本号。 */
     private static final long serialVersionUID = 1L;
 
     /** 新创建的运行任务标识。 */

@@ -23,9 +23,13 @@ class JobStoreServiceTest {
         definition.setName("demo");
         definition.setMode("once_delay");
         definition.setScheduleValue("1000");
-        definition.setPrompt("hello");
-        definition.setSessionKey("dingtalk:private:demo");
-        definition.setReplyTarget(new ReplyTarget(ChannelType.DINGTALK, ConversationType.PRIVATE, "cid", "uid"));
+        definition.setPayloadKind(JobPayloadKind.SYSTEM_EVENT);
+        definition.setSessionTarget(JobSessionTarget.MAIN);
+        definition.setWakeMode(JobWakeMode.NOW);
+        definition.setDeliveryMode(JobDeliveryMode.NONE);
+        definition.setSystemEventText("hello");
+        definition.setBoundSessionKey("dingtalk:private:demo");
+        definition.setBoundReplyTarget(new ReplyTarget(ChannelType.DINGTALK, ConversationType.PRIVATE, "cid", "uid"));
         definition.setEnabled(true);
         definition.setCreatedAt(1L);
         definition.setUpdatedAt(2L);
@@ -36,7 +40,8 @@ class JobStoreServiceTest {
         assertNotNull(saved);
         assertEquals("once_delay", saved.getMode());
         assertEquals("1000", saved.getScheduleValue());
-        assertEquals("hello", saved.getPrompt());
+        assertEquals(JobPayloadKind.SYSTEM_EVENT, saved.getPayloadKind());
+        assertEquals("hello", saved.getSystemEventText());
         assertTrue(storeService.getJobsFile().exists());
     }
 }

@@ -2,8 +2,11 @@ package com.jimuqu.claw.agent.runtime.impl;
 
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
+import com.jimuqu.claw.agent.model.enums.RuntimeSourceKind;
+import com.jimuqu.claw.agent.model.enums.SystemEventPolicy;
 import com.jimuqu.claw.agent.model.route.LatestReplyRoute;
 import com.jimuqu.claw.agent.store.RuntimeStoreService;
+import com.jimuqu.claw.agent.runtime.support.SystemEventRequest;
 import com.jimuqu.claw.config.SolonClawProperties;
 import com.jimuqu.claw.config.props.HeartbeatProperties;
 import org.slf4j.Logger;
@@ -21,8 +24,8 @@ import java.util.concurrent.TimeUnit;
 public class HeartbeatService {
     /** 日志记录器。 */
     private static final Logger log = LoggerFactory.getLogger(HeartbeatService.class);
-    /** Agent 运行时服务。 */
-    private final AgentRuntimeService agentRuntimeService;
+    /** 系统事件执行器。 */
+    private final SystemEventRunner systemEventRunner;
     /** 运行时存储服务。 */
     private final RuntimeStoreService runtimeStoreService;
     /** 项目配置。 */
@@ -33,16 +36,16 @@ public class HeartbeatService {
     /**
      * 创建心跳服务。
      *
-     * @param agentRuntimeService Agent 运行时服务
+     * @param systemEventRunner 系统事件执行器
      * @param runtimeStoreService 运行时存储服务
      * @param properties 项目配置
      */
     public HeartbeatService(
-            AgentRuntimeService agentRuntimeService,
+            SystemEventRunner systemEventRunner,
             RuntimeStoreService runtimeStoreService,
             SolonClawProperties properties
     ) {
-        this.agentRuntimeService = agentRuntimeService;
+        this.systemEventRunner = systemEventRunner;
         this.runtimeStoreService = runtimeStoreService;
         this.properties = properties;
     }
@@ -103,7 +106,7 @@ public class HeartbeatService {
             return;
         }
 
-        String content = FileUtil.readUtf8String(heartbeatFile).trim();
+        String content = normalizeHeartbeatContent(FileUtil.readUtf8String(heartbeatFile));
         if (StrUtil.isBlank(content)) {
             return;
         }
@@ -113,7 +116,35 @@ public class HeartbeatService {
             return;
         }
 
-        agentRuntimeService.submitSilentSystemMessage(route.getSessionKey(), route.getReplyTarget(), content, "heartbeat");
+        SystemEventRequest request = new SystemEventRequest();
+        request.setSourceKind(RuntimeSourceKind.HEARTBEAT_EVENT);
+        request.setPolicy(SystemEventPolicy.INTERNAL_ONLY);
+        request.setSessionKey(route.getSessionKey());
+        request.setReplyTarget(route.getReplyTarget());
+        request.setContent(content);
+        request.setAllowNotifyUser(true);
+        request.setWakeImmediately(true);
+        systemEventRunner.submit(request);
+    }
+
+    private String normalizeHeartbeatContent(String rawContent) {
+        if (StrUtil.isBlank(rawContent)) {
+            return "";
+        }
+
+        String[] lines = rawContent.replace("\r\n", "\n").replace('\r', '\n').split("\n");
+        StringBuilder builder = new StringBuilder();
+        for (String line : lines) {
+            String trimmed = StrUtil.trim(line);
+            if (StrUtil.isBlank(trimmed) || StrUtil.startWith(trimmed, "#")) {
+                continue;
+            }
+            if (builder.length() > 0) {
+                builder.append('\n');
+            }
+            builder.append(line.trim());
+        }
+        return builder.toString().trim();
     }
 }
 

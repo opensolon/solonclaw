@@ -13,6 +13,7 @@ import java.io.Serializable;
 @Data
 @NoArgsConstructor
 public class ReplyTarget implements Serializable {
+    /** 序列化版本号。 */
     private static final long serialVersionUID = 1L;
 
     /** 目标所属渠道。 */
@@ -41,14 +42,5 @@ public class ReplyTarget implements Serializable {
         this.conversationType = conversationType;
         this.conversationId = conversationId;
         this.userId = userId;
-    }
-
-    /**
-     * 判断当前目标是否属于调试页渠道。
-     *
-     * @return 若为调试页则返回 true
-     */
-    public boolean isDebugWeb() {
-        return channelType == ChannelType.DEBUG_WEB;
     }
 }

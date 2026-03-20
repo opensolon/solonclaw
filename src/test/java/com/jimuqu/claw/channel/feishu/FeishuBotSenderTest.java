@@ -53,7 +53,6 @@ class FeishuBotSenderTest {
         assertEquals("msg-1", gateway.patchedMessageIds.get(1));
         assertTrue(gateway.patchedContents.get(1).contains("final-answer"));
     }
-
     private OutboundEnvelope outbound(String runId, String content, boolean progress) {
         OutboundEnvelope outboundEnvelope = new OutboundEnvelope();
         outboundEnvelope.setRunId(runId);

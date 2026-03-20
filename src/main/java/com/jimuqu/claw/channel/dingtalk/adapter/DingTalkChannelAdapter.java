@@ -16,6 +16,7 @@ import com.jimuqu.claw.agent.model.envelope.InboundEnvelope;
 import com.jimuqu.claw.agent.model.envelope.OutboundEnvelope;
 import com.jimuqu.claw.agent.model.route.ReplyTarget;
 import com.jimuqu.claw.agent.runtime.impl.AgentRuntimeService;
+import com.jimuqu.claw.agent.runtime.support.DeliveryResult;
 import com.jimuqu.claw.channel.dingtalk.sender.DingTalkRobotSender;
 import com.jimuqu.claw.config.props.DingTalkProperties;
 import org.slf4j.Logger;
@@ -112,12 +113,16 @@ public class DingTalkChannelAdapter implements
      * @param outboundEnvelope 出站消息
      */
     @Override
-    public void send(OutboundEnvelope outboundEnvelope) {
+    public DeliveryResult send(OutboundEnvelope outboundEnvelope) {
         if (outboundEnvelope == null || outboundEnvelope.getReplyTarget() == null) {
-            return;
+            DeliveryResult result = new DeliveryResult();
+            result.setDelivered(false);
+            result.setMessage("missing reply target");
+            result.setChannelType(ChannelType.DINGTALK);
+            return result;
         }
 
-        dingTalkRobotSender.sendText(outboundEnvelope.getReplyTarget(), normalizeOutboundContent(outboundEnvelope));
+        return dingTalkRobotSender.sendText(outboundEnvelope.getReplyTarget(), normalizeOutboundContent(outboundEnvelope));
     }
 
     /**

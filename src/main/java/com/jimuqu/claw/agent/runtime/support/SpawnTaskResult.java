@@ -11,6 +11,7 @@ import java.io.Serializable;
 @Data
 @NoArgsConstructor
 public class SpawnTaskResult implements Serializable {
+    /** 序列化版本号。 */
     private static final long serialVersionUID = 1L;
 
     /** 新建子运行标识。 */

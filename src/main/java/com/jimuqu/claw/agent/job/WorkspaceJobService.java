@@ -1,9 +1,16 @@
 package com.jimuqu.claw.agent.job;
 
 import cn.hutool.core.util.StrUtil;
+import com.jimuqu.claw.agent.model.enums.RuntimeSourceKind;
+import com.jimuqu.claw.agent.model.enums.SystemEventPolicy;
 import com.jimuqu.claw.agent.model.route.LatestReplyRoute;
 import com.jimuqu.claw.agent.model.route.ReplyTarget;
+import com.jimuqu.claw.agent.runtime.impl.IsolatedAgentRunService;
+import com.jimuqu.claw.agent.runtime.impl.SystemEventRunner;
+import com.jimuqu.claw.agent.runtime.support.AgentTurnRequest;
+import com.jimuqu.claw.agent.runtime.support.SystemEventRequest;
 import com.jimuqu.claw.agent.store.RuntimeStoreService;
+import com.jimuqu.claw.config.SolonClawProperties;
 import org.noear.solon.scheduling.ScheduledAnno;
 import org.noear.solon.scheduling.ScheduledException;
 import org.noear.solon.scheduling.annotation.Scheduled;
@@ -16,28 +23,27 @@ import java.util.List;
  * 管理工作区中的定时任务定义、恢复和运行。
  */
 public class WorkspaceJobService {
-    @FunctionalInterface
-    public interface JobDispatcher {
-        String dispatch(String sessionKey, ReplyTarget replyTarget, String prompt);
-    }
-
     private final IJobManager jobManager;
     private final JobStoreService jobStoreService;
     private final RuntimeStoreService runtimeStoreService;
-    private JobDispatcher jobDispatcher;
+    private final SystemEventRunner systemEventRunner;
+    private final IsolatedAgentRunService isolatedAgentRunService;
+    private final SolonClawProperties properties;
 
     public WorkspaceJobService(
             IJobManager jobManager,
             JobStoreService jobStoreService,
-            RuntimeStoreService runtimeStoreService
+            RuntimeStoreService runtimeStoreService,
+            SystemEventRunner systemEventRunner,
+            IsolatedAgentRunService isolatedAgentRunService,
+            SolonClawProperties properties
     ) {
         this.jobManager = jobManager;
         this.jobStoreService = jobStoreService;
         this.runtimeStoreService = runtimeStoreService;
-    }
-
-    public void setJobDispatcher(JobDispatcher jobDispatcher) {
-        this.jobDispatcher = jobDispatcher;
+        this.systemEventRunner = systemEventRunner;
+        this.isolatedAgentRunService = isolatedAgentRunService;
+        this.properties = properties;
     }
 
     public void restorePersistedJobs() {
@@ -54,28 +60,94 @@ public class WorkspaceJobService {
         return jobStoreService.get(name);
     }
 
-    public JobDefinition addJob(String name, String mode, String scheduleValue, String prompt, long initialDelay, String zone) {
-        validate(name, mode, scheduleValue, prompt);
-
-        LatestReplyRoute route = runtimeStoreService.getLatestExternalRoute();
-        if (route == null || route.getReplyTarget() == null || StrUtil.isBlank(route.getSessionKey())) {
-            throw new IllegalStateException("当前没有可绑定的外部会话，无法创建定时任务。");
+    public JobDefinition addSystemJob(
+            String name,
+            String mode,
+            String scheduleValue,
+            String systemEventText,
+            long initialDelay,
+            String zone,
+            JobWakeMode wakeMode
+    ) {
+        validateSchedule(name, mode, scheduleValue);
+        if (StrUtil.isBlank(systemEventText)) {
+            throw new IllegalArgumentException("systemEventText 不能为空");
         }
+
+        LatestReplyRoute route = requireLatestExternalRoute();
+        long now = System.currentTimeMillis();
 
         JobDefinition definition = new JobDefinition();
         definition.setName(name.trim());
         definition.setMode(mode.trim().toLowerCase());
         definition.setScheduleValue(scheduleValue.trim());
-        definition.setPrompt(prompt.trim());
         definition.setInitialDelay(Math.max(0L, initialDelay));
         definition.setZone(StrUtil.blankToDefault(zone, "").trim());
         definition.setEnabled(true);
-        definition.setSessionKey(route.getSessionKey());
-        definition.setReplyTarget(route.getReplyTarget());
-        long now = System.currentTimeMillis();
+        definition.setPayloadKind(JobPayloadKind.SYSTEM_EVENT);
+        definition.setSessionTarget(JobSessionTarget.MAIN);
+        definition.setWakeMode(wakeMode == null ? properties.getAgent().getJobs().getDefaultWakeMode() : wakeMode);
+        definition.setDeliveryMode(JobDeliveryMode.NONE);
+        definition.setBoundSessionKey(route.getSessionKey());
+        definition.setBoundReplyTarget(route.getReplyTarget());
+        definition.setSystemEventText(systemEventText.trim());
+        definition.setAgentTurn(new AgentTurnSpec());
         definition.setCreatedAt(now);
         definition.setUpdatedAt(now);
 
+        validateDefinition(definition);
+        registerJob(definition);
+        jobStoreService.save(definition);
+        return definition;
+    }
+
+    public JobDefinition addAgentJob(
+            String name,
+            String mode,
+            String scheduleValue,
+            AgentTurnSpec agentTurn,
+            long initialDelay,
+            String zone,
+            JobDeliveryMode deliveryMode
+    ) {
+        validateSchedule(name, mode, scheduleValue);
+        if (agentTurn == null || StrUtil.isBlank(agentTurn.getMessage())) {
+            throw new IllegalArgumentException("agentTurn.message 不能为空");
+        }
+
+        LatestReplyRoute route = requireLatestExternalRoute();
+        long now = System.currentTimeMillis();
+
+        AgentTurnSpec normalizedSpec = new AgentTurnSpec();
+        normalizedSpec.setMessage(agentTurn.getMessage().trim());
+        normalizedSpec.setModel(StrUtil.blankToDefault(StrUtil.trim(agentTurn.getModel()), null));
+        normalizedSpec.setThinking(StrUtil.blankToDefault(StrUtil.trim(agentTurn.getThinking()), null));
+        normalizedSpec.setTimeoutSeconds(
+                agentTurn.getTimeoutSeconds() == null
+                        ? properties.getAgent().getAgentTurn().getDefaultTimeoutSeconds()
+                        : agentTurn.getTimeoutSeconds()
+        );
+        normalizedSpec.setLightContext(agentTurn.isLightContext());
+
+        JobDefinition definition = new JobDefinition();
+        definition.setName(name.trim());
+        definition.setMode(mode.trim().toLowerCase());
+        definition.setScheduleValue(scheduleValue.trim());
+        definition.setInitialDelay(Math.max(0L, initialDelay));
+        definition.setZone(StrUtil.blankToDefault(zone, "").trim());
+        definition.setEnabled(true);
+        definition.setPayloadKind(JobPayloadKind.AGENT_TURN);
+        definition.setSessionTarget(JobSessionTarget.ISOLATED);
+        definition.setWakeMode(JobWakeMode.NOW);
+        definition.setDeliveryMode(deliveryMode == null ? properties.getAgent().getJobs().getDefaultDeliveryMode() : deliveryMode);
+        definition.setBoundSessionKey(route.getSessionKey());
+        definition.setBoundReplyTarget(route.getReplyTarget());
+        definition.setSystemEventText(null);
+        definition.setAgentTurn(normalizedSpec);
+        definition.setCreatedAt(now);
+        definition.setUpdatedAt(now);
+
+        validateDefinition(definition);
         registerJob(definition);
         jobStoreService.save(definition);
         return definition;
@@ -106,6 +178,7 @@ public class WorkspaceJobService {
 
     public JobDefinition startJob(String name) throws ScheduledException {
         JobDefinition definition = requireDefinition(name);
+        validateDefinition(definition);
         if (!jobManager.jobExists(definition.getName())) {
             registerJob(definition);
         }
@@ -114,6 +187,14 @@ public class WorkspaceJobService {
         definition.setUpdatedAt(System.currentTimeMillis());
         jobStoreService.save(definition);
         return definition;
+    }
+
+    private LatestReplyRoute requireLatestExternalRoute() {
+        LatestReplyRoute route = runtimeStoreService.getLatestExternalRoute();
+        if (route == null || route.getReplyTarget() == null || StrUtil.isBlank(route.getSessionKey())) {
+            throw new IllegalStateException("当前没有可绑定的外部会话，无法创建定时任务。");
+        }
+        return route;
     }
 
     private JobDefinition requireDefinition(String name) {
@@ -135,11 +216,7 @@ public class WorkspaceJobService {
 
         Scheduled scheduled = buildScheduled(definition);
         JobHolder holder = jobManager.jobAdd(definition.getName(), scheduled, ctx -> {
-            ReplyTarget replyTarget = definition.getReplyTarget();
-            if (replyTarget == null || StrUtil.isBlank(definition.getSessionKey()) || jobDispatcher == null) {
-                return;
-            }
-            jobDispatcher.dispatch(definition.getSessionKey(), replyTarget, buildDispatchPrompt(definition));
+            dispatch(definition);
             if (isOneShot(definition)) {
                 removeJob(definition.getName());
             }
@@ -153,6 +230,30 @@ public class WorkspaceJobService {
                 throw new IllegalStateException("停止定时任务失败: " + e.getMessage(), e);
             }
         }
+    }
+
+    private void dispatch(JobDefinition definition) {
+        if (definition.getPayloadKind() == JobPayloadKind.SYSTEM_EVENT) {
+            SystemEventRequest request = new SystemEventRequest();
+            request.setSourceKind(RuntimeSourceKind.JOB_SYSTEM_EVENT);
+            request.setPolicy(SystemEventPolicy.USER_VISIBLE_OPTIONAL);
+            request.setSessionKey(definition.getBoundSessionKey());
+            request.setReplyTarget(definition.getBoundReplyTarget());
+            request.setContent(definition.getSystemEventText());
+            request.setAllowNotifyUser(true);
+            request.setWakeImmediately(definition.getWakeMode() != JobWakeMode.NEXT_TICK);
+            systemEventRunner.submit(request);
+            return;
+        }
+
+        AgentTurnRequest request = new AgentTurnRequest();
+        request.setSourceKind(RuntimeSourceKind.JOB_AGENT_TURN);
+        request.setJobName(definition.getName());
+        request.setBoundSessionKey(definition.getBoundSessionKey());
+        request.setBoundReplyTarget(definition.getBoundReplyTarget());
+        request.setDeliveryMode(definition.getDeliveryMode());
+        request.setAgentTurn(copyAgentTurn(definition.getAgentTurn()));
+        isolatedAgentRunService.submit(request);
     }
 
     private Scheduled buildScheduled(JobDefinition definition) {
@@ -186,27 +287,7 @@ public class WorkspaceJobService {
         return scheduled;
     }
 
-    private String buildDispatchPrompt(JobDefinition definition) {
-        StringBuilder builder = new StringBuilder();
-        builder.append("[定时任务触发]").append('\n');
-        builder.append("任务名称: ").append(definition.getName()).append('\n');
-        builder.append("任务模式: ").append(definition.getMode()).append('\n');
-        builder.append("当前这次触发已经到执行时间。请你现在立刻完成下面的任务，并直接在当前会话给出结果。").append('\n');
-        builder.append("不要把这条消息再理解成“稍后执行”，也不要再次创建同一个定时任务，除非用户明确要求循环执行。").append('\n');
-        builder.append("任务内容:").append('\n');
-        builder.append(definition.getPrompt());
-        return builder.toString();
-    }
-
-    private long parseLong(String value, String fieldName) {
-        try {
-            return Long.parseLong(value);
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException(fieldName + " 必须是毫秒数字: " + value, e);
-        }
-    }
-
-    private void validate(String name, String mode, String scheduleValue, String prompt) {
+    private void validateSchedule(String name, String mode, String scheduleValue) {
         if (StrUtil.isBlank(name)) {
             throw new IllegalArgumentException("name 不能为空");
         }
@@ -215,9 +296,6 @@ public class WorkspaceJobService {
         }
         if (StrUtil.isBlank(scheduleValue)) {
             throw new IllegalArgumentException("scheduleValue 不能为空");
-        }
-        if (StrUtil.isBlank(prompt)) {
-            throw new IllegalArgumentException("prompt 不能为空");
         }
 
         String normalized = mode.trim().toLowerCase();
@@ -229,8 +307,63 @@ public class WorkspaceJobService {
         }
     }
 
+    private void validateDefinition(JobDefinition definition) {
+        if (definition == null) {
+            throw new IllegalArgumentException("definition 不能为空");
+        }
+        if (StrUtil.isBlank(definition.getName())) {
+            throw new IllegalArgumentException("name 不能为空");
+        }
+        if (definition.getPayloadKind() == null) {
+            throw new IllegalArgumentException("payloadKind 不能为空");
+        }
+        if (definition.getSessionTarget() == null) {
+            throw new IllegalArgumentException("sessionTarget 不能为空");
+        }
+        if (definition.getPayloadKind() == JobPayloadKind.SYSTEM_EVENT) {
+            if (definition.getSessionTarget() != JobSessionTarget.MAIN) {
+                throw new IllegalArgumentException("SYSTEM_EVENT 任务必须使用 MAIN sessionTarget");
+            }
+            if (StrUtil.isBlank(definition.getSystemEventText())) {
+                throw new IllegalArgumentException("SYSTEM_EVENT 任务必须提供 systemEventText");
+            }
+        } else {
+            if (definition.getSessionTarget() != JobSessionTarget.ISOLATED) {
+                throw new IllegalArgumentException("AGENT_TURN 任务必须使用 ISOLATED sessionTarget");
+            }
+            if (definition.getAgentTurn() == null || StrUtil.isBlank(definition.getAgentTurn().getMessage())) {
+                throw new IllegalArgumentException("AGENT_TURN 任务必须提供 agentTurn.message");
+            }
+        }
+        if (definition.getDeliveryMode() == JobDeliveryMode.BOUND_REPLY_TARGET && definition.getBoundReplyTarget() == null) {
+            throw new IllegalArgumentException("BOUND_REPLY_TARGET 模式必须提供 boundReplyTarget");
+        }
+        if (StrUtil.isBlank(definition.getBoundSessionKey())) {
+            throw new IllegalArgumentException("boundSessionKey 不能为空");
+        }
+    }
+
+    private long parseLong(String value, String fieldName) {
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException(fieldName + " 必须是毫秒数字: " + value, e);
+        }
+    }
+
     private boolean isOneShot(JobDefinition definition) {
         return "once_delay".equals(definition.getMode());
     }
-}
 
+    private AgentTurnSpec copyAgentTurn(AgentTurnSpec source) {
+        AgentTurnSpec copy = new AgentTurnSpec();
+        if (source != null) {
+            copy.setMessage(source.getMessage());
+            copy.setModel(source.getModel());
+            copy.setThinking(source.getThinking());
+            copy.setTimeoutSeconds(source.getTimeoutSeconds());
+            copy.setLightContext(source.isLightContext());
+        }
+        return copy;
+    }
+}
