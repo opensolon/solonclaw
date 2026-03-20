@@ -18,6 +18,7 @@ import java.util.List;
 @Data
 @NoArgsConstructor
 public class ConversationExecutionRequest implements Serializable {
+    /** 序列化版本号。 */
     private static final long serialVersionUID = 1L;
 
     /** 当前会话对应的内部键。 */

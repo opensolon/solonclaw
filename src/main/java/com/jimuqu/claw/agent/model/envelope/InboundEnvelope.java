@@ -17,6 +17,7 @@ import java.util.List;
 @Data
 @NoArgsConstructor
 public class InboundEnvelope implements Serializable {
+    /** 序列化版本号。 */
     private static final long serialVersionUID = 1L;
 
     /** 上游消息唯一标识。 */
