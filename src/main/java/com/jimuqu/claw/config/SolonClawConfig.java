@@ -10,6 +10,9 @@ import com.jimuqu.claw.agent.runtime.impl.HeartbeatService;
 import com.jimuqu.claw.agent.runtime.impl.SolonAiConversationAgent;
 import com.jimuqu.claw.agent.store.RuntimeStoreService;
 import com.jimuqu.claw.agent.tool.JobTools;
+import com.jimuqu.claw.constitution.BlacklistInterceptor;
+import com.jimuqu.claw.config.props.BlacklistProperties;
+import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
 import com.jimuqu.claw.agent.tool.WorkspaceAgentTools;
 import com.jimuqu.claw.agent.workspace.AgentWorkspaceService;
 import com.jimuqu.claw.agent.workspace.WorkspacePromptService;
@@ -171,6 +174,19 @@ public class SolonClawConfig {
     }
 
     /**
+     * 创建黑名单拦截器。
+     * 始终创建，空黑名单不会拦截任何命令。
+     */
+    @Bean
+    public HITLInterceptor blacklistInterceptor(SolonClawProperties properties) {
+        BlacklistProperties blacklistProps = properties.getAgent().getBlacklist();
+        BlacklistInterceptor strategy = new BlacklistInterceptor(
+                blacklistProps.isEnabled() ? blacklistProps : null
+        );
+        return new HITLInterceptor().onTool("bash", strategy);
+    }
+
+    /**
      * 创建会话执行 Agent。
      *
      * @param chatModel 聊天模型
@@ -183,14 +199,16 @@ public class SolonClawConfig {
             WorkspacePromptService workspacePromptService,
             WorkspaceAgentTools workspaceAgentTools,
             CliSkillProvider cliSkillProvider,
-            JobTools jobTools
+            JobTools jobTools,
+            HITLInterceptor blacklistInterceptor
     ) {
         return new SolonAiConversationAgent(
                 chatModel,
                 workspacePromptService,
                 workspaceAgentTools,
                 cliSkillProvider,
-                jobTools
+                jobTools,
+                blacklistInterceptor
         );
     }
 
