@@ -15,9 +15,12 @@ import com.jimuqu.claw.agent.runtime.support.ConversationExecutionRequest;
 import com.jimuqu.claw.agent.runtime.support.DeliveryResult;
 import com.jimuqu.claw.agent.runtime.support.NotificationResult;
 import com.jimuqu.claw.agent.runtime.support.ParentRunChildrenSummary;
+import com.jimuqu.claw.agent.runtime.support.RuntimeDeliveryHelper;
+import com.jimuqu.claw.agent.runtime.support.RuntimeSupportFactory;
 import com.jimuqu.claw.agent.runtime.support.SystemEventRequest;
 import com.jimuqu.claw.agent.store.RuntimeStoreService;
 import com.jimuqu.claw.config.SolonClawProperties;
+import org.noear.solon.ai.chat.message.ChatMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -145,18 +148,28 @@ public class SystemEventRunner {
             executionRequest.setSessionKey(request.getSessionKey());
             executionRequest.setCurrentMessage(request.getContent());
             executionRequest.setCurrentSourceKind(request.getSourceKind());
-            executionRequest.setHistory(runtimeStoreService.loadConversationHistoryBefore(
+            List<ChatMessage> history = runtimeStoreService.loadConversationHistoryBefore(
                     request.getSessionKey(),
                     runtimeStoreService.getLatestConversationVersion(request.getSessionKey()) + 1L
-            ));
-            executionRequest.setRunQuerySupport(buildRunQuerySupport(request.getSessionKey()));
+            );
+            if (request.getSourceKind() == RuntimeSourceKind.CHILD_CONTINUATION) {
+                history = trimHistoryForContinuation(history, 6);
+                executionRequest.setLightContext(true);
+            }
+            executionRequest.setHistory(history);
+            executionRequest.setRunQuerySupport(RuntimeSupportFactory.buildRunQuerySupport(runtimeStoreService, request.getSessionKey()));
             executionRequest.setNotificationSupport(request.isAllowNotifyUser()
-                    ? buildNotificationSupport(request.getSessionKey(), request.getReplyTarget(), runId)
+                    ? RuntimeSupportFactory.buildNotificationSupport(runtimeStoreService, channelRegistry, request.getSessionKey(), request.getReplyTarget(), runId)
                     : null);
 
+            final String[] lastProgressText = {""};
             final String[] latestProgress = {""};
             String response = conversationAgent.execute(executionRequest, progress -> {
                 latestProgress[0] = progress;
+                if (StrUtil.isBlank(progress) || StrUtil.equals(progress, lastProgressText[0])) {
+                    return;
+                }
+                lastProgressText[0] = progress;
                 runtimeStoreService.appendRunEvent(runId, "progress", progress);
             });
             if (StrUtil.isBlank(response)) {
@@ -168,7 +181,7 @@ public class SystemEventRunner {
                 return;
             }
 
-            String visibleResponse = normalizeVisibleResponse(response);
+            String visibleResponse = RuntimeDeliveryHelper.normalizeVisibleResponse(response);
             if (StrUtil.isBlank(visibleResponse)) {
                 run.setStatus(RunStatus.FAILED);
                 run.setFinishedAt(System.currentTimeMillis());
@@ -186,7 +199,7 @@ public class SystemEventRunner {
                 delivered = tryDeliverAggregateReply(runId, request, response, visibleResponse);
             } else if (request.getPolicy() == SystemEventPolicy.USER_VISIBLE_OPTIONAL) {
                 delivered = tryDeliverUserVisibleReply(runId, request, response, visibleResponse, notifyUsed);
-            } else if (!notifyUsed && StrUtil.isNotBlank(visibleResponse) && !isNoReply(response)) {
+            } else if (!notifyUsed && StrUtil.isNotBlank(visibleResponse) && !RuntimeDeliveryHelper.isNoReply(response)) {
                 runtimeStoreService.appendRunEvent(runId, "delivery_suppressed", visibleResponse);
             }
 
@@ -227,7 +240,7 @@ public class SystemEventRunner {
             String visibleResponse,
             boolean notifyUsed
     ) {
-        if (notifyUsed || isNoReply(response) || StrUtil.isBlank(visibleResponse)) {
+        if (notifyUsed || RuntimeDeliveryHelper.isNoReply(response) || StrUtil.isBlank(visibleResponse)) {
             return false;
         }
         if (request.getReplyTarget() == null) {
@@ -240,7 +253,7 @@ public class SystemEventRunner {
         outboundEnvelope.setReplyTarget(request.getReplyTarget());
         outboundEnvelope.setContent(visibleResponse);
         DeliveryResult deliveryResult = channelRegistry.send(outboundEnvelope);
-        recordDeliveryResult(runId, deliveryResult);
+        RuntimeDeliveryHelper.recordDeliveryResult(runtimeStoreService, runId, deliveryResult);
         runtimeStoreService.appendRunEvent(runId, "delivery_fallback_sent", visibleResponse);
         return deliveryResult.isDelivered();
     }
@@ -254,8 +267,8 @@ public class SystemEventRunner {
         if (StrUtil.isBlank(request.getRelatedRunId())) {
             return false;
         }
-        if (!isFinalReplyOnce(response) || StrUtil.isBlank(visibleResponse)) {
-            if (!isNoReply(response) && StrUtil.isNotBlank(visibleResponse)) {
+        if (!RuntimeDeliveryHelper.isFinalReplyOnce(response) || StrUtil.isBlank(visibleResponse)) {
+            if (!RuntimeDeliveryHelper.isNoReply(response) && StrUtil.isNotBlank(visibleResponse)) {
                 runtimeStoreService.appendRunEvent(runId, "delivery_suppressed", visibleResponse);
             }
             return false;
@@ -279,88 +292,10 @@ public class SystemEventRunner {
         outboundEnvelope.setReplyTarget(request.getReplyTarget());
         outboundEnvelope.setContent(visibleResponse);
         DeliveryResult deliveryResult = channelRegistry.send(outboundEnvelope);
-        recordDeliveryResult(runId, deliveryResult);
+        RuntimeDeliveryHelper.recordDeliveryResult(runtimeStoreService, runId, deliveryResult);
         runtimeStoreService.appendRunEvent(request.getRelatedRunId(), "children_aggregated", "aggregateRunId=" + runId);
         runtimeStoreService.appendRunEvent(runId, "delivery_fallback_sent", visibleResponse);
         return deliveryResult.isDelivered();
-    }
-
-    private NotificationSupport buildNotificationSupport(String sessionKey, ReplyTarget replyTarget, String runId) {
-        return (message, progress) -> {
-            NotificationResult result = new NotificationResult();
-            result.setSessionKey(sessionKey);
-
-            if (StrUtil.isBlank(message)) {
-                result.setDelivered(false);
-                result.setMessage("message 不能为空");
-                return result;
-            }
-            if (replyTarget == null) {
-                result.setDelivered(false);
-                result.setMessage("当前系统事件没有可用的 ReplyTarget");
-                return result;
-            }
-
-            OutboundEnvelope outboundEnvelope = new OutboundEnvelope();
-            outboundEnvelope.setRunId(runId);
-            outboundEnvelope.setReplyTarget(replyTarget);
-            outboundEnvelope.setContent(message);
-            outboundEnvelope.setProgress(progress);
-            DeliveryResult deliveryResult = channelRegistry.send(outboundEnvelope);
-            recordDeliveryResult(runId, deliveryResult);
-            applyDeliveryResult(result, deliveryResult);
-            runtimeStoreService.appendRunEvent(runId, progress ? "notify_progress" : "notify", message);
-
-            result.setDelivered(deliveryResult.isDelivered());
-            if (StrUtil.isBlank(result.getMessage())) {
-                result.setMessage("sent to " + replyTarget.getChannelType() + ":" + replyTarget.getConversationId());
-            }
-            return result;
-        };
-    }
-
-    private RunQuerySupport buildRunQuerySupport(String sessionKey) {
-        return new RunQuerySupport() {
-            @Override
-            public List<AgentRun> listChildRuns(int limit) {
-                return runtimeStoreService.listChildRuns(sessionKey, limit);
-            }
-
-            @Override
-            public AgentRun getRun(String runId) {
-                AgentRun run = runtimeStoreService.getRun(runId);
-                if (run == null) {
-                    return null;
-                }
-                if (StrUtil.equals(sessionKey, run.getParentSessionKey()) || StrUtil.equals(sessionKey, run.getSessionKey())) {
-                    return run;
-                }
-                return null;
-            }
-
-            @Override
-            public AgentRun getLatestChildRun() {
-                return runtimeStoreService.getLatestChildRun(sessionKey);
-            }
-
-            @Override
-            public ParentRunChildrenSummary getChildSummary(String parentRunId, String batchKey) {
-                String resolvedParentRunId = parentRunId;
-                if (StrUtil.isBlank(resolvedParentRunId)) {
-                    AgentRun latestParent = runtimeStoreService.getLatestParentRunWithChildren(sessionKey);
-                    resolvedParentRunId = latestParent == null ? null : latestParent.getRunId();
-                }
-                if (StrUtil.isBlank(resolvedParentRunId)) {
-                    return null;
-                }
-
-                ParentRunChildrenSummary summary = runtimeStoreService.summarizeChildRuns(
-                        resolvedParentRunId,
-                        StrUtil.blankToDefault(StrUtil.trim(batchKey), null)
-                );
-                return summary.getTotalChildren() == 0 ? null : summary;
-            }
-        };
     }
 
     private void validate(SystemEventRequest request) {
@@ -390,22 +325,6 @@ public class SystemEventRunner {
         return "child_continuation_triggered";
     }
 
-    private boolean isNoReply(String response) {
-        return StrUtil.equalsIgnoreCase(StrUtil.trim(response), AgentRuntimeService.NO_REPLY);
-    }
-
-    private boolean isFinalReplyOnce(String response) {
-        return StrUtil.startWithIgnoreCase(StrUtil.trim(response), AgentRuntimeService.FINAL_REPLY_ONCE_PREFIX);
-    }
-
-    private String normalizeVisibleResponse(String response) {
-        String trimmed = StrUtil.trim(response);
-        if (StrUtil.startWithIgnoreCase(trimmed, AgentRuntimeService.FINAL_REPLY_ONCE_PREFIX)) {
-            return StrUtil.trim(trimmed.substring(AgentRuntimeService.FINAL_REPLY_ONCE_PREFIX.length()));
-        }
-        return response;
-    }
-
     private SystemEventRequest copyRequest(SystemEventRequest request) {
         SystemEventRequest copy = new SystemEventRequest();
         copy.setSourceKind(request.getSourceKind());
@@ -420,41 +339,11 @@ public class SystemEventRunner {
         return copy;
     }
 
-    private void applyDeliveryResult(NotificationResult result, DeliveryResult deliveryResult) {
-        if (result == null || deliveryResult == null) {
-            return;
+    private List<ChatMessage> trimHistoryForContinuation(List<ChatMessage> history, int maxMessages) {
+        if (history == null || history.size() <= maxMessages) {
+            return history;
         }
-        result.setTruncated(deliveryResult.isTruncated());
-        result.setSegmented(deliveryResult.isSegmented());
-        result.setSegmentCount(deliveryResult.getSegmentCount());
-        result.setOriginalLength(deliveryResult.getOriginalLength());
-        result.setFinalLength(deliveryResult.getFinalLength());
-        result.setChannelType(deliveryResult.getChannelType() == null ? null : deliveryResult.getChannelType().name());
-        result.setMessage(deliveryResult.getMessage());
+        return history.subList(history.size() - maxMessages, history.size());
     }
 
-    private void recordDeliveryResult(String runId, DeliveryResult deliveryResult) {
-        if (deliveryResult == null) {
-            return;
-        }
-        StringBuilder message = new StringBuilder();
-        message.append("channel=").append(deliveryResult.getChannelType())
-                .append(", segmentCount=").append(deliveryResult.getSegmentCount())
-                .append(", originalLength=").append(deliveryResult.getOriginalLength())
-                .append(", finalLength=").append(deliveryResult.getFinalLength());
-        if (StrUtil.isNotBlank(deliveryResult.getMessage())) {
-            message.append(", detail=").append(deliveryResult.getMessage());
-        }
-        if (!deliveryResult.isDelivered()) {
-            runtimeStoreService.appendRunEvent(runId, "delivery_failed", message.toString());
-            return;
-        }
-        runtimeStoreService.appendRunEvent(runId, "delivery_sent", message.toString());
-        if (deliveryResult.isSegmented()) {
-            runtimeStoreService.appendRunEvent(runId, "delivery_segmented", message.toString());
-        }
-        if (deliveryResult.isTruncated()) {
-            runtimeStoreService.appendRunEvent(runId, "delivery_truncated", message.toString());
-        }
-    }
 }

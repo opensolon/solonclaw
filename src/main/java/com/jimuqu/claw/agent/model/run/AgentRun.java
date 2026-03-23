@@ -55,4 +55,10 @@ public class AgentRun implements Serializable {
     private String finalResponse;
     /** 错误信息。 */
     private String errorMessage;
+    /** 最新进度阶段标签。 */
+    private String latestPhase;
+    /** 最新进度描述。 */
+    private String latestProgressDetail;
+    /** 最新进度更新时间戳。 */
+    private long latestProgressAt;
 }

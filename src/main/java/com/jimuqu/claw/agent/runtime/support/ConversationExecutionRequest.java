@@ -2,8 +2,11 @@ package com.jimuqu.claw.agent.runtime.support;
 
 import com.jimuqu.claw.agent.model.enums.RuntimeSourceKind;
 import com.jimuqu.claw.agent.runtime.api.NotificationSupport;
+import com.jimuqu.claw.agent.runtime.api.ProgressReportSupport;
 import com.jimuqu.claw.agent.runtime.api.RunQuerySupport;
 import com.jimuqu.claw.agent.runtime.api.SpawnTaskSupport;
+import com.jimuqu.claw.agent.runtime.api.TaskControlSupport;
+import com.jimuqu.claw.agent.runtime.registry.ActiveTaskEntry;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -43,4 +46,12 @@ public class ConversationExecutionRequest implements Serializable {
     private RunQuerySupport runQuerySupport;
     /** 当前运行可用的主动通知能力。 */
     private NotificationSupport notificationSupport;
+    /** 当前运行可用的进度报告能力。 */
+    private ProgressReportSupport progressReportSupport;
+    /** 当前运行可用的子任务控制能力。 */
+    private TaskControlSupport taskControlSupport;
+    /** 当前运行标识。 */
+    private String runId;
+    /** 当前会话的活跃子任务快照，用于注入系统提示词。 */
+    private List<ActiveTaskEntry> activeTasks;
 }

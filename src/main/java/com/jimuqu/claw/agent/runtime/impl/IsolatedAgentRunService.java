@@ -16,6 +16,7 @@ import com.jimuqu.claw.agent.runtime.support.AgentTurnRequest;
 import com.jimuqu.claw.agent.runtime.support.ConversationExecutionRequest;
 import com.jimuqu.claw.agent.runtime.support.DeliveryResult;
 import com.jimuqu.claw.agent.runtime.support.NotificationResult;
+import com.jimuqu.claw.agent.runtime.support.RuntimeDeliveryHelper;
 import com.jimuqu.claw.agent.store.RuntimeStoreService;
 import com.jimuqu.claw.config.SolonClawProperties;
 import org.slf4j.Logger;
@@ -136,7 +137,7 @@ public class IsolatedAgentRunService {
             String visibleResponse,
             boolean notifyUsed
     ) {
-        if (notifyUsed || StrUtil.isBlank(visibleResponse) || isNoReply(visibleResponse)) {
+        if (notifyUsed || StrUtil.isBlank(visibleResponse) || RuntimeDeliveryHelper.isNoReply(visibleResponse)) {
             return false;
         }
 
@@ -151,7 +152,7 @@ public class IsolatedAgentRunService {
         outboundEnvelope.setReplyTarget(replyTarget);
         outboundEnvelope.setContent(visibleResponse);
         DeliveryResult deliveryResult = channelRegistry.send(outboundEnvelope);
-        recordDeliveryResult(runId, deliveryResult);
+        RuntimeDeliveryHelper.recordDeliveryResult(runtimeStoreService, runId, deliveryResult);
         runtimeStoreService.appendRunEvent(runId, "delivery_fallback_sent", visibleResponse);
         return deliveryResult.isDelivered();
     }
@@ -184,8 +185,8 @@ public class IsolatedAgentRunService {
             outboundEnvelope.setContent(message);
             outboundEnvelope.setProgress(progress);
             DeliveryResult deliveryResult = channelRegistry.send(outboundEnvelope);
-            recordDeliveryResult(runId, deliveryResult);
-            applyDeliveryResult(result, deliveryResult);
+            RuntimeDeliveryHelper.recordDeliveryResult(runtimeStoreService, runId, deliveryResult);
+            RuntimeDeliveryHelper.applyDeliveryResult(result, deliveryResult);
             runtimeStoreService.appendRunEvent(runId, progress ? "notify_progress" : "notify", message);
 
             result.setDelivered(deliveryResult.isDelivered());
@@ -210,10 +211,6 @@ public class IsolatedAgentRunService {
     private String buildIsolatedSessionKey(AgentTurnRequest request, String runId) {
         String base = StrUtil.blankToDefault(StrUtil.trim(request.getJobName()), "agent-turn-job");
         return "job-agent:" + base + ":run:" + runId;
-    }
-
-    private boolean isNoReply(String response) {
-        return StrUtil.equalsIgnoreCase(StrUtil.trim(response), AgentRuntimeService.NO_REPLY);
     }
 
     private void validate(AgentTurnRequest request) {
@@ -271,47 +268,9 @@ public class IsolatedAgentRunService {
                 outboundEnvelope.setReplyTarget(replyTarget);
                 outboundEnvelope.setContent(fallback);
                 DeliveryResult deliveryResult = channelRegistry.send(outboundEnvelope);
-                recordDeliveryResult(runId, deliveryResult);
+                RuntimeDeliveryHelper.recordDeliveryResult(runtimeStoreService, runId, deliveryResult);
                 runtimeStoreService.appendRunEvent(runId, "delivery_fallback_sent", fallback);
             }
-        }
-    }
-
-    private void applyDeliveryResult(NotificationResult result, DeliveryResult deliveryResult) {
-        if (result == null || deliveryResult == null) {
-            return;
-        }
-        result.setTruncated(deliveryResult.isTruncated());
-        result.setSegmented(deliveryResult.isSegmented());
-        result.setSegmentCount(deliveryResult.getSegmentCount());
-        result.setOriginalLength(deliveryResult.getOriginalLength());
-        result.setFinalLength(deliveryResult.getFinalLength());
-        result.setChannelType(deliveryResult.getChannelType() == null ? null : deliveryResult.getChannelType().name());
-        result.setMessage(deliveryResult.getMessage());
-    }
-
-    private void recordDeliveryResult(String runId, DeliveryResult deliveryResult) {
-        if (deliveryResult == null) {
-            return;
-        }
-        StringBuilder message = new StringBuilder();
-        message.append("channel=").append(deliveryResult.getChannelType())
-                .append(", segmentCount=").append(deliveryResult.getSegmentCount())
-                .append(", originalLength=").append(deliveryResult.getOriginalLength())
-                .append(", finalLength=").append(deliveryResult.getFinalLength());
-        if (StrUtil.isNotBlank(deliveryResult.getMessage())) {
-            message.append(", detail=").append(deliveryResult.getMessage());
-        }
-        if (!deliveryResult.isDelivered()) {
-            runtimeStoreService.appendRunEvent(runId, "delivery_failed", message.toString());
-            return;
-        }
-        runtimeStoreService.appendRunEvent(runId, "delivery_sent", message.toString());
-        if (deliveryResult.isSegmented()) {
-            runtimeStoreService.appendRunEvent(runId, "delivery_segmented", message.toString());
-        }
-        if (deliveryResult.isTruncated()) {
-            runtimeStoreService.appendRunEvent(runId, "delivery_truncated", message.toString());
         }
     }
 }

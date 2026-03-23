@@ -15,27 +15,36 @@ import com.jimuqu.claw.agent.model.route.ReplyTarget;
 import com.jimuqu.claw.agent.model.run.AgentRun;
 import com.jimuqu.claw.agent.runtime.api.ConversationAgent;
 import com.jimuqu.claw.agent.runtime.api.NotificationSupport;
+import com.jimuqu.claw.agent.runtime.api.ProgressReportSupport;
 import com.jimuqu.claw.agent.runtime.api.RunQuerySupport;
 import com.jimuqu.claw.agent.runtime.api.SpawnTaskSupport;
+import com.jimuqu.claw.agent.runtime.api.TaskControlSupport;
+import com.jimuqu.claw.agent.runtime.registry.ActiveTaskRegistry;
 import com.jimuqu.claw.agent.runtime.support.ConversationExecutionRequest;
 import com.jimuqu.claw.agent.runtime.support.DeliveryResult;
 import com.jimuqu.claw.agent.runtime.support.NotificationResult;
 import com.jimuqu.claw.agent.runtime.support.ParentRunChildrenSummary;
+import com.jimuqu.claw.agent.runtime.support.RuntimeDeliveryHelper;
+import com.jimuqu.claw.agent.runtime.support.RuntimeSupportFactory;
+import com.jimuqu.claw.agent.runtime.support.RuntimeReplyProtocol;
 import com.jimuqu.claw.agent.runtime.support.SpawnTaskResult;
 import com.jimuqu.claw.agent.runtime.support.SystemEventRequest;
+import com.jimuqu.claw.agent.runtime.support.TaskControlResult;
 import com.jimuqu.claw.agent.store.RuntimeStoreService;
 import com.jimuqu.claw.config.SolonClawProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 处理用户消息主链，并为子任务与查询提供运行时能力。
  */
 public class AgentRuntimeService {
-    public static final String NO_REPLY = "NO_REPLY";
-    public static final String FINAL_REPLY_ONCE_PREFIX = "FINAL_REPLY_ONCE:";
 
     private static final Logger log = LoggerFactory.getLogger(AgentRuntimeService.class);
 
@@ -44,7 +53,16 @@ public class AgentRuntimeService {
     private final ConversationScheduler conversationScheduler;
     private final ChannelRegistry channelRegistry;
     private final SystemEventRunner systemEventRunner;
+    private final ActiveTaskRegistry activeTaskRegistry;
     private final SolonClawProperties properties;
+    private final ScheduledExecutorService cancelTimer = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
+        @Override
+        public Thread newThread(Runnable runnable) {
+            Thread thread = new Thread(runnable, "solonclaw-cancel-timer");
+            thread.setDaemon(true);
+            return thread;
+        }
+    });
 
     public AgentRuntimeService(
             ConversationAgent conversationAgent,
@@ -52,6 +70,7 @@ public class AgentRuntimeService {
             ConversationScheduler conversationScheduler,
             ChannelRegistry channelRegistry,
             SystemEventRunner systemEventRunner,
+            ActiveTaskRegistry activeTaskRegistry,
             SolonClawProperties properties
     ) {
         this.conversationAgent = conversationAgent;
@@ -59,6 +78,7 @@ public class AgentRuntimeService {
         this.conversationScheduler = conversationScheduler;
         this.channelRegistry = channelRegistry;
         this.systemEventRunner = systemEventRunner;
+        this.activeTaskRegistry = activeTaskRegistry;
         this.properties = properties;
     }
 
@@ -82,7 +102,7 @@ public class AgentRuntimeService {
             return null;
         }
 
-        ConversationScheduler.SessionState state = conversationScheduler.inspect(inboundEnvelope.getSessionKey());
+        ConversationScheduler.SessionState state = conversationScheduler.inspectUserMessage(inboundEnvelope.getSessionKey());
 
         long latestConversationVersion = runtimeStoreService.getLatestConversationVersion(inboundEnvelope.getSessionKey());
         long nextConversationVersion = latestConversationVersion + 1L;
@@ -120,10 +140,10 @@ public class AgentRuntimeService {
             ack.setReplyTarget(inboundEnvelope.getReplyTarget());
             ack.setContent(state.queuedCount() > 0 ? "已收到，排队处理中。" : "已收到，正在并行处理中。");
             DeliveryResult deliveryResult = channelRegistry.send(ack);
-            recordDeliveryResult(run.getRunId(), deliveryResult);
+            RuntimeDeliveryHelper.recordDeliveryResult(runtimeStoreService, run.getRunId(), deliveryResult);
         }
 
-        conversationScheduler.submit(inboundEnvelope.getSessionKey(), () -> processRun(inboundEnvelope, run.getRunId()));
+        conversationScheduler.submit(inboundEnvelope.getSessionKey(), ConversationScheduler.SchedulerRunType.USER_MESSAGE, () -> processRun(inboundEnvelope, run.getRunId()));
         return run.getRunId();
     }
 
@@ -156,6 +176,12 @@ public class AgentRuntimeService {
             return;
         }
 
+        boolean isChildRun = StrUtil.isNotBlank(run.getParentRunId());
+        if (isChildRun) {
+            activeTaskRegistry.setExecutionThread(runId, Thread.currentThread());
+            activeTaskRegistry.updateStatus(runId, RunStatus.RUNNING);
+        }
+
         try {
             run.setStatus(RunStatus.RUNNING);
             run.setStartedAt(System.currentTimeMillis());
@@ -165,9 +191,10 @@ public class AgentRuntimeService {
 
             ConversationExecutionRequest request = new ConversationExecutionRequest();
             request.setSessionKey(inboundEnvelope.getSessionKey());
+            request.setRunId(runId);
             request.setCurrentMessage(inboundEnvelope.getContent());
             request.setCurrentSourceKind(run.getSourceKind());
-            request.setChildRun(StrUtil.isNotBlank(run.getParentRunId()));
+            request.setChildRun(isChildRun);
             request.setParentRunId(run.getParentRunId());
             request.setTaskTitle(run.getTaskTitle());
             request.setHistory(runtimeStoreService.loadConversationHistoryBefore(
@@ -175,12 +202,24 @@ public class AgentRuntimeService {
                     inboundEnvelope.getSessionVersion()
             ));
             request.setSpawnTaskSupport(buildSpawnTaskSupport(runId, run, inboundEnvelope));
-            request.setRunQuerySupport(buildRunQuerySupport(inboundEnvelope.getSessionKey()));
-            request.setNotificationSupport(buildNotificationSupport(inboundEnvelope.getSessionKey(), runId));
+            request.setRunQuerySupport(RuntimeSupportFactory.buildRunQuerySupport(runtimeStoreService, inboundEnvelope.getSessionKey()));
+            request.setNotificationSupport(RuntimeSupportFactory.buildNotificationSupport(runtimeStoreService, channelRegistry, inboundEnvelope.getSessionKey(), runId));
+            request.setTaskControlSupport(buildTaskControlSupport(inboundEnvelope.getSessionKey()));
+            if (isChildRun) {
+                request.setProgressReportSupport(buildProgressReportSupport(runId));
+            }
+            if (!isChildRun) {
+                request.setActiveTasks(activeTaskRegistry.getActiveTasks(inboundEnvelope.getSessionKey()));
+            }
 
+            final String[] lastProgressText = {""};
             final String[] latestProgress = {""};
             String response = conversationAgent.execute(request, progress -> {
                 latestProgress[0] = progress;
+                if (StrUtil.isBlank(progress) || StrUtil.equals(progress, lastProgressText[0])) {
+                    return;
+                }
+                lastProgressText[0] = progress;
                 runtimeStoreService.appendRunEvent(runId, "progress", progress);
                 dispatchProgressOutbound(runId, inboundEnvelope, progress);
             });
@@ -193,12 +232,21 @@ public class AgentRuntimeService {
                 return;
             }
 
-            String visibleResponse = normalizeVisibleResponse(response);
+            if (RuntimeDeliveryHelper.isNoReply(response) || activeTaskRegistry.isCancelRequested(runId)) {
+                run.setStatus(RunStatus.CANCELLED);
+                run.setFinishedAt(System.currentTimeMillis());
+                run.setErrorMessage("被父任务主动取消");
+                runtimeStoreService.saveRun(run);
+                runtimeStoreService.appendRunEvent(runId, "status", "cancelled");
+                return;
+            }
+
+            String visibleResponse = RuntimeDeliveryHelper.normalizeVisibleResponse(response);
             if (StrUtil.isBlank(visibleResponse)) {
                 handleEmptyUserResponse(run, inboundEnvelope, runId);
                 return;
             }
-            boolean suppressReply = isNoReply(response);
+            boolean suppressReply = RuntimeDeliveryHelper.isNoReply(response);
             run.setFinalResponse(visibleResponse);
 
             if (run.getStatus() == RunStatus.WAITING_CHILDREN) {
@@ -260,9 +308,18 @@ public class AgentRuntimeService {
                 outboundEnvelope.setReplyTarget(inboundEnvelope.getReplyTarget());
                 outboundEnvelope.setContent("抱歉，这次处理失败了：" + throwable.getMessage());
                 DeliveryResult deliveryResult = channelRegistry.send(outboundEnvelope);
-                recordDeliveryResult(runId, deliveryResult);
+                RuntimeDeliveryHelper.recordDeliveryResult(runtimeStoreService, runId, deliveryResult);
+            }
+        } finally {
+            if (isChildRun) {
+                activeTaskRegistry.markCompleted(runId, run.getStatus());
+                activeTaskRegistry.setExecutionThread(runId, null);
             }
         }
+    }
+
+    public void shutdown() {
+        cancelTimer.shutdownNow();
     }
 
     private SpawnTaskResult spawnTask(String parentRunId, InboundEnvelope parentInbound, String taskTitle, String taskDescription, String batchKey) {
@@ -334,7 +391,8 @@ public class AgentRuntimeService {
                 childRun
         );
 
-        conversationScheduler.submit(childSessionKey, () -> processRun(childInbound, childRun.getRunId()));
+        activeTaskRegistry.register(parentInbound.getSessionKey(), childRun);
+        conversationScheduler.submit(childSessionKey, ConversationScheduler.SchedulerRunType.CHILD_TASK, () -> processRun(childInbound, childRun.getRunId()));
 
         SpawnTaskResult result = new SpawnTaskResult();
         result.setRunId(childRun.getRunId());
@@ -496,83 +554,110 @@ public class AgentRuntimeService {
         }
     }
 
-    private RunQuerySupport buildRunQuerySupport(String sessionKey) {
-        return new RunQuerySupport() {
+    private TaskControlSupport buildTaskControlSupport(String parentSessionKey) {
+        return new TaskControlSupport() {
             @Override
-            public List<AgentRun> listChildRuns(int limit) {
-                return runtimeStoreService.listChildRuns(sessionKey, limit);
+            public TaskControlResult cancelTask(String runId) {
+                TaskControlResult result = new TaskControlResult();
+                if (StrUtil.isBlank(runId)) {
+                    result.setCode("invalid_run_id");
+                    result.setSuccess(false);
+                    result.setMessage("runId 不能为空");
+                    return result;
+                }
+                com.jimuqu.claw.agent.runtime.registry.ActiveTaskEntry entry = activeTaskRegistry.getEntry(runId);
+                if (entry == null) {
+                    result.setCode("not_found");
+                    result.setSuccess(false);
+                    result.setMessage("未找到活跃任务: " + runId);
+                    return result;
+                }
+                if (!StrUtil.equals(parentSessionKey, entry.getParentSessionKey())) {
+                    result.setCode("forbidden");
+                    result.setSuccess(false);
+                    result.setMessage("该任务不属于当前会话");
+                    return result;
+                }
+
+                activeTaskRegistry.requestCancel(runId);
+                activeTaskRegistry.updateStatus(runId, RunStatus.CANCELLED);
+                runtimeStoreService.appendRunEvent(runId, "cancel_requested", "父任务请求取消");
+                scheduleInterruptFallback(runId);
+                result.setCode("cancel_requested");
+                result.setSuccess(true);
+                result.setMessage("已请求取消任务: " + runId);
+                return result;
             }
 
             @Override
-            public AgentRun getRun(String runId) {
-                AgentRun run = runtimeStoreService.getRun(runId);
-                if (run == null) {
-                    return null;
+            public TaskControlResult appendInstruction(String runId, String instruction) {
+                TaskControlResult result = new TaskControlResult();
+                if (StrUtil.isBlank(runId)) {
+                    result.setCode("invalid_run_id");
+                    result.setSuccess(false);
+                    result.setMessage("runId 不能为空");
+                    return result;
                 }
-                if (StrUtil.equals(sessionKey, run.getParentSessionKey()) || StrUtil.equals(sessionKey, run.getSessionKey())) {
-                    return run;
+                com.jimuqu.claw.agent.runtime.registry.ActiveTaskEntry entry = activeTaskRegistry.getEntry(runId);
+                if (entry == null) {
+                    result.setCode("not_found");
+                    result.setSuccess(false);
+                    result.setMessage("未找到活跃任务: " + runId);
+                    return result;
                 }
-                return null;
-            }
+                if (!StrUtil.equals(parentSessionKey, entry.getParentSessionKey())) {
+                    result.setCode("forbidden");
+                    result.setSuccess(false);
+                    result.setMessage("该任务不属于当前会话");
+                    return result;
+                }
+                if (StrUtil.isBlank(instruction)) {
+                    result.setCode("invalid_instruction");
+                    result.setSuccess(false);
+                    result.setMessage("instruction 不能为空");
+                    return result;
+                }
 
-            @Override
-            public AgentRun getLatestChildRun() {
-                return runtimeStoreService.getLatestChildRun(sessionKey);
-            }
-
-            @Override
-            public ParentRunChildrenSummary getChildSummary(String parentRunId, String batchKey) {
-                String resolvedParentRunId = parentRunId;
-                if (StrUtil.isBlank(resolvedParentRunId)) {
-                    AgentRun latestParent = runtimeStoreService.getLatestParentRunWithChildren(sessionKey);
-                    resolvedParentRunId = latestParent == null ? null : latestParent.getRunId();
-                }
-                if (StrUtil.isBlank(resolvedParentRunId)) {
-                    return null;
-                }
-
-                ParentRunChildrenSummary summary = runtimeStoreService.summarizeChildRuns(
-                        resolvedParentRunId,
-                        StrUtil.blankToDefault(StrUtil.trim(batchKey), null)
+                runtimeStoreService.appendSystemConversationEvent(
+                        entry.getChildSessionKey(),
+                        runId,
+                        "[父任务追加指令]\n" + instruction.trim()
                 );
-                return summary.getTotalChildren() == 0 ? null : summary;
+                runtimeStoreService.appendRunEvent(runId, "instruction_injected", instruction.trim());
+                result.setCode("instruction_injected");
+                result.setSuccess(true);
+                result.setMessage("指令已追加到子任务: " + runId);
+                return result;
             }
         };
     }
 
-    private NotificationSupport buildNotificationSupport(String sessionKey, String runId) {
-        return (message, progress) -> {
-            NotificationResult result = new NotificationResult();
-            result.setSessionKey(sessionKey);
-
-            if (StrUtil.isBlank(message)) {
-                result.setDelivered(false);
-                result.setMessage("message 不能为空");
-                return result;
+    private void scheduleInterruptFallback(String runId) {
+        int timeoutSeconds = properties.getAgent().getScheduler().getCancelCooperativeTimeoutSeconds();
+        cancelTimer.schedule(() -> {
+            Thread thread = activeTaskRegistry.getExecutionThread(runId);
+            if (thread != null && thread.isAlive() && activeTaskRegistry.isCancelRequested(runId)) {
+                thread.interrupt();
+                runtimeStoreService.appendRunEvent(runId, "cancel_interrupt", "协作取消超时，已强制中断线程");
             }
+        }, timeoutSeconds, TimeUnit.SECONDS);
+    }
 
-            ReplyTarget replyTarget = runtimeStoreService.getReplyTarget(sessionKey);
-            if (replyTarget == null) {
-                result.setDelivered(false);
-                result.setMessage("当前会话没有可用的 ReplyTarget，无法主动通知");
-                return result;
+    private ProgressReportSupport buildProgressReportSupport(String runId) {
+        return (phase, detail) -> {
+            AgentRun run = runtimeStoreService.getRun(runId);
+            if (run != null) {
+                if (StrUtil.equals(run.getLatestPhase(), phase) && StrUtil.equals(run.getLatestProgressDetail(), detail)) {
+                    activeTaskRegistry.updateProgress(runId, phase, detail);
+                    return;
+                }
+                run.setLatestPhase(phase);
+                run.setLatestProgressDetail(detail);
+                run.setLatestProgressAt(System.currentTimeMillis());
+                runtimeStoreService.saveRun(run);
             }
-
-            OutboundEnvelope outboundEnvelope = new OutboundEnvelope();
-            outboundEnvelope.setRunId(runId);
-            outboundEnvelope.setReplyTarget(replyTarget);
-            outboundEnvelope.setContent(message);
-            outboundEnvelope.setProgress(progress);
-            DeliveryResult deliveryResult = channelRegistry.send(outboundEnvelope);
-            recordDeliveryResult(runId, deliveryResult);
-            applyDeliveryResult(result, deliveryResult);
-            runtimeStoreService.appendRunEvent(runId, progress ? "notify_progress" : "notify", message);
-
-            result.setDelivered(deliveryResult.isDelivered());
-            if (StrUtil.isBlank(result.getMessage())) {
-                result.setMessage("sent to " + replyTarget.getChannelType() + ":" + replyTarget.getConversationId());
-            }
-            return result;
+            activeTaskRegistry.updateProgress(runId, phase, detail);
+            runtimeStoreService.appendRunEvent(runId, "progress_report", "phase=" + phase + ", detail=" + detail);
         };
     }
 
@@ -594,19 +679,7 @@ public class AgentRuntimeService {
         outboundEnvelope.setContent(progress);
         outboundEnvelope.setProgress(true);
         DeliveryResult deliveryResult = channelRegistry.send(outboundEnvelope);
-        recordDeliveryResult(runId, deliveryResult);
-    }
-
-    private boolean isNoReply(String response) {
-        return StrUtil.equalsIgnoreCase(StrUtil.trim(response), NO_REPLY);
-    }
-
-    private String normalizeVisibleResponse(String response) {
-        String trimmed = StrUtil.trim(response);
-        if (StrUtil.startWithIgnoreCase(trimmed, FINAL_REPLY_ONCE_PREFIX)) {
-            return StrUtil.trim(trimmed.substring(FINAL_REPLY_ONCE_PREFIX.length()));
-        }
-        return response;
+        RuntimeDeliveryHelper.recordDeliveryResult(runtimeStoreService, runId, deliveryResult);
     }
 
     private void handleEmptyUserResponse(AgentRun run, InboundEnvelope inboundEnvelope, String runId) {
@@ -635,7 +708,7 @@ public class AgentRuntimeService {
             outboundEnvelope.setReplyTarget(inboundEnvelope.getReplyTarget());
             outboundEnvelope.setContent(fallback);
             DeliveryResult deliveryResult = channelRegistry.send(outboundEnvelope);
-            recordDeliveryResult(runId, deliveryResult);
+            RuntimeDeliveryHelper.recordDeliveryResult(runtimeStoreService, runId, deliveryResult);
             log.info(
                     "Run {} empty response fallback dispatched. channelType={}, conversationType={}, conversationId={}",
                     runId,
@@ -644,19 +717,6 @@ public class AgentRuntimeService {
                     inboundEnvelope.getReplyTarget().getConversationId()
             );
         }
-    }
-
-    private void applyDeliveryResult(NotificationResult result, DeliveryResult deliveryResult) {
-        if (result == null || deliveryResult == null) {
-            return;
-        }
-        result.setTruncated(deliveryResult.isTruncated());
-        result.setSegmented(deliveryResult.isSegmented());
-        result.setSegmentCount(deliveryResult.getSegmentCount());
-        result.setOriginalLength(deliveryResult.getOriginalLength());
-        result.setFinalLength(deliveryResult.getFinalLength());
-        result.setChannelType(deliveryResult.getChannelType() == null ? null : deliveryResult.getChannelType().name());
-        result.setMessage(deliveryResult.getMessage());
     }
 
     private void dispatchFinalReply(String runId, ReplyTarget replyTarget, String content) {
@@ -669,7 +729,7 @@ public class AgentRuntimeService {
         outboundEnvelope.setReplyTarget(replyTarget);
         outboundEnvelope.setContent(content);
         DeliveryResult deliveryResult = channelRegistry.send(outboundEnvelope);
-        recordDeliveryResult(runId, deliveryResult);
+        RuntimeDeliveryHelper.recordDeliveryResult(runtimeStoreService, runId, deliveryResult);
         log.info(
                 "Run {} reply dispatched. channelType={}, conversationType={}, conversationId={}",
                 runId,
@@ -689,29 +749,4 @@ public class AgentRuntimeService {
         return builder.toString().trim();
     }
 
-    private void recordDeliveryResult(String runId, DeliveryResult deliveryResult) {
-        if (deliveryResult == null) {
-            return;
-        }
-        StringBuilder message = new StringBuilder();
-        message.append("channel=").append(deliveryResult.getChannelType())
-                .append(", segmentCount=").append(deliveryResult.getSegmentCount())
-                .append(", originalLength=").append(deliveryResult.getOriginalLength())
-                .append(", finalLength=").append(deliveryResult.getFinalLength());
-        if (StrUtil.isNotBlank(deliveryResult.getMessage())) {
-            message.append(", detail=").append(deliveryResult.getMessage());
-        }
-
-        if (!deliveryResult.isDelivered()) {
-            runtimeStoreService.appendRunEvent(runId, "delivery_failed", message.toString());
-            return;
-        }
-        runtimeStoreService.appendRunEvent(runId, "delivery_sent", message.toString());
-        if (deliveryResult.isSegmented()) {
-            runtimeStoreService.appendRunEvent(runId, "delivery_segmented", message.toString());
-        }
-        if (deliveryResult.isTruncated()) {
-            runtimeStoreService.appendRunEvent(runId, "delivery_truncated", message.toString());
-        }
-    }
 }

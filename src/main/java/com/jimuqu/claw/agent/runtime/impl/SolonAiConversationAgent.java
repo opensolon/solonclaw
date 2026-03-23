@@ -54,12 +54,13 @@ public class SolonAiConversationAgent implements ConversationAgent {
      */
     @Setter
     private JobTools jobTools;
-    /**
-     * ReAct 运行日志拦截器。
-     */
+    /** ReAct 运行日志拦截器。 */
     private final ReActInterceptor reActInterceptor;
     /** 黑名单拦截器（可选）。 */
     private final HITLInterceptor blacklistInterceptor;
+    /** 取消拦截器（可选）。 */
+    @Setter
+    private CancellationInterceptor cancellationInterceptor;
 
     /**
      * 创建基于聊天模型的会话执行 Agent。
@@ -98,6 +99,9 @@ public class SolonAiConversationAgent implements ConversationAgent {
     @Override
     public String execute(ConversationExecutionRequest request, Consumer<String> progressConsumer) throws Throwable {
         SystemAwareAgentSession session = SystemAwareAgentSession.of(request.getSessionKey());
+        if (StrUtil.isNotBlank(request.getRunId())) {
+            session.getSnapshot().put("runId", request.getRunId());
+        }
         if (StrUtil.isNotBlank(request.getTaskTitle())) {
             session.getSnapshot().put("taskTitle", request.getTaskTitle());
         }
@@ -167,7 +171,9 @@ public class SolonAiConversationAgent implements ConversationAgent {
                 workspaceAgentTools,
                 request == null ? null : request.getSpawnTaskSupport(),
                 request == null ? null : request.getRunQuerySupport(),
-                request == null ? null : request.getNotificationSupport()
+                request == null ? null : request.getNotificationSupport(),
+                request == null ? null : request.getProgressReportSupport(),
+                request == null ? null : request.getTaskControlSupport()
         );
         ReActAgent.Builder builder = ReActAgent.of(chatModel)
                 .name(workspacePromptService.resolveAgentName())
@@ -179,6 +185,9 @@ public class SolonAiConversationAgent implements ConversationAgent {
                 .retryConfig(5, 1000L)
                 .sessionWindowSize(64);
 
+        if (cancellationInterceptor != null) {
+            builder.defaultInterceptorAdd(cancellationInterceptor);
+        }
         if (blacklistInterceptor != null) {
             builder.defaultInterceptorAdd(blacklistInterceptor);
         }

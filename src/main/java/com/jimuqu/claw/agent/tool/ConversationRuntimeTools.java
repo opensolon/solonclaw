@@ -4,11 +4,14 @@ import cn.hutool.core.util.StrUtil;
 import com.jimuqu.claw.agent.model.run.AgentRun;
 import com.jimuqu.claw.agent.runtime.support.NotificationResult;
 import com.jimuqu.claw.agent.runtime.api.NotificationSupport;
+import com.jimuqu.claw.agent.runtime.api.ProgressReportSupport;
 import com.jimuqu.claw.agent.runtime.support.ParentRunChildrenSummary;
 import com.jimuqu.claw.agent.runtime.support.RunTurnControl;
 import com.jimuqu.claw.agent.runtime.support.SpawnTaskResult;
 import com.jimuqu.claw.agent.runtime.api.SpawnTaskSupport;
 import com.jimuqu.claw.agent.runtime.api.RunQuerySupport;
+import com.jimuqu.claw.agent.runtime.api.TaskControlSupport;
+import com.jimuqu.claw.agent.runtime.support.TaskControlResult;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.annotation.Param;
 
@@ -28,12 +31,58 @@ public class ConversationRuntimeTools {
     private final RunQuerySupport runQuerySupport;
     /** 主动通知能力。 */
     private final NotificationSupport notificationSupport;
+    /** 进度报告能力。 */
+    private final ProgressReportSupport progressReportSupport;
+    /** 子任务控制能力。 */
+    private final TaskControlSupport taskControlSupport;
 
     /**
      * 创建运行时工具集。
      *
-     * @param workspaceAgentTools 基础工作区工具
-     * @param spawnTaskSupport 子任务派生能力
+     * @param workspaceAgentTools   基础工作区工具
+     * @param spawnTaskSupport      子任务派生能力
+     * @param runQuerySupport       任务状态查询能力
+     * @param notificationSupport   主动通知能力
+     * @param progressReportSupport 进度报告能力
+     * @param taskControlSupport    子任务控制能力
+     */
+    public ConversationRuntimeTools(
+            WorkspaceAgentTools workspaceAgentTools,
+            SpawnTaskSupport spawnTaskSupport,
+            RunQuerySupport runQuerySupport,
+            NotificationSupport notificationSupport,
+            ProgressReportSupport progressReportSupport,
+            TaskControlSupport taskControlSupport
+    ) {
+        this.workspaceAgentTools = workspaceAgentTools;
+        this.spawnTaskSupport = spawnTaskSupport;
+        this.runQuerySupport = runQuerySupport;
+        this.notificationSupport = notificationSupport;
+        this.progressReportSupport = progressReportSupport;
+        this.taskControlSupport = taskControlSupport;
+    }
+
+    /**
+     * 创建运行时工具集。
+     *
+     * @param workspaceAgentTools   基础工作区工具
+     * @param spawnTaskSupport      子任务派生能力
+     * @param runQuerySupport       任务状态查询能力
+     * @param notificationSupport   主动通知能力
+     * @param progressReportSupport 进度报告能力
+     */
+    public ConversationRuntimeTools(
+            WorkspaceAgentTools workspaceAgentTools,
+            SpawnTaskSupport spawnTaskSupport,
+            RunQuerySupport runQuerySupport,
+            NotificationSupport notificationSupport,
+            ProgressReportSupport progressReportSupport
+    ) {
+        this(workspaceAgentTools, spawnTaskSupport, runQuerySupport, notificationSupport, progressReportSupport, null);
+    }
+
+    /**
+     * 创建运行时工具集（兼容旧构造器）。
      */
     public ConversationRuntimeTools(
             WorkspaceAgentTools workspaceAgentTools,
@@ -41,10 +90,7 @@ public class ConversationRuntimeTools {
             RunQuerySupport runQuerySupport,
             NotificationSupport notificationSupport
     ) {
-        this.workspaceAgentTools = workspaceAgentTools;
-        this.spawnTaskSupport = spawnTaskSupport;
-        this.runQuerySupport = runQuerySupport;
-        this.notificationSupport = notificationSupport;
+        this(workspaceAgentTools, spawnTaskSupport, runQuerySupport, notificationSupport, null, null);
     }
 
     @ToolMapping(name = "read_file", description = "读取工作区内指定文件的文本内容")
@@ -94,6 +140,59 @@ public class ConversationRuntimeTools {
         return result.isDelivered()
                 ? "通知已发送。sessionKey=" + result.getSessionKey() + ", detail=" + result.getMessage()
                 : "通知失败: " + result.getMessage();
+    }
+
+    @ToolMapping(name = "report_progress", description = "向父任务上报当前子任务的执行阶段和进展详情，父任务可据此向用户同步状态")
+    public String reportProgress(
+            @Param(description = "当前阶段标签，如：信息收集、代码分析、总结中") String phase,
+            @Param(description = "详细进展说明") String detail
+    ) {
+        if (progressReportSupport == null) {
+            return "当前运行不支持 report_progress";
+        }
+        if (StrUtil.isBlank(phase)) {
+            return "进度上报失败: phase 不能为空";
+        }
+
+        try {
+            progressReportSupport.reportProgress(phase.trim(), StrUtil.blankToDefault(detail, "").trim());
+            return "进度已上报: phase=" + phase.trim();
+        } catch (Exception e) {
+            return "进度上报失败: " + e.getMessage();
+        }
+    }
+
+
+    @ToolMapping(name = "cancel_task", description = "取消一个正在运行或排队中的子任务。适合用户要求停止后台调研、分析或执行时使用")
+    public String cancelTask(
+            @Param(description = "要取消的子任务 runId") String runId
+    ) {
+        if (taskControlSupport == null) {
+            return "当前运行不支持 cancel_task";
+        }
+        if (StrUtil.isBlank(runId)) {
+            return "取消失败: runId 不能为空";
+        }
+        TaskControlResult result = taskControlSupport.cancelTask(runId.trim());
+        return result.isSuccess() ? result.getMessage() : "取消失败: " + result.getMessage();
+    }
+
+    @ToolMapping(name = "append_instruction", description = "向正在运行的子任务追加修正信息、补充要求或新的关注重点。适合用户要求修改正在执行任务的方向时使用")
+    public String appendInstruction(
+            @Param(description = "目标子任务 runId") String runId,
+            @Param(description = "要追加给子任务的新指令") String instruction
+    ) {
+        if (taskControlSupport == null) {
+            return "当前运行不支持 append_instruction";
+        }
+        if (StrUtil.isBlank(runId)) {
+            return "追加指令失败: runId 不能为空";
+        }
+        if (StrUtil.isBlank(instruction)) {
+            return "追加指令失败: instruction 不能为空";
+        }
+        TaskControlResult result = taskControlSupport.appendInstruction(runId.trim(), instruction.trim());
+        return result.isSuccess() ? result.getMessage() : "追加指令失败: " + result.getMessage();
     }
 
     @ToolMapping(name = "spawn_task", description = "当你无法立刻直接回答时，优先用它创建子 Agent 去完成具体执行、检查、搜索或分析。适合长任务、复杂任务和可并行任务；子任务完成后会自动以内部事件回流父会话，便于继续汇总与追踪进度")
@@ -197,6 +296,15 @@ public class ConversationRuntimeTools {
             builder.append("batchKey=").append(run.getBatchKey()).append('\n');
         }
         builder.append("task=").append(StrUtil.blankToDefault(run.getTaskDescription(), "(未记录任务描述)")).append('\n');
+        if (StrUtil.isNotBlank(run.getLatestPhase())) {
+            builder.append("latestPhase=").append(run.getLatestPhase()).append('\n');
+        }
+        if (StrUtil.isNotBlank(run.getLatestProgressDetail())) {
+            builder.append("latestProgressDetail=").append(run.getLatestProgressDetail()).append('\n');
+        }
+        if (run.getLatestProgressAt() > 0) {
+            builder.append("latestProgressAt=").append(run.getLatestProgressAt()).append('\n');
+        }
         if (StrUtil.isNotBlank(run.getFinalResponse())) {
             builder.append("result=").append(run.getFinalResponse()).append('\n');
         }

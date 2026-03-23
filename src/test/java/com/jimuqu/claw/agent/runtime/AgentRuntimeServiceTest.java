@@ -15,6 +15,7 @@ import com.jimuqu.claw.agent.runtime.api.ConversationAgent;
 import com.jimuqu.claw.agent.runtime.impl.AgentRuntimeService;
 import com.jimuqu.claw.agent.runtime.impl.ConversationScheduler;
 import com.jimuqu.claw.agent.runtime.impl.SystemEventRunner;
+import com.jimuqu.claw.agent.runtime.support.RuntimeReplyProtocol;
 import com.jimuqu.claw.agent.runtime.support.DeliveryResult;
 import com.jimuqu.claw.agent.runtime.support.NotificationResult;
 import com.jimuqu.claw.agent.runtime.support.ParentRunChildrenSummary;
@@ -99,7 +100,7 @@ class AgentRuntimeServiceTest {
             if ("请主动通知我".equals(request.getCurrentMessage())) {
                 NotificationResult result = request.getNotificationSupport().notifyUser("这是一条主动通知", false);
                 assertTrue(result.isDelivered());
-                return AgentRuntimeService.NO_REPLY;
+                return RuntimeReplyProtocol.NO_REPLY;
             }
             return "reply-" + request.getCurrentMessage();
         };
@@ -231,6 +232,7 @@ class AgentRuntimeServiceTest {
                 scheduler,
                 registry,
                 systemEventRunner,
+                new com.jimuqu.claw.agent.runtime.registry.ActiveTaskRegistry(new java.io.File(store.getRuntimeDir(), "runs")),
                 properties
         );
     }
@@ -305,6 +307,55 @@ class AgentRuntimeServiceTest {
         @Override
         public boolean supportsProgressUpdates() {
             return true;
+        }
+    }
+
+
+    @Test
+    void secondUserMessageCanSeeActiveTaskSnapshot() throws Exception {
+        RuntimeStoreService store = new RuntimeStoreService(tempDir.toFile());
+        ConversationScheduler scheduler = new ConversationScheduler(4, 1);
+        ChannelRegistry registry = new ChannelRegistry();
+        RecordingChannelAdapter adapter = new RecordingChannelAdapter();
+        registry.register(adapter);
+        CountDownLatch releaseChild = new CountDownLatch(1);
+
+        ConversationAgent conversationAgent = (request, progressConsumer) -> {
+            if (request.getCurrentSourceKind() == RuntimeSourceKind.USER_MESSAGE && "安排调研".equals(request.getCurrentMessage())) {
+                request.getSpawnTaskSupport().spawnTask("调研 Solon", "child-research", "batch-1");
+                return "已安排调研任务。";
+            }
+            if (request.isChildRun()) {
+                assertTrue(releaseChild.await(5, TimeUnit.SECONDS));
+                return "调研完成";
+            }
+            if (request.getCurrentSourceKind() == RuntimeSourceKind.USER_MESSAGE && "现在进度如何".equals(request.getCurrentMessage())) {
+                assertNotNull(request.getActiveTasks());
+                assertEquals(1, request.getActiveTasks().size());
+                assertEquals("调研 Solon", request.getActiveTasks().get(0).getTaskTitle());
+                return "当前有 1 个活跃任务。";
+            }
+            if (request.getCurrentSourceKind() == RuntimeSourceKind.CHILD_CONTINUATION) {
+                return RuntimeReplyProtocol.NO_REPLY;
+            }
+            return "reply-" + request.getCurrentMessage();
+        };
+
+        SolonClawProperties properties = new SolonClawProperties();
+        AgentRuntimeService runtimeService = runtimeService(conversationAgent, store, scheduler, registry, properties);
+
+        try {
+            String firstRunId = runtimeService.submitInbound(inbound("msg-a", "安排调研"));
+            assertNotNull(firstRunId);
+            assertTrue(waitUntil(() -> adapter.messages.contains("已安排调研任务。"), 5000));
+            assertTrue(waitUntil(() -> !runtimeService.listChildRuns(firstRunId, "batch-1").isEmpty(), 5000));
+
+            String secondRunId = runtimeService.submitInbound(inbound("msg-b", "现在进度如何"));
+            assertNotNull(secondRunId);
+            assertTrue(waitUntil(() -> adapter.messages.contains("当前有 1 个活跃任务。"), 5000));
+        } finally {
+            releaseChild.countDown();
+            scheduler.shutdown();
         }
     }
 
