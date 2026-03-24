@@ -127,23 +127,7 @@ workspace/
 
 ## 当前已实现的渠道
 
-### 1. Debug Web
-
-本地调试页默认可用，访问根路径即可进入：
-
-- `GET /`
-- `POST /api/debug/chat`
-- `GET /api/debug/runs/{runId}`
-- `GET /api/debug/runs/{runId}/events`
-- `GET /api/debug/runs/{runId}/children`
-
-特性：
-
-- 与钉钉共用同一个运行时
-- `debug-web` 会话与外部渠道隔离
-- 可查看流式事件、最终回复、子任务和聚合摘要
-
-### 2. DingTalk
+### DingTalk
 
 当前钉钉接入方式：
 

@@ -18,4 +18,6 @@ public class ChannelsProperties implements Serializable {
     private FeishuProperties feishu = new FeishuProperties();
     /** 钉钉渠道配置。 */
     private DingTalkProperties dingtalk = new DingTalkProperties();
+    /** 微信渠道配置。 */
+    private WeixinProperties weixin = new WeixinProperties();
 }

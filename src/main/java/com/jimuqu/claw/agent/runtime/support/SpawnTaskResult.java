@@ -20,6 +20,8 @@ public class SpawnTaskResult implements Serializable {
     private String sessionKey;
     /** 任务描述。 */
     private String taskDescription;
+    /** 任务标题。 */
+    private String taskTitle;
     /** 子任务批次键。 */
     private String batchKey;
 }

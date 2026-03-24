@@ -9,20 +9,11 @@ public interface SpawnTaskSupport {
     /**
      * 创建一个新的子任务运行。
      *
-     * @param taskDescription 子任务描述
-     * @return 子任务创建结果
-     */
-    default SpawnTaskResult spawnTask(String taskDescription) {
-        return spawnTask(taskDescription, null);
-    }
-
-    /**
-     * 创建一个新的子任务运行。
-     *
+     * @param taskTitle 子任务标题
      * @param taskDescription 子任务描述
      * @param batchKey 子任务批次键
      * @return 子任务创建结果
      */
-    SpawnTaskResult spawnTask(String taskDescription, String batchKey);
+    SpawnTaskResult spawnTask(String taskTitle, String taskDescription, String batchKey);
 }
 

@@ -51,6 +51,10 @@ public class RuntimeStoreService {
     private final File mediaDir;
     /** 文件路径锁表。 */
     private final Map<String, ReentrantLock> pathLocks = new ConcurrentHashMap<>();
+    /** 父运行 -> 子运行 ID 列表索引。 */
+    private final ConcurrentHashMap<String, java.util.concurrent.CopyOnWriteArrayList<String>> parentChildIndex = new ConcurrentHashMap<>();
+    /** 父会话 -> 子运行 ID 列表索引。 */
+    private final ConcurrentHashMap<String, java.util.concurrent.CopyOnWriteArrayList<String>> parentSessionChildIndex = new ConcurrentHashMap<>();
 
     /**
      * 创建运行时存储服务。
@@ -190,6 +194,7 @@ public class RuntimeStoreService {
         data.setParentRunId(parentRunId);
         data.setChildRunId(childRun.getRunId());
         data.setChildSessionKey(childRun.getSessionKey());
+        data.setTaskTitle(childRun.getTaskTitle());
         data.setTaskDescription(childRun.getTaskDescription());
         data.setBatchKey(childRun.getBatchKey());
 
@@ -221,6 +226,7 @@ public class RuntimeStoreService {
         data.setChildRunId(childRun.getRunId());
         data.setChildSessionKey(childRun.getSessionKey());
         data.setStatus(childRun.getStatus() == null ? null : childRun.getStatus().name());
+        data.setTaskTitle(childRun.getTaskTitle());
         data.setTaskDescription(childRun.getTaskDescription());
         data.setBatchKey(childRun.getBatchKey());
         data.setResult(childRun.getFinalResponse());
@@ -350,6 +356,7 @@ public class RuntimeStoreService {
         } finally {
             lock.unlock();
         }
+        indexRun(agentRun);
     }
 
     /**
@@ -477,16 +484,14 @@ public class RuntimeStoreService {
      */
     public List<AgentRun> listChildRuns(String parentSessionKey, int limit) {
         int resolvedLimit = Math.max(1, limit);
+        java.util.concurrent.CopyOnWriteArrayList<String> runIds = parentSessionChildIndex.get(parentSessionKey);
         List<AgentRun> runs = new ArrayList<>();
-        List<File> files = FileUtil.loopFiles(runsDir, pathname -> pathname.isFile() && pathname.getName().endsWith(".json"));
-        for (File file : files) {
-            try {
-                AgentRun run = JSONUtil.toBean(FileUtil.readUtf8String(file), AgentRun.class);
+        if (runIds != null) {
+            for (String rid : runIds) {
+                AgentRun run = getRun(rid);
                 if (run != null && StrUtil.equals(parentSessionKey, run.getParentSessionKey())) {
                     runs.add(run);
                 }
-            } catch (Exception ignored) {
-                // 子任务与聚合查询并发发生时，允许跳过临时不可读文件。
             }
         }
         runs.sort(Comparator.comparingLong(AgentRun::getCreatedAt).reversed());
@@ -527,17 +532,15 @@ public class RuntimeStoreService {
             return runs;
         }
 
-        List<File> files = FileUtil.loopFiles(runsDir, pathname -> pathname.isFile() && pathname.getName().endsWith(".json"));
-        for (File file : files) {
-            try {
-                AgentRun run = JSONUtil.toBean(FileUtil.readUtf8String(file), AgentRun.class);
+        java.util.concurrent.CopyOnWriteArrayList<String> runIds = parentChildIndex.get(parentRunId);
+        if (runIds != null) {
+            for (String rid : runIds) {
+                AgentRun run = getRun(rid);
                 if (run != null
                         && StrUtil.equals(parentRunId, run.getParentRunId())
                         && (StrUtil.isBlank(batchKey) || StrUtil.equals(batchKey, run.getBatchKey()))) {
                     runs.add(run);
                 }
-            } catch (Exception ignored) {
-                // 允许跳过并发写入期间的临时不可读文件。
             }
         }
         runs.sort(Comparator.comparingLong(AgentRun::getCreatedAt));
@@ -551,22 +554,17 @@ public class RuntimeStoreService {
      * @return 父运行；不存在则返回 null
      */
     public AgentRun getLatestParentRunWithChildren(String sessionKey) {
-        List<File> files = FileUtil.loopFiles(runsDir, pathname -> pathname.isFile() && pathname.getName().endsWith(".json"));
         AgentRun latest = null;
-        for (File file : files) {
-            try {
-                AgentRun run = JSONUtil.toBean(FileUtil.readUtf8String(file), AgentRun.class);
-                if (run == null || !StrUtil.equals(sessionKey, run.getSessionKey())) {
-                    continue;
-                }
-                if (listChildRunsByParentRun(run.getRunId()).isEmpty()) {
-                    continue;
-                }
-                if (latest == null || run.getCreatedAt() > latest.getCreatedAt()) {
-                    latest = run;
-                }
-            } catch (Exception ignored) {
-                // 允许跳过并发写入期间的临时不可读文件。
+        for (Map.Entry<String, java.util.concurrent.CopyOnWriteArrayList<String>> entry : parentChildIndex.entrySet()) {
+            if (entry.getValue().isEmpty()) {
+                continue;
+            }
+            AgentRun parentRun = getRun(entry.getKey());
+            if (parentRun == null || !StrUtil.equals(sessionKey, parentRun.getSessionKey())) {
+                continue;
+            }
+            if (latest == null || parentRun.getCreatedAt() > latest.getCreatedAt()) {
+                latest = parentRun;
             }
         }
         return latest;
@@ -801,6 +799,7 @@ public class RuntimeStoreService {
         List<File> runFiles = FileUtil.loopFiles(runsDir, file -> file.isFile() && file.getName().endsWith(".json"));
         for (File runFile : runFiles) {
             AgentRun run = JSONUtil.toBean(FileUtil.readUtf8String(runFile), AgentRun.class);
+            indexRun(run);
             if (run.getStatus() == RunStatus.QUEUED || run.getStatus() == RunStatus.RUNNING) {
                 run.setStatus(RunStatus.ABORTED);
                 run.setFinishedAt(System.currentTimeMillis());
@@ -808,6 +807,27 @@ public class RuntimeStoreService {
                 saveRun(run);
                 appendRunEvent(run.getRunId(), "status", "aborted");
             }
+        }
+    }
+
+    /**
+     * 维护父子索引。
+     *
+     * @param agentRun 运行任务
+     */
+    private void indexRun(AgentRun agentRun) {
+        if (agentRun == null || StrUtil.isBlank(agentRun.getRunId())) {
+            return;
+        }
+        if (StrUtil.isNotBlank(agentRun.getParentRunId())) {
+            parentChildIndex.computeIfAbsent(agentRun.getParentRunId(),
+                    key -> new java.util.concurrent.CopyOnWriteArrayList<String>())
+                    .addIfAbsent(agentRun.getRunId());
+        }
+        if (StrUtil.isNotBlank(agentRun.getParentSessionKey())) {
+            parentSessionChildIndex.computeIfAbsent(agentRun.getParentSessionKey(),
+                    key -> new java.util.concurrent.CopyOnWriteArrayList<String>())
+                    .addIfAbsent(agentRun.getRunId());
         }
     }
 
@@ -941,6 +961,7 @@ public class RuntimeStoreService {
                     + "parentRunId=" + StrUtil.blankToDefault(data.getParentRunId(), "(未知)") + "\n"
                     + "childRunId=" + StrUtil.blankToDefault(data.getChildRunId(), "(未知)") + "\n"
                     + "childSessionKey=" + StrUtil.blankToDefault(data.getChildSessionKey(), "(未知)") + "\n"
+                    + (StrUtil.isBlank(data.getTaskTitle()) ? "" : "taskTitle=" + data.getTaskTitle() + "\n")
                     + (StrUtil.isBlank(data.getBatchKey()) ? "" : "batchKey=" + data.getBatchKey() + "\n")
                     + "task=" + StrUtil.blankToDefault(data.getTaskDescription(), "(未记录任务描述)");
         }
@@ -950,6 +971,9 @@ public class RuntimeStoreService {
             builder.append("parentRunId=").append(StrUtil.blankToDefault(data.getParentRunId(), "(未知)")).append('\n');
             builder.append("childRunId=").append(StrUtil.blankToDefault(data.getChildRunId(), "(未知)")).append('\n');
             builder.append("status=").append(StrUtil.blankToDefault(data.getStatus(), "(未知)")).append('\n');
+            if (StrUtil.isNotBlank(data.getTaskTitle())) {
+                builder.append("taskTitle=").append(data.getTaskTitle()).append('\n');
+            }
             if (StrUtil.isNotBlank(data.getBatchKey())) {
                 builder.append("batchKey=").append(data.getBatchKey()).append('\n');
             }

@@ -145,11 +145,13 @@
 实现特点：
 
 - 子任务使用独立 `childSessionKey`
+- 子任务应显式携带 `taskTitle` 与 `taskDescription`；标题用于日志、汇总和区分不同子任务
 - 子任务 run 会记录 `parentRunId`、`parentSessionKey`、`parentReplyTarget`
 - 子任务完成后，会向父会话写入结构化事件并自动触发一次 continuation run
 - 父运行可进入 `WAITING_CHILDREN`
-- 父运行可以用 `NO_REPLY` 抑制中间回复
-- 父运行可以用 `FINAL_REPLY_ONCE:` 前缀实现“仅发送一次最终聚合回复”
+- 父运行派生子任务后，默认应先向用户说明已经安排了哪些子任务以及后续同步方式
+- 子任务每次完成后，父会话都可以基于该次结果立即增量回复，不必默认等待全部子任务结束
+- 只有在确实需要“全部结束后统一收口”的场景，才使用 `FINAL_REPLY_ONCE:` 前缀实现“仅发送一次最终聚合回复”
 - `batchKey` 可用于给同一批子任务分组聚合
 
 ### 5. 主动通知能力
@@ -305,28 +307,6 @@
 
 ## 当前渠道实现
 
-### Debug Web
-
-本地调试页相关文件：
-
-- [src/main/java/com/jimuqu/claw/web/controller/DebugChatController.java](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/web/controller/DebugChatController.java)
-- [src/main/java/com/jimuqu/claw/web/controller/RootController.java](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/web/controller/RootController.java)
-- [src/main/resources/static/index.html](D:/IdeaProjects/SolonClaw/src/main/resources/static/index.html)
-
-当前调试接口：
-
-- `POST /api/debug/chat`
-- `GET /api/debug/runs/{runId}`
-- `GET /api/debug/runs/{runId}/events`
-- `GET /api/debug/runs/{runId}/children`
-
-当前约定：
-
-- `debug-web` 是独立渠道
-- 调试页和钉钉共用同一个 Agent 运行时
-- `debug-web` 不应污染最近一次外部路由
-- 调试页已支持查看运行事件、最新回复、子任务摘要和子任务列表
-
 ### 钉钉
 
 钉钉实现位于 [src/main/java/com/jimuqu/claw/channel/dingtalk](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/channel/dingtalk)：
@@ -470,7 +450,6 @@ java -jar target/solonclaw.jar --env=dev
 说明：
 
 - [ChatModelConfigTest.java](D:/IdeaProjects/SolonClaw/src/test/java/com/jimuqu/claw/llm/ChatModelConfigTest.java) 在本地 Ollama 不可达时会跳过真实对话测试
-- 钉钉配置缺失时，钉钉渠道不会启动，但本地 `debug-web` 仍可工作
 
 ## 修改代码时的默认规则
 
@@ -479,7 +458,7 @@ java -jar target/solonclaw.jar --env=dev
 3. 会话历史只能通过 `RuntimeStoreService` 维护
 4. 长时运行资源必须显式接入 Solon 生命周期
 5. 新增配置优先并入 `SolonClawProperties`
-6. 调试能力优先接到现有 `debug-web` 入口，不要另造一套本地测试通道
+6. 调试能力优先通过现有测试、运行事件和日志观测完成，不要另造本地消息通道
 7. 钉钉相关改动要同时考虑私聊、群聊、白名单、markdown 发送和回复路由
 8. 工具、子任务、通知、定时任务都应复用统一运行时，不要平行造轮子
 9. 工作区相关能力优先改 `AgentWorkspaceService / WorkspacePromptService / WorkspaceAgentTools`
@@ -575,6 +554,5 @@ java -jar target/solonclaw.jar --env=dev
 - [src/main/java/com/jimuqu/claw/agent/job/WorkspaceJobService.java](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/agent/job/WorkspaceJobService.java)
 - [src/main/java/com/jimuqu/claw/channel/dingtalk/DingTalkChannelAdapter.java](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/channel/dingtalk/DingTalkChannelAdapter.java)
 - [src/main/java/com/jimuqu/claw/channel/dingtalk/DingTalkRobotSender.java](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/channel/dingtalk/DingTalkRobotSender.java)
-- [src/main/java/com/jimuqu/claw/web/controller/DebugChatController.java](D:/IdeaProjects/SolonClaw/src/main/java/com/jimuqu/claw/web/controller/DebugChatController.java)
 - [src/main/resources/app.yml](D:/IdeaProjects/SolonClaw/src/main/resources/app.yml)
 - [scripts/config.example.yml](D:/IdeaProjects/SolonClaw/scripts/config.example.yml)

@@ -6,12 +6,14 @@ import com.jimuqu.claw.agent.job.JobStoreService;
 import com.jimuqu.claw.agent.job.WorkspaceJobService;
 import com.jimuqu.claw.agent.runtime.impl.AgentRuntimeService;
 import com.jimuqu.claw.agent.runtime.api.ConversationAgent;
+import com.jimuqu.claw.agent.runtime.impl.CancellationInterceptor;
 import com.jimuqu.claw.agent.runtime.impl.ConversationScheduler;
 import com.jimuqu.claw.agent.runtime.impl.HeartbeatService;
 import com.jimuqu.claw.agent.runtime.impl.IsolatedAgentRunService;
 import com.jimuqu.claw.agent.runtime.impl.ReActLoggingInterceptor;
 import com.jimuqu.claw.agent.runtime.impl.SolonAiConversationAgent;
 import com.jimuqu.claw.agent.runtime.impl.SystemEventRunner;
+import com.jimuqu.claw.agent.runtime.registry.ActiveTaskRegistry;
 import com.jimuqu.claw.agent.store.RuntimeStoreService;
 import com.jimuqu.claw.agent.tool.JobTools;
 import com.jimuqu.claw.constitution.BlacklistInterceptor;
@@ -25,6 +27,12 @@ import com.jimuqu.claw.channel.dingtalk.adapter.DingTalkChannelAdapter;
 import com.jimuqu.claw.channel.dingtalk.sender.DingTalkRobotSender;
 import com.jimuqu.claw.channel.feishu.sender.FeishuBotSender;
 import com.jimuqu.claw.channel.feishu.adapter.FeishuChannelAdapter;
+import com.jimuqu.claw.channel.weixin.adapter.WeixinChannelAdapter;
+import com.jimuqu.claw.channel.weixin.sender.WeixinRobotSender;
+import com.jimuqu.claw.channel.weixin.service.WeixinAccountStoreService;
+import com.jimuqu.claw.channel.weixin.service.WeixinApiGateway;
+import com.jimuqu.claw.channel.weixin.service.WeixinHttpGateway;
+import com.jimuqu.claw.channel.weixin.service.WeixinLoginService;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.skills.cli.CliSkillProvider;
 import org.noear.solon.ai.chat.ChatModel;
@@ -40,34 +48,17 @@ import java.io.File;
  */
 @Configuration
 public class SolonClawConfig {
-    /**
-     * 绑定项目自定义配置。
-     *
-     * @return 配置对象
-     */
     @Bean
     @BindProps(prefix = "solonclaw")
     public SolonClawProperties solonClawProperties() {
         return new SolonClawProperties();
     }
 
-    /**
-     * 创建工作区服务。
-     *
-     * @param properties 项目配置
-     * @return 工作区服务
-     */
     @Bean
     public AgentWorkspaceService agentWorkspaceService(SolonClawProperties properties) {
         return new AgentWorkspaceService(properties.getWorkspace());
     }
 
-    /**
-     * 创建工作区提示词服务。
-     *
-     * @param workspaceService 工作区服务
-     * @return 工作区提示词服务
-     */
     @Bean
     public WorkspacePromptService workspacePromptService(
             AgentWorkspaceService workspaceService,
@@ -76,12 +67,6 @@ public class SolonClawConfig {
         return new WorkspacePromptService(workspaceService, properties.getAgent().getSystemPrompt());
     }
 
-    /**
-     * 创建运行时存储服务。
-     *
-     * @param workspaceService 工作区服务
-     * @return 存储服务
-     */
     @Bean
     public RuntimeStoreService runtimeStoreService(
             AgentWorkspaceService workspaceService
@@ -90,12 +75,6 @@ public class SolonClawConfig {
         return new RuntimeStoreService(runtimeDir);
     }
 
-    /**
-     * 创建工作区工具集。
-     *
-     * @param workspaceService 工作区服务
-     * @return 工具集
-     */
     @Bean
     public WorkspaceAgentTools workspaceAgentTools(
             AgentWorkspaceService workspaceService
@@ -103,24 +82,11 @@ public class SolonClawConfig {
         return new WorkspaceAgentTools(workspaceService);
     }
 
-    /**
-     * 创建定时任务存储服务。
-     *
-     * @param workspaceService 工作区服务
-     * @return 定时任务存储服务
-     */
     @Bean
     public JobStoreService jobStoreService(AgentWorkspaceService workspaceService) {
         return new JobStoreService(workspaceService);
     }
 
-    /**
-     * 创建工作区定时任务服务，并在启动时恢复任务。
-     *
-     * @param jobManager 任务管理器
-     * @param jobStoreService 定时任务存储服务
-     * @return 工作区定时任务服务
-     */
     @Bean(initMethod = "restorePersistedJobs")
     public WorkspaceJobService workspaceJobService(
             IJobManager jobManager,
@@ -140,12 +106,6 @@ public class SolonClawConfig {
         );
     }
 
-    /**
-     * 创建定时任务工具。
-     *
-     * @param workspaceJobService 工作区定时任务服务
-     * @return 定时任务工具
-     */
     @Bean
     public JobTools jobTools(
             WorkspaceJobService workspaceJobService,
@@ -156,12 +116,6 @@ public class SolonClawConfig {
         return jobTools;
     }
 
-    /**
-     * 创建 CLI 技能提供者，并挂载工作区技能目录。
-     *
-     * @param workspaceService 工作区服务
-     * @return CLI 技能提供者
-     */
     @Bean
     public CliSkillProvider cliSkillProvider(
             AgentWorkspaceService workspaceService,
@@ -180,31 +134,28 @@ public class SolonClawConfig {
         return cliSkillProvider;
     }
 
-    /**
-     * 创建会话调度器。
-     *
-     * @param properties 项目配置
-     * @return 会话调度器
-     */
     @Bean
-    public ConversationScheduler conversationScheduler(SolonClawProperties properties) {
-        return new ConversationScheduler(properties.getAgent().getScheduler().getMaxConcurrentPerConversation());
+    public ActiveTaskRegistry activeTaskRegistry(RuntimeStoreService runtimeStoreService) {
+        ActiveTaskRegistry registry = new ActiveTaskRegistry(
+                new File(runtimeStoreService.getRuntimeDir(), "runs")
+        );
+        registry.rebuildFromDisk();
+        return registry;
     }
 
-    /**
-     * 创建 ReAct 运行日志拦截器。
-     *
-     * @return ReAct 日志拦截器
-     */
     @Bean
-    public ReActInterceptor reActLoggingInterceptor() {
+    public ConversationScheduler conversationScheduler(SolonClawProperties properties) {
+        return new ConversationScheduler(
+                properties.getAgent().getScheduler().getMaxConcurrentPerConversation(),
+                properties.getAgent().getScheduler().getMaxConcurrentUserMessage()
+        );
+    }
+
+    @Bean
+    public ReActLoggingInterceptor reActLoggingInterceptor() {
         return new ReActLoggingInterceptor();
     }
 
-    /**
-     * 创建黑名单拦截器。
-     * 始终创建，空黑名单不会拦截任何命令。
-     */
     @Bean
     public HITLInterceptor blacklistInterceptor(SolonClawProperties properties) {
         BlacklistProperties blacklistProps = properties.getAgent().getBlacklist();
@@ -214,23 +165,18 @@ public class SolonClawConfig {
         return new HITLInterceptor().onTool("bash", strategy);
     }
 
-    /**
-     * 创建会话执行 Agent。
-     *
-     * @param chatModel 聊天模型
-     * @param workspacePromptService 工作区提示词服务
-     * @return 会话执行 Agent
-     */
     @Bean
     public SolonAiConversationAgent conversationAgent(
             ChatModel chatModel,
             WorkspacePromptService workspacePromptService,
             WorkspaceAgentTools workspaceAgentTools,
             CliSkillProvider cliSkillProvider,
-            ReActInterceptor reActLoggingInterceptor,
-            HITLInterceptor blacklistInterceptor
+            ReActLoggingInterceptor reActLoggingInterceptor,
+            HITLInterceptor blacklistInterceptor,
+            CancellationInterceptor cancellationInterceptor,
+            ActiveTaskRegistry activeTaskRegistry
     ) {
-        return new SolonAiConversationAgent(
+        SolonAiConversationAgent agent = new SolonAiConversationAgent(
                 chatModel,
                 workspacePromptService,
                 workspaceAgentTools,
@@ -238,13 +184,16 @@ public class SolonClawConfig {
                 reActLoggingInterceptor,
                 blacklistInterceptor
         );
+        agent.setCancellationInterceptor(cancellationInterceptor);
+        agent.setActiveTaskRegistry(activeTaskRegistry);
+        return agent;
     }
 
-    /**
-     * 创建渠道注册表。
-     *
-     * @return 渠道注册表
-     */
+    @Bean
+    public CancellationInterceptor cancellationInterceptor(ActiveTaskRegistry activeTaskRegistry) {
+        return new CancellationInterceptor(activeTaskRegistry);
+    }
+
     @Bean
     public ChannelRegistry channelRegistry() {
         return new ChannelRegistry();
@@ -284,36 +233,45 @@ public class SolonClawConfig {
         );
     }
 
-    /**
-     * 创建飞书消息发送服务。
-     *
-     * @param properties 项目配置
-     * @return 飞书发送服务
-     */
     @Bean
     public FeishuBotSender feishuBotSender(SolonClawProperties properties) {
         return new FeishuBotSender(properties.getChannels().getFeishu());
     }
 
-    /**
-     * 创建钉钉 token 服务。
-     *
-     * @param properties 项目配置
-     * @return token 服务
-     */
+    @Bean
+    public WeixinAccountStoreService weixinAccountStoreService(AgentWorkspaceService workspaceService) {
+        return new WeixinAccountStoreService(workspaceService);
+    }
+
+    @Bean
+    public WeixinApiGateway weixinApiGateway() {
+        return new WeixinHttpGateway();
+    }
+
+    @Bean
+    public WeixinLoginService weixinLoginService(
+            WeixinApiGateway apiGateway,
+            WeixinAccountStoreService accountStoreService,
+            SolonClawProperties properties,
+            WeixinChannelAdapter weixinChannelAdapter
+    ) {
+        return new WeixinLoginService(apiGateway, accountStoreService, properties.getChannels().getWeixin(), weixinChannelAdapter);
+    }
+
+    @Bean
+    public WeixinRobotSender weixinRobotSender(
+            WeixinApiGateway apiGateway,
+            WeixinAccountStoreService accountStoreService,
+            SolonClawProperties properties
+    ) {
+        return new WeixinRobotSender(apiGateway, accountStoreService, properties.getChannels().getWeixin());
+    }
+
     @Bean(initMethod = "start", destroyMethod = "stop")
     public DingTalkAccessTokenService dingTalkAccessTokenService(SolonClawProperties properties) {
         return new DingTalkAccessTokenService(properties.getChannels().getDingtalk());
     }
 
-    /**
-     * 创建钉钉机器人发送服务。
-     *
-     * @param dingTalkAccessTokenService token 服务
-     * @param properties 项目配置
-     * @return 发送服务
-     * @throws Exception 创建底层客户端时的异常
-     */
     @Bean
     public DingTalkRobotSender dingTalkRobotSender(
             DingTalkAccessTokenService dingTalkAccessTokenService,
@@ -322,23 +280,14 @@ public class SolonClawConfig {
         return new DingTalkRobotSender(dingTalkAccessTokenService, properties.getChannels().getDingtalk());
     }
 
-    /**
-     * 创建 Agent 运行时服务。
-     *
-     * @param conversationAgent 会话执行 Agent
-     * @param runtimeStoreService 运行时存储服务
-     * @param conversationScheduler 会话调度器
-     * @param channelRegistry 渠道注册表
-     * @param properties 项目配置
-     * @return Agent 运行时服务
-     */
-    @Bean
+    @Bean(destroyMethod = "shutdown")
     public AgentRuntimeService agentRuntimeService(
             ConversationAgent conversationAgent,
             RuntimeStoreService runtimeStoreService,
             ConversationScheduler conversationScheduler,
             ChannelRegistry channelRegistry,
             SystemEventRunner systemEventRunner,
+            ActiveTaskRegistry activeTaskRegistry,
             SolonClawProperties properties
     ) {
         return new AgentRuntimeService(
@@ -347,20 +296,11 @@ public class SolonClawConfig {
                 conversationScheduler,
                 channelRegistry,
                 systemEventRunner,
+                activeTaskRegistry,
                 properties
         );
     }
 
-    /**
-     * 创建并注册钉钉渠道适配器。
-     *
-     * @param agentRuntimeService Agent 运行时服务
-     * @param runtimeStoreService 运行时存储服务
-     * @param dingTalkRobotSender 钉钉机器人发送服务
-     * @param channelRegistry 渠道注册表
-     * @param properties 项目配置
-     * @return 钉钉渠道适配器
-     */
     @Bean(initMethod = "start", destroyMethod = "stop")
     public DingTalkChannelAdapter dingTalkChannelAdapter(
             AgentRuntimeService agentRuntimeService,
@@ -377,15 +317,6 @@ public class SolonClawConfig {
         return adapter;
     }
 
-    /**
-     * 创建并注册飞书渠道适配器。
-     *
-     * @param agentRuntimeService Agent 运行时服务
-     * @param feishuBotSender 飞书消息发送服务
-     * @param channelRegistry 渠道注册表
-     * @param properties 项目配置
-     * @return 飞书渠道适配器
-     */
     @Bean(initMethod = "start", destroyMethod = "stop")
     public FeishuChannelAdapter feishuChannelAdapter(
             AgentRuntimeService agentRuntimeService,
@@ -402,14 +333,26 @@ public class SolonClawConfig {
         return adapter;
     }
 
-    /**
-     * 创建心跳服务。
-     *
-     * @param systemEventRunner 系统事件执行器
-     * @param runtimeStoreService 运行时存储服务
-     * @param properties 项目配置
-     * @return 心跳服务
-     */
+    @Bean(initMethod = "start", destroyMethod = "stop")
+    public WeixinChannelAdapter weixinChannelAdapter(
+            AgentRuntimeService agentRuntimeService,
+            WeixinRobotSender weixinRobotSender,
+            WeixinAccountStoreService accountStoreService,
+            WeixinApiGateway apiGateway,
+            ChannelRegistry channelRegistry,
+            SolonClawProperties properties
+    ) {
+        WeixinChannelAdapter adapter = new WeixinChannelAdapter(
+                agentRuntimeService,
+                weixinRobotSender,
+                accountStoreService,
+                apiGateway,
+                properties.getChannels().getWeixin()
+        );
+        channelRegistry.register(adapter);
+        return adapter;
+    }
+
     @Bean(initMethod = "start", destroyMethod = "stop")
     public HeartbeatService heartbeatService(
             SystemEventRunner systemEventRunner,

@@ -1,6 +1,9 @@
 package com.jimuqu.claw.agent.workspace;
 
 import cn.hutool.core.io.FileUtil;
+import com.jimuqu.claw.agent.model.enums.RuntimeSourceKind;
+import com.jimuqu.claw.agent.model.enums.RunStatus;
+import com.jimuqu.claw.agent.runtime.registry.ActiveTaskEntry;
 import com.jimuqu.claw.agent.runtime.support.ConversationExecutionRequest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -107,6 +110,48 @@ class WorkspacePromptServiceTest {
     }
 
     /**
+     * 验证轻量上下文会收敛自动化任务的工作区注入，避免人格和 heartbeat 文件干扰任务执行。
+     *
+     * @param tempDir 临时工作区
+     */
+    @Test
+    void lightContextPromptUsesTaskFocusedContext(@TempDir Path tempDir) {
+        AgentWorkspaceService workspaceService = new AgentWorkspaceService(tempDir.toString());
+        WorkspacePromptService promptService = new WorkspacePromptService(workspaceService, "基础系统提示");
+
+        FileUtil.writeUtf8String("# AGENTS\nAGENTS-ONLY-CONTENT", workspaceService.fileInWorkspace(WorkspacePromptService.AGENTS_FILE));
+        FileUtil.writeUtf8String("# SOUL\nSOUL-ONLY-CONTENT", workspaceService.fileInWorkspace(WorkspacePromptService.SOUL_FILE));
+        FileUtil.writeUtf8String("# IDENTITY\nIDENTITY-ONLY-CONTENT", workspaceService.fileInWorkspace(WorkspacePromptService.IDENTITY_FILE));
+        FileUtil.writeUtf8String("# USER\nUSER-ONLY-CONTENT", workspaceService.fileInWorkspace(WorkspacePromptService.USER_FILE));
+        FileUtil.writeUtf8String("# TOOLS\nTOOLS-ONLY-CONTENT", workspaceService.fileInWorkspace(WorkspacePromptService.TOOLS_FILE));
+        FileUtil.writeUtf8String("# HEARTBEAT\nHEARTBEAT-ONLY-CONTENT", workspaceService.fileInWorkspace(WorkspacePromptService.HEARTBEAT_FILE));
+        FileUtil.writeUtf8String("# MEMORY\nMEMORY-ONLY-CONTENT", workspaceService.fileInWorkspace(WorkspacePromptService.MEMORY_FILE));
+        LocalDate today = LocalDate.now();
+        FileUtil.writeUtf8String(
+                "# DAILY\nDAILY-ONLY-CONTENT",
+                workspaceService.fileInWorkspace("memory/" + DateTimeFormatter.ISO_LOCAL_DATE.format(today) + ".md")
+        );
+
+        ConversationExecutionRequest request = new ConversationExecutionRequest();
+        request.setCurrentSourceKind(RuntimeSourceKind.JOB_AGENT_TURN);
+        request.setLightContext(true);
+
+        String prompt = promptService.buildSystemPrompt(request);
+
+        assertTrue(prompt.contains("## 自动化任务"));
+        assertTrue(prompt.contains("不要把当前任务改写成 heartbeat 检查"));
+        assertTrue(prompt.contains("## 轻量上下文"));
+        assertTrue(prompt.contains("TOOLS-ONLY-CONTENT"));
+        assertFalse(prompt.contains("AGENTS-ONLY-CONTENT"));
+        assertFalse(prompt.contains("SOUL-ONLY-CONTENT"));
+        assertFalse(prompt.contains("IDENTITY-ONLY-CONTENT"));
+        assertFalse(prompt.contains("USER-ONLY-CONTENT"));
+        assertFalse(prompt.contains("HEARTBEAT-ONLY-CONTENT"));
+        assertFalse(prompt.contains("MEMORY-ONLY-CONTENT"));
+        assertFalse(prompt.contains("DAILY-ONLY-CONTENT"));
+    }
+
+    /**
      * 验证全新工作区会初始化内置模板，并包含首次对话引导文件。
      *
      * @param tempDir 临时工作区
@@ -140,6 +185,30 @@ class WorkspacePromptServiceTest {
         assertTrue(prompt.contains("你是在 SolonClaw 内运行的个人助理。"));
         assertTrue(prompt.contains("## 工具使用"));
         assertTrue(prompt.contains("## 长任务与子任务"));
+    }
+
+    @Test
+    void promptIncludesActiveTasksSnapshot(@TempDir Path tempDir) {
+        AgentWorkspaceService workspaceService = new AgentWorkspaceService(tempDir.toString());
+        WorkspacePromptService promptService = new WorkspacePromptService(workspaceService, "基础系统提示");
+
+        ConversationExecutionRequest request = new ConversationExecutionRequest();
+        ActiveTaskEntry entry = new ActiveTaskEntry();
+        entry.setRunId("child-1");
+        entry.setTaskTitle("调研 Solon");
+        entry.setStatus(RunStatus.RUNNING);
+        entry.setLatestPhase("信息收集");
+        entry.setLatestProgressDetail("已读取 README 并开始分析模块结构");
+        request.setActiveTasks(java.util.Collections.singletonList(entry));
+
+        String prompt = promptService.buildSystemPrompt(request);
+
+        assertTrue(prompt.contains("## 当前活跃子任务"));
+        assertTrue(prompt.contains("runId=child-1"));
+        assertTrue(prompt.contains("标题=调研 Solon"));
+        assertTrue(prompt.contains("状态=RUNNING"));
+        assertTrue(prompt.contains("阶段=信息收集"));
+        assertTrue(prompt.contains("已读取 README 并开始分析模块结构"));
     }
 }
 

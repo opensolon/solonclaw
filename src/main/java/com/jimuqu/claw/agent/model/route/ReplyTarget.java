@@ -24,6 +24,10 @@ public class ReplyTarget implements Serializable {
     private String conversationId;
     /** 目标用户标识，例如私聊用户 staffId。 */
     private String userId;
+    /** 渠道实例标识，例如多账号渠道中的 accountId。 */
+    private String channelInstanceId;
+    /** 渠道要求回传的上下文令牌，例如微信 context_token。 */
+    private String contextToken;
     /** 历史兼容保留的 sessionWebhook。 */
     private String sessionWebhook;
     /** 历史兼容保留的 sessionWebhook 过期时间。 */
@@ -42,5 +46,28 @@ public class ReplyTarget implements Serializable {
         this.conversationType = conversationType;
         this.conversationId = conversationId;
         this.userId = userId;
+    }
+
+    /**
+     * 按关键字段创建回复目标，并携带渠道实例与上下文令牌。
+     *
+     * @param channelType 渠道类型
+     * @param conversationType 会话类型
+     * @param conversationId 会话标识
+     * @param userId 用户标识
+     * @param channelInstanceId 渠道实例标识
+     * @param contextToken 渠道上下文令牌
+     */
+    public ReplyTarget(
+            ChannelType channelType,
+            ConversationType conversationType,
+            String conversationId,
+            String userId,
+            String channelInstanceId,
+            String contextToken
+    ) {
+        this(channelType, conversationType, conversationId, userId);
+        this.channelInstanceId = channelInstanceId;
+        this.contextToken = contextToken;
     }
 }
