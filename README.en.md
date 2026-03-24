@@ -112,15 +112,6 @@ workspace/
 
 ## Implemented Channels
 
-### Debug Web
-
-Available debug endpoints:
-
-- `POST /api/debug/chat`
-- `GET /api/debug/runs/{runId}`
-- `GET /api/debug/runs/{runId}/events`
-- `GET /api/debug/runs/{runId}/children`
-
 ### DingTalk
 
 Current DingTalk integration:

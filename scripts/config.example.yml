@@ -200,3 +200,17 @@ solonclaw:
       # 群聊白名单：为空时当前代码行为是默认允许
       # 示例：["cidAxxxx", "cidByyyy"]
       groupAllowFrom: []
+
+    weixin:
+      # 不使用微信时保持 false
+      enabled: false
+
+      # 微信 iLink Bot 配置
+      baseUrl: "https://ilinkai.weixin.qq.com"
+      botType: "3"
+      longPollTimeoutMs: 35000
+      loginTimeoutMs: 480000
+
+      # 私聊白名单：为空时当前代码行为是默认允许
+      # 示例：["wxid_xxx", "wxid_yyy"]
+      allowFrom: []

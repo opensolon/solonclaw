@@ -4,7 +4,7 @@ package com.jimuqu.claw.agent.model.enums;
  * 描述一次运行请求的来源类型。
  */
 public enum RuntimeSourceKind {
-    /** 用户主动发送的消息，包括 debug-web。 */
+    /** 用户主动发送的消息。 */
     USER_MESSAGE,
     /** 定时任务的 systemEvent 触发。 */
     JOB_SYSTEM_EVENT,

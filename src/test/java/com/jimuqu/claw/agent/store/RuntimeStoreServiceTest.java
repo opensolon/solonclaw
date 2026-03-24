@@ -51,7 +51,7 @@ class RuntimeStoreServiceTest {
         RuntimeStoreService store = new RuntimeStoreService(tempDir.toFile());
         AgentRun run = new AgentRun();
         run.setRunId("run-abort");
-        run.setSessionKey("debug-web:test");
+        run.setSessionKey("session-abort");
         run.setSourceKind(RuntimeSourceKind.USER_MESSAGE);
         run.setStatus(RunStatus.RUNNING);
         run.setCreatedAt(System.currentTimeMillis());
@@ -72,12 +72,16 @@ class RuntimeStoreServiceTest {
     void remembersLatestExternalRouteWithSessionKey() {
         RuntimeStoreService store = new RuntimeStoreService(tempDir.toFile());
         ReplyTarget replyTarget = new ReplyTarget(ChannelType.DINGTALK, ConversationType.GROUP, "cid", "uid");
+        replyTarget.setChannelInstanceId("account-1");
+        replyTarget.setContextToken("ctx-1");
 
         store.rememberReplyTarget("dingtalk:group:cid", replyTarget);
 
         assertEquals("dingtalk:group:cid", store.getLatestExternalRoute().getSessionKey());
         assertEquals("cid", store.getLatestExternalRoute().getReplyTarget().getConversationId());
         assertEquals("cid", store.getReplyTarget("dingtalk:group:cid").getConversationId());
+        assertEquals("account-1", store.getReplyTarget("dingtalk:group:cid").getChannelInstanceId());
+        assertEquals("ctx-1", store.getReplyTarget("dingtalk:group:cid").getContextToken());
     }
 
     @Test
@@ -90,6 +94,7 @@ class RuntimeStoreServiceTest {
         AgentRun childRun = new AgentRun();
         childRun.setRunId("child-1");
         childRun.setSessionKey("session-a:subtask:1");
+        childRun.setTaskTitle("研究子任务");
         childRun.setTaskDescription("research-child");
         childRun.setStatus(RunStatus.SUCCEEDED);
         childRun.setFinalResponse("child-result");
@@ -103,6 +108,7 @@ class RuntimeStoreServiceTest {
         assertEquals("parent-question", history.get(0).getContent());
         assertEquals("SYSTEM", history.get(1).getRole().toString());
         assertEquals("SYSTEM", history.get(2).getRole().toString());
+        assertTrue(history.get(1).getContent().contains("taskTitle=研究子任务"));
         assertTrue(history.get(1).getContent().contains("childRunId=child-1"));
         assertTrue(history.get(2).getContent().contains("result="));
     }
@@ -153,7 +159,7 @@ class RuntimeStoreServiceTest {
         InboundEnvelope envelope = new InboundEnvelope();
         envelope.setSessionKey(sessionKey);
         envelope.setMessageId(messageId);
-        envelope.setChannelType(ChannelType.DEBUG_WEB);
+        envelope.setChannelType(ChannelType.DINGTALK);
         envelope.setConversationType(ConversationType.PRIVATE);
         envelope.setConversationId("conv");
         envelope.setSenderId("user");

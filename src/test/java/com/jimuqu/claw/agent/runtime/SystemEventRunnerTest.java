@@ -182,6 +182,60 @@ class SystemEventRunnerTest {
         }
     }
 
+    @Test
+    void childContinuationCanDeliverIncrementalReplyBeforeAllChildrenComplete() throws Exception {
+        RuntimeStoreService store = new RuntimeStoreService(tempDir.toFile());
+        ConversationScheduler scheduler = new ConversationScheduler(1);
+        ChannelRegistry registry = new ChannelRegistry();
+        RecordingChannelAdapter adapter = new RecordingChannelAdapter();
+        registry.register(adapter);
+        SolonClawProperties properties = new SolonClawProperties();
+        ConversationAgent conversationAgent = (request, progressConsumer) -> "一个子任务已完成，先同步进展。";
+        SystemEventRunner runner = new SystemEventRunner(conversationAgent, store, scheduler, registry, properties);
+
+        try {
+            AgentRun parentRun = new AgentRun();
+            parentRun.setRunId("parent-run");
+            parentRun.setSessionKey("dingtalk:group:group-1");
+            parentRun.setSourceKind(RuntimeSourceKind.USER_MESSAGE);
+            parentRun.setSourceUserVersion(1L);
+            store.saveRun(parentRun);
+
+            AgentRun childDone = new AgentRun();
+            childDone.setRunId("child-1");
+            childDone.setParentRunId("parent-run");
+            childDone.setParentSessionKey("dingtalk:group:group-1");
+            childDone.setStatus(RunStatus.SUCCEEDED);
+            childDone.setFinalResponse("done");
+            store.saveRun(childDone);
+
+            AgentRun childRunning = new AgentRun();
+            childRunning.setRunId("child-2");
+            childRunning.setParentRunId("parent-run");
+            childRunning.setParentSessionKey("dingtalk:group:group-1");
+            childRunning.setStatus(RunStatus.RUNNING);
+            store.saveRun(childRunning);
+
+            SystemEventRequest request = new SystemEventRequest();
+            request.setSourceKind(RuntimeSourceKind.CHILD_CONTINUATION);
+            request.setPolicy(SystemEventPolicy.USER_VISIBLE_OPTIONAL);
+            request.setSessionKey("dingtalk:group:group-1");
+            request.setReplyTarget(new ReplyTarget(ChannelType.DINGTALK, ConversationType.GROUP, "group-1", "user-1"));
+            request.setContent("child completed");
+            request.setRelatedRunId("parent-run");
+
+            String runId = runner.submit(request);
+            assertNotNull(runId);
+            assertTrue(waitUntil(() -> adapter.messages.contains("一个子任务已完成，先同步进展。"), 5000));
+            assertTrue(store.readConversationEvents("dingtalk:group:group-1").stream()
+                    .anyMatch(event -> "assistant_reply".equals(event.getEventType())
+                            && "一个子任务已完成，先同步进展。".equals(event.getContent())));
+            assertTrue(!store.hasRunEventType("parent-run", "children_aggregated"));
+        } finally {
+            scheduler.shutdown();
+        }
+    }
+
     private boolean waitUntil(BooleanSupplier condition, long timeoutMs) throws InterruptedException {
         long deadline = System.currentTimeMillis() + timeoutMs;
         while (System.currentTimeMillis() < deadline) {

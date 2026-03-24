@@ -40,7 +40,10 @@ solonclaw:
       - 如果有待办、异常或需要提醒用户的事项，就优先汇报真实状态。
     scheduler:
       maxConcurrentPerConversation: 4
+      maxConcurrentUserMessage: 1
       ackWhenBusy: false
+      cancelCooperativeTimeoutSeconds: 30
+      progressSamplingIntervalMs: 500
     tools:
       # CLI TerminalSkill 沙盒开关
       # true: 只允许工作区相对路径、~/ 和 @skills 逻辑路径；禁止绝对路径与越界访问
@@ -70,6 +73,13 @@ solonclaw:
       robotCode: ""
       allowFrom: []
       groupAllowFrom: []
+    weixin:
+      enabled: false
+      baseUrl: "https://ilinkai.weixin.qq.com"
+      botType: "3"
+      longPollTimeoutMs: 35000
+      loginTimeoutMs: 480000
+      allowFrom: []
 
 ---
 solon.env.on: prod

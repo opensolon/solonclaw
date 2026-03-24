@@ -3,6 +3,8 @@ package com.jimuqu.claw.agent.workspace;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.util.StrUtil;
+import com.jimuqu.claw.agent.model.enums.RuntimeSourceKind;
+import com.jimuqu.claw.agent.runtime.registry.ActiveTaskEntry;
 import com.jimuqu.claw.agent.runtime.support.ConversationExecutionRequest;
 
 import java.io.File;
@@ -74,11 +76,30 @@ public class WorkspacePromptService {
     static final String DAILY_MEMORY_DIR = "memory";
     /** 每日记忆文件名格式。 */
     static final DateTimeFormatter DAILY_MEMORY_FILE_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE;
+    /** 工作区文件缓存 TTL（毫秒）。 */
+    static final long FILE_CACHE_TTL_MS = 15000L;
 
     /** 工作区服务。 */
     private final AgentWorkspaceService workspaceService;
     /** 基础系统提示词。 */
     private final String baseSystemPrompt;
+    /** 工作区文件缓存。 */
+    private final java.util.concurrent.ConcurrentHashMap<String, CachedFileContent> fileCache = new java.util.concurrent.ConcurrentHashMap<String, CachedFileContent>();
+
+    /**
+     * 缓存的文件内容。
+     */
+    private static final class CachedFileContent {
+        private final String content;
+        private final long loadedAt;
+        private final long lastModified;
+
+        private CachedFileContent(String content, long loadedAt, long lastModified) {
+            this.content = content;
+            this.loadedAt = loadedAt;
+            this.lastModified = lastModified;
+        }
+    }
 
     /**
      * 创建工作区提示词服务，并确保引导文件存在。
@@ -118,13 +139,15 @@ public class WorkspacePromptService {
      */
     public String buildSystemPrompt(ConversationExecutionRequest request) {
         boolean childRun = request != null && request.isChildRun();
+        boolean lightContext = request != null && request.isLightContext();
         List<String> lines = new ArrayList<>();
         lines.add(baseSystemPrompt.trim());
-        appendExecutionGuidance(lines, request, childRun);
+        appendExecutionGuidance(lines, request, childRun, lightContext);
+        appendActiveTasksSection(lines, request);
         lines.add("");
         lines.add("当前工作区: " + workspaceService.getWorkspaceDir().getAbsolutePath());
         lines.add("除非用户明确要求，否则所有运行期文件与引导文件都以该工作区为根目录。");
-        appendWorkspaceContext(lines, childRun);
+        appendWorkspaceContext(lines, childRun, lightContext);
         return String.join("\n", lines);
     }
 
@@ -208,10 +231,62 @@ public class WorkspacePromptService {
     private String readFile(String fileName) {
         File file = workspaceService.fileInWorkspace(fileName);
         if (!file.exists()) {
+            fileCache.remove(fileName);
             return null;
         }
+
+        CachedFileContent cached = fileCache.get(fileName);
+        long now = System.currentTimeMillis();
+        if (cached != null && now - cached.loadedAt < FILE_CACHE_TTL_MS && cached.lastModified == file.lastModified()) {
+            return cached.content;
+        }
+
         String content = FileUtil.readUtf8String(file).trim();
-        return content.isEmpty() ? null : content;
+        if (content.isEmpty()) {
+            fileCache.remove(fileName);
+            return null;
+        }
+
+        fileCache.put(fileName, new CachedFileContent(content, now, file.lastModified()));
+        return content;
+    }
+
+    /**
+     * 将当前活跃子任务快照注入系统提示词。
+     *
+     * @param lines   结果行集合
+     * @param request 当前执行请求
+     */
+    private void appendActiveTasksSection(List<String> lines, ConversationExecutionRequest request) {
+        if (request == null || request.getActiveTasks() == null || request.getActiveTasks().isEmpty()) {
+            return;
+        }
+
+        lines.add("");
+        lines.add("## 当前活跃子任务");
+        lines.add("以下是当前会话中正在执行的子任务状态，可直接用于回答用户的进度、状态、是否完成等问题：");
+        int index = 1;
+        int maxTasks = Math.min(request.getActiveTasks().size(), 5);
+        for (ActiveTaskEntry entry : request.getActiveTasks().subList(0, maxTasks)) {
+            StringBuilder builder = new StringBuilder();
+            builder.append(index++)
+                    .append(". runId=").append(entry.getRunId())
+                    .append(", 标题=").append(StrUtil.blankToDefault(entry.getTaskTitle(), "(未记录任务标题)"))
+                    .append(", 状态=").append(entry.getStatus());
+            if (StrUtil.isNotBlank(entry.getLatestPhase())) {
+                builder.append(", 阶段=").append(entry.getLatestPhase());
+            }
+            if (StrUtil.isNotBlank(entry.getLatestProgressDetail())) {
+                builder.append(", 进度=").append(StrUtil.maxLength(entry.getLatestProgressDetail(), 120));
+            }
+            if (StrUtil.isNotBlank(entry.getBatchKey())) {
+                builder.append(", batchKey=").append(entry.getBatchKey());
+            }
+            lines.add(builder.toString());
+        }
+        if (request.getActiveTasks().size() > maxTasks) {
+            lines.add("... 其余 " + (request.getActiveTasks().size() - maxTasks) + " 个活跃任务已省略");
+        }
     }
 
     /**
@@ -243,8 +318,10 @@ public class WorkspacePromptService {
     private void appendExecutionGuidance(
             List<String> lines,
             ConversationExecutionRequest request,
-            boolean childRun
+            boolean childRun,
+            boolean lightContext
     ) {
+        RuntimeSourceKind sourceKind = request == null ? RuntimeSourceKind.USER_MESSAGE : request.getCurrentSourceKind();
         lines.add("");
         if (childRun) {
             lines.add("## 子任务模式");
@@ -260,11 +337,29 @@ public class WorkspacePromptService {
             return;
         }
 
+        if (sourceKind == RuntimeSourceKind.JOB_AGENT_TURN) {
+            lines.add("## 自动化任务");
+            lines.add("- 当前运行来自自动化 agent turn，目标是直接完成本次任务并返回执行结果。");
+            lines.add("- 不要把当前任务改写成 heartbeat 检查、状态巡检或待办扫描，除非任务描述明确要求。");
+            lines.add("- 不要因为工作区里存在 `HEARTBEAT.md` 就主动读取它；只有任务明确要求检查心跳或待办时才读取。");
+            lines.add("- 如果任务要求提醒或通知用户，直接产出提醒内容或调用 `notify_user`，不要先回“状态正常”。");
+        }
+        if (lightContext) {
+            lines.add("## 轻量上下文");
+            lines.add("- 当前运行启用了轻量上下文，应优先依据当前任务描述完成工作。");
+            lines.add("- 除非任务明确要求，不要读取或引用 `AGENTS.md`、`SOUL.md`、`IDENTITY.md`、`USER.md`、`HEARTBEAT.md`、`MEMORY.md` 或 daily memory。");
+            lines.add("- 只有在完成任务确实需要额外背景时，才主动读取相关工作区文件。");
+        }
+
         lines.add("## 长任务与子任务");
         lines.add("- 默认把较大任务拆成子任务处理，而不是在一个 run 里硬做到底。");
         lines.add("- 只有在任务只是纯文字回答，不需要查资料、不需要读文件、不需要调用工具、也不需要较长时间执行时，才不要拆分。");
         lines.add("- 父任务负责规划、跟踪和汇总；子任务负责完成单一、清晰、可执行的目标。");
-        lines.add("- 派生后，父任务可先记录进度或返回 `NO_REPLY`；如果要等全部子任务完成后统一回复，可使用 `FINAL_REPLY_ONCE:` 只发送一次最终聚合结果。");
+        lines.add("- 调用 `spawn_task` 时必须显式提供任务标题（例如“分析 SolonCode 任务”），标题要能清楚区分不同子任务。");
+        lines.add("- 如果当前轮需要创建多个子任务，尽量在同一轮里连续调用 `spawn_task` 把这一批全部创建完。");
+        lines.add("- 派生后，父任务应先用自然语言告诉用户已经安排了哪些子任务、接下来会怎么同步进展；只有明确需要静默时才返回 `NO_REPLY`。");
+        lines.add("- 每个子任务完成后，父任务都会收到 continuation 结果；应优先根据单个子任务的新结果增量回复用户，而不是默认等全部结束。");
+        lines.add("- 如果某个场景确实需要等全部子任务完成后再统一收口，才使用 `FINAL_REPLY_ONCE:` 只发送一次最终聚合结果。");
         lines.add("- 使用 `list_child_runs`、`get_run_status`、`get_child_summary` 跟踪子任务进度和批次聚合结果。");
         lines.add("- 如果一个动作明显很小、很快、一步可完成，也可以直接做，不必强行拆分。");
     }
@@ -275,7 +370,12 @@ public class WorkspacePromptService {
      * @param lines 结果行集合
      * @param childRun 是否为子任务模式
      */
-    private void appendWorkspaceContext(List<String> lines, boolean childRun) {
+    private void appendWorkspaceContext(List<String> lines, boolean childRun, boolean lightContext) {
+        if (lightContext) {
+            appendSection(lines, "轻量工具备注", TOOLS_FILE);
+            return;
+        }
+
         appendSection(lines, childRun ? "子任务工作区规则" : "工作区规则", AGENTS_FILE);
         if (childRun) {
             appendSection(lines, "子任务工具备注", TOOLS_FILE);

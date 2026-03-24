@@ -6,16 +6,14 @@ import lombok.NoArgsConstructor;
 import java.io.Serializable;
 
 /**
- * 描述调试页发起聊天请求时的参数。
+ * 描述等待微信扫码登录完成的请求。
  */
 @Data
 @NoArgsConstructor
-public class DebugChatRequest implements Serializable {
+public class WeixinLoginWaitRequest implements Serializable {
     /** 序列化版本号。 */
     private static final long serialVersionUID = 1L;
 
-    /** 调试会话标识。 */
-    private String sessionId;
-    /** 用户输入文本。 */
-    private String message;
+    /** 登录会话标识。 */
+    private String sessionKey;
 }

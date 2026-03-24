@@ -24,6 +24,8 @@ public class ChildRunCompletedData implements Serializable {
     private String status;
     /** 任务描述。 */
     private String taskDescription;
+    /** 任务标题。 */
+    private String taskTitle;
     /** 子任务批次键。 */
     private String batchKey;
     /** 子任务结果。 */
