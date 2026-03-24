@@ -1,6 +1,7 @@
 package com.jimuqu.claw.agent.runtime;
 
 import cn.hutool.core.io.FileUtil;
+import cn.hutool.crypto.digest.DigestUtil;
 import com.jimuqu.claw.agent.channel.ChannelRegistry;
 import com.jimuqu.claw.agent.model.enums.ChannelType;
 import com.jimuqu.claw.agent.model.enums.ConversationType;
@@ -54,6 +55,42 @@ class HeartbeatServiceTest {
             assertEquals(SystemEventPolicy.INTERNAL_ONLY, request.getPolicy());
             assertEquals("请汇报当前状态", request.getContent());
             assertEquals("dingtalk:group:group-9", request.getSessionKey());
+            assertNull(request.getReplyTarget());
+            assertEquals(true, request.isAllowNotifyUser());
+        } finally {
+            scheduler.shutdown();
+        }
+    }
+
+    @Test
+    void tickStillSubmitsWhenSessionReplyTargetIsMissing() {
+        Path workspace = tempDir.resolve("workspace-missing-route");
+        FileUtil.mkdir(workspace.toFile());
+        FileUtil.writeUtf8String("请汇报当前状态", workspace.resolve("HEARTBEAT.md").toFile());
+
+        Path runtime = tempDir.resolve("runtime-missing-route");
+        RuntimeStoreService store = new RuntimeStoreService(runtime.toFile());
+        ReplyTarget replyTarget = new ReplyTarget(ChannelType.DINGTALK, ConversationType.GROUP, "group-11", "user-11");
+        String sessionKey = "dingtalk:group:group-11";
+        store.rememberReplyTarget(sessionKey, replyTarget);
+
+        String safeSessionKey = DigestUtil.sha1Hex(sessionKey);
+        FileUtil.del(runtime.resolve("meta").resolve("reply-targets").resolve(safeSessionKey + ".json").toFile());
+
+        SolonClawProperties properties = new SolonClawProperties();
+        properties.setWorkspace(workspace.toString());
+
+        ConversationScheduler scheduler = new ConversationScheduler(1);
+        try {
+            CapturingSystemEventRunner runner = new CapturingSystemEventRunner(store, scheduler, properties);
+            HeartbeatService heartbeatService = new HeartbeatService(runner, store, properties);
+
+            heartbeatService.tick();
+
+            SystemEventRequest request = runner.lastRequest.get();
+            assertNotNull(request);
+            assertEquals(sessionKey, request.getSessionKey());
+            assertNull(request.getReplyTarget());
         } finally {
             scheduler.shutdown();
         }

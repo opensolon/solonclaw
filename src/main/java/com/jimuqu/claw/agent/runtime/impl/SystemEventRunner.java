@@ -158,9 +158,7 @@ public class SystemEventRunner {
             }
             executionRequest.setHistory(history);
             executionRequest.setRunQuerySupport(RuntimeSupportFactory.buildRunQuerySupport(runtimeStoreService, request.getSessionKey()));
-            executionRequest.setNotificationSupport(request.isAllowNotifyUser()
-                    ? RuntimeSupportFactory.buildNotificationSupport(runtimeStoreService, channelRegistry, request.getSessionKey(), request.getReplyTarget(), runId)
-                    : null);
+            executionRequest.setNotificationSupport(resolveNotificationSupport(request, runId));
 
             final String[] lastProgressText = {""};
             final String[] latestProgress = {""};
@@ -231,6 +229,27 @@ public class SystemEventRunner {
             runtimeStoreService.appendRunEvent(runId, "status", "failed");
             log.warn("System event run {} failed: {}", runId, throwable.getMessage(), throwable);
         }
+    }
+
+    private NotificationSupport resolveNotificationSupport(SystemEventRequest request, String runId) {
+        if (!request.isAllowNotifyUser()) {
+            return null;
+        }
+        if (request.getReplyTarget() != null) {
+            return RuntimeSupportFactory.buildNotificationSupport(
+                    runtimeStoreService,
+                    channelRegistry,
+                    request.getSessionKey(),
+                    request.getReplyTarget(),
+                    runId
+            );
+        }
+        return RuntimeSupportFactory.buildNotificationSupport(
+                runtimeStoreService,
+                channelRegistry,
+                request.getSessionKey(),
+                runId
+        );
     }
 
     private boolean tryDeliverUserVisibleReply(

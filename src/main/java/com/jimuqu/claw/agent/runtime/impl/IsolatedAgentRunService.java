@@ -7,7 +7,6 @@ import com.jimuqu.claw.agent.job.JobDeliveryMode;
 import com.jimuqu.claw.agent.model.enums.RuntimeSourceKind;
 import com.jimuqu.claw.agent.model.enums.RunStatus;
 import com.jimuqu.claw.agent.model.envelope.OutboundEnvelope;
-import com.jimuqu.claw.agent.model.route.LatestReplyRoute;
 import com.jimuqu.claw.agent.model.route.ReplyTarget;
 import com.jimuqu.claw.agent.model.run.AgentRun;
 import com.jimuqu.claw.agent.runtime.api.ConversationAgent;
@@ -141,7 +140,11 @@ public class IsolatedAgentRunService {
             return false;
         }
 
-        ReplyTarget replyTarget = resolveReplyTarget(request.getDeliveryMode(), request.getBoundReplyTarget());
+        ReplyTarget replyTarget = resolveReplyTarget(
+                request.getDeliveryMode(),
+                request.getBoundSessionKey(),
+                request.getBoundReplyTarget()
+        );
         if (replyTarget == null) {
             runtimeStoreService.appendRunEvent(runId, "delivery_suppressed", visibleResponse);
             return false;
@@ -172,7 +175,11 @@ public class IsolatedAgentRunService {
                 return result;
             }
 
-            ReplyTarget replyTarget = resolveReplyTarget(request.getDeliveryMode(), request.getBoundReplyTarget());
+            ReplyTarget replyTarget = resolveReplyTarget(
+                request.getDeliveryMode(),
+                request.getBoundSessionKey(),
+                request.getBoundReplyTarget()
+        );
             if (replyTarget == null) {
                 result.setDelivered(false);
                 result.setMessage("当前 agentTurn 没有可用的 ReplyTarget");
@@ -197,15 +204,21 @@ public class IsolatedAgentRunService {
         };
     }
 
-    private ReplyTarget resolveReplyTarget(JobDeliveryMode deliveryMode, ReplyTarget boundReplyTarget) {
+    private ReplyTarget resolveReplyTarget(
+            JobDeliveryMode deliveryMode,
+            String boundSessionKey,
+            ReplyTarget boundReplyTarget
+    ) {
         if (deliveryMode == JobDeliveryMode.NONE) {
             return null;
         }
         if (deliveryMode == JobDeliveryMode.BOUND_REPLY_TARGET) {
             return boundReplyTarget;
         }
-        LatestReplyRoute latestReplyRoute = runtimeStoreService.getLatestExternalRoute();
-        return latestReplyRoute == null ? null : latestReplyRoute.getReplyTarget();
+        if (StrUtil.isBlank(boundSessionKey)) {
+            return null;
+        }
+        return runtimeStoreService.getReplyTarget(boundSessionKey);
     }
 
     private String buildIsolatedSessionKey(AgentTurnRequest request, String runId) {
@@ -261,7 +274,11 @@ public class IsolatedAgentRunService {
         runtimeStoreService.appendRunEvent(runId, "status", "failed");
 
         if (request.getDeliveryMode() != JobDeliveryMode.NONE) {
-            ReplyTarget replyTarget = resolveReplyTarget(request.getDeliveryMode(), request.getBoundReplyTarget());
+            ReplyTarget replyTarget = resolveReplyTarget(
+                request.getDeliveryMode(),
+                request.getBoundSessionKey(),
+                request.getBoundReplyTarget()
+        );
             if (replyTarget != null) {
                 OutboundEnvelope outboundEnvelope = new OutboundEnvelope();
                 outboundEnvelope.setRunId(runId);

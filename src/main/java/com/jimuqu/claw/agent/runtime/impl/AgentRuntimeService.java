@@ -104,11 +104,9 @@ public class AgentRuntimeService {
 
         ConversationScheduler.SessionState state = conversationScheduler.inspectUserMessage(inboundEnvelope.getSessionKey());
 
-        long latestConversationVersion = runtimeStoreService.getLatestConversationVersion(inboundEnvelope.getSessionKey());
-        long nextConversationVersion = latestConversationVersion + 1L;
-        inboundEnvelope.setHistoryAnchorVersion(nextConversationVersion);
         long version = runtimeStoreService.appendInboundConversationEvent(inboundEnvelope);
         inboundEnvelope.setSessionVersion(version);
+        inboundEnvelope.setHistoryAnchorVersion(version);
         if (inboundEnvelope.getReplyTarget() != null) {
             runtimeStoreService.rememberReplyTarget(inboundEnvelope.getSessionKey(), inboundEnvelope.getReplyTarget());
         }
@@ -125,7 +123,7 @@ public class AgentRuntimeService {
         run.setSessionKey(inboundEnvelope.getSessionKey());
         run.setSourceMessageId(inboundEnvelope.getMessageId());
         run.setSourceKind(RuntimeSourceKind.USER_MESSAGE);
-        run.setSourceUserVersion(inboundEnvelope.getHistoryAnchorVersion());
+        run.setSourceUserVersion(version);
         run.setReplyTarget(inboundEnvelope.getReplyTarget());
         run.setStatus(RunStatus.QUEUED);
         run.setCreatedAt(System.currentTimeMillis());

@@ -82,10 +82,12 @@ class IsolatedAgentRunServiceTest {
     }
 
     @Test
-    void lastRouteDeliveryUsesLatestExternalRoute() throws Exception {
+    void lastRouteDeliveryUsesRouteFromBoundSession() throws Exception {
         RuntimeStoreService store = new RuntimeStoreService(tempDir.toFile());
-        ReplyTarget latestReplyTarget = new ReplyTarget(ChannelType.DINGTALK, ConversationType.GROUP, "group-last", "user-last");
-        store.rememberReplyTarget("dingtalk:group:group-last", latestReplyTarget);
+        ReplyTarget boundSessionReplyTarget = new ReplyTarget(ChannelType.DINGTALK, ConversationType.GROUP, "group-1", "user-1");
+        store.rememberReplyTarget("dingtalk:group:group-1", boundSessionReplyTarget);
+        ReplyTarget unrelatedLatestReplyTarget = new ReplyTarget(ChannelType.DINGTALK, ConversationType.GROUP, "group-last", "user-last");
+        store.rememberReplyTarget("dingtalk:group:group-last", unrelatedLatestReplyTarget);
 
         ConversationScheduler scheduler = new ConversationScheduler(1);
         ChannelRegistry registry = new ChannelRegistry();
@@ -99,7 +101,35 @@ class IsolatedAgentRunServiceTest {
             String runId = service.submit(request(JobDeliveryMode.LAST_ROUTE, null));
             assertNotNull(runId);
             assertTrue(waitUntil(() -> adapter.messages.contains("自动化结果"), 5000));
-            assertEquals("group-last", adapter.outbounds.get(0).getReplyTarget().getConversationId());
+            assertEquals("group-1", adapter.outbounds.get(0).getReplyTarget().getConversationId());
+        } finally {
+            scheduler.shutdown();
+        }
+    }
+
+    @Test
+    void lastRouteDeliverySuppressesWhenBoundSessionHasNoReplyTarget() throws Exception {
+        RuntimeStoreService store = new RuntimeStoreService(tempDir.toFile());
+        ReplyTarget unrelatedLatestReplyTarget = new ReplyTarget(ChannelType.DINGTALK, ConversationType.GROUP, "group-last", "user-last");
+        store.rememberReplyTarget("dingtalk:group:group-last", unrelatedLatestReplyTarget);
+
+        ConversationScheduler scheduler = new ConversationScheduler(1);
+        ChannelRegistry registry = new ChannelRegistry();
+        RecordingChannelAdapter adapter = new RecordingChannelAdapter();
+        registry.register(adapter);
+        SolonClawProperties properties = new SolonClawProperties();
+        ConversationAgent conversationAgent = (request, progressConsumer) -> "自动化结果";
+        IsolatedAgentRunService service = new IsolatedAgentRunService(conversationAgent, store, scheduler, registry, properties);
+
+        try {
+            String runId = service.submit(request(JobDeliveryMode.LAST_ROUTE, null));
+            assertNotNull(runId);
+            assertTrue(waitUntil(() -> {
+                AgentRun run = store.getRun(runId);
+                return run != null && run.getStatus() == RunStatus.SUCCEEDED;
+            }, 5000));
+            assertTrue(adapter.outbounds.isEmpty());
+            assertTrue(store.hasRunEventType(runId, "delivery_suppressed"));
         } finally {
             scheduler.shutdown();
         }

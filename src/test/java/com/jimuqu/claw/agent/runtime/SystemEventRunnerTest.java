@@ -97,8 +97,12 @@ class SystemEventRunnerTest {
     }
 
     @Test
-    void heartbeatEventCanNotifyUserExplicitly() throws Exception {
+    void heartbeatEventCanNotifyUserExplicitlyBySessionRoute() throws Exception {
         RuntimeStoreService store = new RuntimeStoreService(tempDir.toFile());
+        store.rememberReplyTarget(
+                "dingtalk:group:group-1",
+                new ReplyTarget(ChannelType.DINGTALK, ConversationType.GROUP, "group-1", "user-1")
+        );
         ConversationScheduler scheduler = new ConversationScheduler(1);
         ChannelRegistry registry = new ChannelRegistry();
         RecordingChannelAdapter adapter = new RecordingChannelAdapter();
@@ -116,7 +120,6 @@ class SystemEventRunnerTest {
             request.setSourceKind(RuntimeSourceKind.HEARTBEAT_EVENT);
             request.setPolicy(SystemEventPolicy.INTERNAL_ONLY);
             request.setSessionKey("dingtalk:group:group-1");
-            request.setReplyTarget(new ReplyTarget(ChannelType.DINGTALK, ConversationType.GROUP, "group-1", "user-1"));
             request.setContent("heartbeat");
             request.setAllowNotifyUser(true);
 

@@ -8,7 +8,7 @@ import com.jimuqu.claw.agent.model.enums.ChannelType;
 import com.jimuqu.claw.agent.model.enums.ConversationType;
 import com.jimuqu.claw.agent.model.enums.RuntimeSourceKind;
 import com.jimuqu.claw.agent.model.enums.RunStatus;
-import com.jimuqu.claw.agent.model.event.RunEvent;
+import com.jimuqu.claw.agent.model.event.ConversationEvent;
 import com.jimuqu.claw.agent.model.route.ReplyTarget;
 import com.jimuqu.claw.agent.model.run.AgentRun;
 import com.jimuqu.claw.agent.runtime.api.ConversationAgent;
@@ -166,6 +166,99 @@ class AgentRuntimeServiceTest {
                     .allMatch(child -> child.getStatus() == RunStatus.SUCCEEDED), 5000));
         } finally {
             releaseSecondChild.countDown();
+            scheduler.shutdown();
+        }
+    }
+
+    @Test
+    void concurrentInboundMessagesUsePersistedVersionAsSourceUserVersion() throws Exception {
+        RuntimeStoreService store = new RuntimeStoreService(tempDir.toFile());
+        ConversationScheduler scheduler = new ConversationScheduler(4, 2);
+        ChannelRegistry registry = new ChannelRegistry();
+        RecordingChannelAdapter adapter = new RecordingChannelAdapter();
+        registry.register(adapter);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        ConversationAgent conversationAgent = (request, progressConsumer) -> {
+            ready.countDown();
+            assertTrue(start.await(5, TimeUnit.SECONDS));
+            return "reply-" + request.getCurrentMessage();
+        };
+
+        SolonClawProperties properties = new SolonClawProperties();
+        properties.getAgent().getScheduler().setMaxConcurrentUserMessage(2);
+        AgentRuntimeService runtimeService = runtimeService(conversationAgent, store, scheduler, registry, properties);
+
+        try {
+            String runId1 = runtimeService.submitInbound(inbound("msg-c1", "question-c1"));
+            String runId2 = runtimeService.submitInbound(inbound("msg-c2", "question-c2"));
+            assertNotNull(runId1);
+            assertNotNull(runId2);
+            assertTrue(ready.await(5, TimeUnit.SECONDS));
+            start.countDown();
+
+            assertTrue(waitUntil(() -> {
+                AgentRun run1 = runtimeService.getRun(runId1);
+                AgentRun run2 = runtimeService.getRun(runId2);
+                return run1 != null && run2 != null
+                        && run1.getStatus() == RunStatus.SUCCEEDED
+                        && run2.getStatus() == RunStatus.SUCCEEDED;
+            }, 5000));
+
+            List<ConversationEvent> events = store.readConversationEvents("dingtalk:group:group-1");
+            List<ConversationEvent> userEvents = events.stream()
+                    .filter(event -> "user_message".equals(event.getEventType()))
+                    .collect(java.util.stream.Collectors.toList());
+            assertEquals(2, userEvents.size());
+
+            AgentRun run1 = runtimeService.getRun(runId1);
+            AgentRun run2 = runtimeService.getRun(runId2);
+            assertTrue(userEvents.stream().anyMatch(event -> event.getVersion() == run1.getSourceUserVersion() && "msg-c1".equals(event.getSourceMessageId())));
+            assertTrue(userEvents.stream().anyMatch(event -> event.getVersion() == run2.getSourceUserVersion() && "msg-c2".equals(event.getSourceMessageId())));
+            assertTrue(run1.getSourceUserVersion() != run2.getSourceUserVersion());
+        } finally {
+            start.countDown();
+            scheduler.shutdown();
+        }
+    }
+
+
+    @Test
+    void conversationHistoryKeepsRepliesAnchoredToTheirOwnUserTurn() throws Exception {
+        RuntimeStoreService store = new RuntimeStoreService(tempDir.toFile());
+        ConversationScheduler scheduler = new ConversationScheduler(4, 2);
+        ChannelRegistry registry = new ChannelRegistry();
+        RecordingChannelAdapter adapter = new RecordingChannelAdapter();
+        registry.register(adapter);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        ConversationAgent conversationAgent = (request, progressConsumer) -> {
+            ready.countDown();
+            assertTrue(start.await(5, TimeUnit.SECONDS));
+            return "reply-" + request.getCurrentMessage();
+        };
+
+        SolonClawProperties properties = new SolonClawProperties();
+        properties.getAgent().getScheduler().setMaxConcurrentUserMessage(2);
+        AgentRuntimeService runtimeService = runtimeService(conversationAgent, store, scheduler, registry, properties);
+
+        try {
+            assertNotNull(runtimeService.submitInbound(inbound("msg-h1", "history-1")));
+            assertNotNull(runtimeService.submitInbound(inbound("msg-h2", "history-2")));
+            assertTrue(ready.await(5, TimeUnit.SECONDS));
+            start.countDown();
+            assertTrue(waitUntil(() -> adapter.messages.size() >= 2, 5000));
+
+            List<org.noear.solon.ai.chat.message.ChatMessage> history = store.loadConversationHistoryBefore("dingtalk:group:group-1", 10L);
+            assertEquals(4, history.size());
+            assertEquals("history-1", history.get(0).getContent());
+            assertEquals("reply-history-1", history.get(1).getContent());
+            assertEquals("history-2", history.get(2).getContent());
+            assertEquals("reply-history-2", history.get(3).getContent());
+        } finally {
+            start.countDown();
             scheduler.shutdown();
         }
     }

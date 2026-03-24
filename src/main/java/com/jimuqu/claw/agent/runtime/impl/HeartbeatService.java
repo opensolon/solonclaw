@@ -112,7 +112,7 @@ public class HeartbeatService {
         }
 
         LatestReplyRoute route = runtimeStoreService.getLatestExternalRoute();
-        if (route == null || route.getReplyTarget() == null || StrUtil.isBlank(route.getSessionKey())) {
+        if (route == null || StrUtil.isBlank(route.getSessionKey())) {
             return;
         }
 
@@ -120,7 +120,6 @@ public class HeartbeatService {
         request.setSourceKind(RuntimeSourceKind.HEARTBEAT_EVENT);
         request.setPolicy(SystemEventPolicy.INTERNAL_ONLY);
         request.setSessionKey(route.getSessionKey());
-        request.setReplyTarget(route.getReplyTarget());
         request.setContent(content);
         request.setAllowNotifyUser(true);
         request.setWakeImmediately(true);
