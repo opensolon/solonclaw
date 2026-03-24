@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>微信登录</title>
+    <style>
+        :root {
+            --bg: #f6efe5;
+            --bg2: #e3ece4;
+            --panel: rgba(255, 252, 247, 0.9);
+            --line: rgba(20, 54, 61, 0.12);
+            --text: #173840;
+            --muted: #63797d;
+            --accent: #cf6d39;
+            --success: #2d7a59;
+            --warn: #9d6b20;
+            --danger: #b24c43;
+            --mono: "JetBrains Mono", "Consolas", monospace;
+            --sans: "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+            --serif: "Source Han Serif SC", "Songti SC", serif;
+            --shadow: 0 18px 48px rgba(20, 54, 61, 0.1);
+        }
+
+        * { box-sizing: border-box; }
+        html, body { margin: 0; min-height: 100%; }
+
+        body {
+            font-family: var(--sans);
+            color: var(--text);
+            background:
+                radial-gradient(circle at 12% 12%, rgba(255,255,255,.75), transparent 28%),
+                radial-gradient(circle at 82% 18%, rgba(207,109,57,.18), transparent 18%),
+                radial-gradient(circle at 18% 82%, rgba(80,130,100,.14), transparent 18%),
+                linear-gradient(135deg, var(--bg), #f1e5d3 46%, var(--bg2));
+        }
+
+        .page {
+            width: min(1080px, calc(100% - 28px));
+            margin: 0 auto;
+            padding: 22px 0 30px;
+        }
+
+        .hero, .panel {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 28px;
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(10px);
+        }
+
+        .hero {
+            padding: 26px;
+            margin-bottom: 18px;
+        }
+
+        .hero h1 {
+            margin: 0 0 10px;
+            font-family: var(--serif);
+            font-size: clamp(1.9rem, 4vw, 3rem);
+            line-height: 1.05;
+        }
+
+        .hero p {
+            margin: 0;
+            color: var(--muted);
+            line-height: 1.8;
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 1fr 420px;
+            gap: 18px;
+        }
+
+        .panel { padding: 22px; }
+
+        .panel-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .panel-title h2 {
+            margin: 0;
+            font-family: var(--serif);
+            font-size: 1.35rem;
+        }
+
+        .hint {
+            padding: 9px 14px;
+            border-radius: 999px;
+            background: rgba(255,255,255,.74);
+            border: 1px solid rgba(20,54,61,.08);
+            color: var(--muted);
+            font-size: .88rem;
+        }
+
+        .account-list {
+            display: grid;
+            gap: 12px;
+        }
+
+        .account-item, .empty, .message-box, .meta-item {
+            border-radius: 20px;
+            border: 1px solid rgba(20,54,61,.08);
+            background: rgba(255,255,255,.78);
+        }
+
+        .account-item {
+            padding: 16px;
+        }
+
+        .account-item strong {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 1rem;
+        }
+
+        .account-item span {
+            display: block;
+            color: var(--muted);
+            line-height: 1.75;
+            word-break: break-all;
+        }
+
+        .empty {
+            padding: 26px 18px;
+            text-align: center;
+            color: var(--muted);
+            line-height: 1.75;
+        }
+
+        .status {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            border-radius: 999px;
+            background: rgba(20,54,61,.06);
+            color: var(--muted);
+            font-size: .9rem;
+        }
+
+        .status::before {
+            content: "";
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        .waiting { color: var(--warn); }
+        .success { color: var(--success); }
+        .error { color: var(--danger); }
+        .pulse::before { animation: pulse 1.8s infinite; }
+
+        .qr-box {
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            padding: 18px;
+            border-radius: 30px;
+            position: relative;
+            background: linear-gradient(145deg, rgba(255,255,255,.94), rgba(245,236,224,.92));
+            border: 1px solid rgba(20,54,61,.08);
+            overflow: hidden;
+        }
+
+        .qr-box.waiting { animation: glow 2.4s infinite; }
+
+        .qr-box::before,
+        .qr-box::after {
+            content: "";
+            position: absolute;
+            width: 56px;
+            height: 56px;
+            border-style: solid;
+            border-color: rgba(20,54,61,.16);
+        }
+
+        .qr-box::before {
+            top: 16px;
+            left: 16px;
+            border-width: 2px 0 0 2px;
+            border-radius: 18px 0 0 0;
+        }
+
+        .qr-box::after {
+            right: 16px;
+            bottom: 16px;
+            border-width: 0 2px 2px 0;
+            border-radius: 0 0 18px 0;
+        }
+
+        #qrImage,
+        .placeholder {
+            width: 100%;
+            height: 100%;
+            border-radius: 22px;
+        }
+
+        #qrImage {
+            display: none;
+            object-fit: cover;
+            background: #fff;
+        }
+
+        .placeholder {
+            display: grid;
+            place-items: center;
+            text-align: center;
+            padding: 26px;
+            color: var(--muted);
+            background:
+                linear-gradient(135deg, rgba(207,109,57,.08), rgba(80,130,100,.08)),
+                repeating-linear-gradient(45deg, rgba(255,255,255,.34) 0, rgba(255,255,255,.34) 16px, rgba(20,54,61,.03) 16px, rgba(20,54,61,.03) 32px);
+        }
+
+        .placeholder strong {
+            display: block;
+            margin-bottom: 10px;
+            font-family: var(--serif);
+            font-size: 1.35rem;
+            color: var(--text);
+        }
+
+        .message-box {
+            padding: 16px;
+            margin-top: 14px;
+        }
+
+        .message-box strong,
+        .meta-item label {
+            display: block;
+            margin-bottom: 7px;
+            font-size: .84rem;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            color: var(--muted);
+        }
+
+        .message-box span {
+            color: var(--muted);
+            line-height: 1.75;
+        }
+
+        .meta {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 14px;
+        }
+
+        .meta-item {
+            padding: 14px;
+        }
+
+        .meta-item span {
+            display: block;
+            font-family: var(--mono);
+            word-break: break-all;
+            line-height: 1.65;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 currentColor; }
+            70% { box-shadow: 0 0 0 10px rgba(0,0,0,0); }
+            100% { box-shadow: 0 0 0 0 rgba(0,0,0,0); }
+        }
+
+        @keyframes glow {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(207,109,57,.08); }
+            50% { box-shadow: 0 0 0 12px rgba(207,109,57,.18); }
+        }
+
+        @media (max-width: 900px) {
+            .layout { grid-template-columns: 1fr; }
+        }
+
+        @media (max-width: 640px) {
+            .page { width: calc(100% - 18px); padding-top: 16px; }
+            .hero, .panel { padding: 18px; border-radius: 24px; }
+            .meta { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+<main class="page">
+    <section class="hero">
+        <h1>微信扫码登录</h1>
+    </section>
+
+    <section class="layout">
+        <section class="panel">
+            <div class="panel-title">
+                <h2>已登录账号</h2>
+                <span class="hint">自动刷新</span>
+            </div>
+            <div id="accountList" class="account-list">
+                <div class="empty">正在加载账号列表...</div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <div class="panel-title">
+                <h2>扫码二维码</h2>
+                <span id="statusBadge" class="status waiting pulse">初始化中</span>
+            </div>
+            <div id="qrBox" class="qr-box waiting">
+                <img id="qrImage" alt="微信二维码">
+                <div id="placeholder" class="placeholder">
+                    <div>
+                        <strong>正在准备二维码</strong>
+                        <span>页面打开后会自动请求微信二维码并开始轮询。</span>
+                    </div>
+                </div>
+            </div>
+            <div class="message-box">
+                <strong>当前状态</strong>
+                <span id="messageText">页面初始化中，请稍候。</span>
+            </div>
+            <div class="meta">
+                <div class="meta-item">
+                    <label>Session Key</label>
+                    <span id="sessionValue">-</span>
+                </div>
+                <div class="meta-item">
+                    <label>最近结果</label>
+                    <span id="resultValue">等待扫码</span>
+                </div>
+            </div>
+        </section>
+    </section>
+</main>
+
+<script>
+    (function () {
+        var API = {
+            accounts: "/api/admin/channels/weixin/accounts",
+            start: "/api/admin/channels/weixin/login/start",
+            wait: "/api/admin/channels/weixin/login/wait"
+        };
+        var pollActive = false;
+        var sessionKey = "";
+
+        var accountList = $("#accountList");
+        var statusBadge = $("#statusBadge");
+        var qrBox = $("#qrBox");
+        var qrImage = $("#qrImage");
+        var placeholder = $("#placeholder");
+        var messageText = $("#messageText");
+        var sessionValue = $("#sessionValue");
+        var resultValue = $("#resultValue");
+
+        boot();
+
+        async function boot() {
+            await loadAccounts();
+            await startLogin();
+        }
+
+        async function loadAccounts() {
+            try {
+                var data = unwrap(await getJson(API.accounts));
+                var list = Array.isArray(data) ? data : (Array.isArray(data && data.items) ? data.items : []);
+                if (!list.length) {
+                    accountList.innerHTML = '<div class="empty">当前还没有已登录账号。</div>';
+                    return;
+                }
+
+                accountList.innerHTML = list.map(function (item) {
+                    var accountId = valueOf(item, ["accountId", "account_id", "id"]) || "未命名账号";
+                    var userId = valueOf(item, ["userId", "user_id", "staffId"]) || "-";
+                    var remoteId = valueOf(item, ["remoteAccountId", "remote_account_id", "openUserId", "unionId"]) || "-";
+                    var savedAt = valueOf(item, ["savedAt", "updatedAt", "createdAt"]) || "-";
+                    return '' +
+                        '<div class="account-item">' +
+                        '<strong>' + escapeHtml(accountId) + '</strong>' +
+                        '<span>用户: ' + escapeHtml(userId) + '</span>' +
+                        '<span>远端账号: ' + escapeHtml(remoteId) + '</span>' +
+                        '<span>更新时间: ' + escapeHtml(savedAt) + '</span>' +
+                        '</div>';
+                }).join("");
+            } catch (e) {
+                accountList.innerHTML = '<div class="empty">账号列表加载失败，请检查 /api/admin/channels/weixin/accounts 是否可用。</div>';
+            }
+        }
+
+        async function startLogin() {
+            stopPolling();
+            setStatus("waiting", "请求二维码中", "正在生成二维码，请稍候。", true);
+
+            try {
+                var data = unwrap(await postJson(API.start, {}));
+                sessionKey = valueOf(data, ["sessionKey", "session_id", "sid", "loginSessionKey"]) || "";
+                var qrSource = valueOf(data, ["qrCodeUrl", "qr_code_url", "qrCode", "qrcode", "qrcode_img_content", "qrUrl", "imageUrl", "image"]);
+                var message = valueOf(data, ["message", "msg", "desc"]) || "二维码已生成，请使用微信扫码。";
+
+                if (!qrSource) {
+                    throw new Error("启动接口没有返回二维码字段");
+                }
+
+                sessionValue.textContent = sessionKey || "-";
+                renderQr(qrSource);
+                resultValue.textContent = "等待扫码";
+                setStatus("waiting", "等待扫码", message, true);
+                await startPolling();
+            } catch (e) {
+                setStatus("error", "二维码获取失败", errorMessage(e), false);
+                resultValue.textContent = "启动失败";
+            }
+        }
+
+        async function startPolling() {
+            if (!sessionKey) {
+                setStatus("error", "缺少 Session", "启动接口没有返回 sessionKey，无法轮询。", false);
+                resultValue.textContent = "轮询失败";
+                return;
+            }
+            if (pollActive) {
+                return;
+            }
+
+            pollActive = true;
+            while (pollActive) {
+                try {
+                    var data = unwrap(await postJson(API.wait, { sessionKey: sessionKey }));
+                    var message = valueOf(data, ["message", "msg", "desc"]) || "等待扫码中。";
+
+                    if (!pollActive) {
+                        return;
+                    }
+
+                    if (isConnected(data)) {
+                        stopPolling();
+                        setStatus("success", "扫码完成", message, false);
+                        resultValue.textContent = "已登录";
+                        await loadAccounts();
+                        await startLogin();
+                        return;
+                    }
+
+                    if (isExpired(data)) {
+                        stopPolling();
+                        setStatus("error", "二维码过期", message, false);
+                        resultValue.textContent = "二维码过期";
+                        await startLogin();
+                        return;
+                    }
+
+                    setStatus("waiting", "等待扫码", message, true);
+                    resultValue.textContent = "等待扫码";
+                } catch (e) {
+                    if (!pollActive) {
+                        return;
+                    }
+                    stopPolling();
+                    setStatus("error", "轮询失败", errorMessage(e), false);
+                    resultValue.textContent = "轮询失败";
+                    return;
+                }
+            }
+        }
+
+        function stopPolling() {
+            pollActive = false;
+        }
+
+        function renderQr(source) {
+            var value = "/api/admin/channels/weixin/login/qr-image?content=" + encodeURIComponent(String(source || ""));
+            qrImage.src = value;
+            qrImage.style.display = "block";
+            placeholder.style.display = "none";
+        }
+
+        function setStatus(type, label, message, pulse) {
+            statusBadge.className = "status " + type + (pulse ? " pulse" : "");
+            statusBadge.textContent = label;
+            messageText.textContent = message;
+            qrBox.classList.toggle("waiting", !!pulse);
+        }
+
+        async function getJson(url) {
+            var response = await fetch(url, { headers: { "Accept": "application/json, text/plain, */*" } });
+            return parseResponse(response);
+        }
+
+        async function postJson(url, payload) {
+            var response = await fetch(url, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json, text/plain, */*"
+                },
+                body: JSON.stringify(payload || {})
+            });
+            return parseResponse(response);
+        }
+
+        async function parseResponse(response) {
+            var text = await response.text();
+            var data = text ? tryParseJson(text) : null;
+            if (!response.ok) {
+                var error = new Error("HTTP " + response.status + " " + response.statusText);
+                error.payload = data || text;
+                throw error;
+            }
+            return data || {};
+        }
+
+        function unwrap(data) {
+            if (data && typeof data === "object") {
+                if (data.data && typeof data.data === "object") return data.data;
+                if (data.result && typeof data.result === "object") return data.result;
+            }
+            return data;
+        }
+
+        function isConnected(data) {
+            var value = valueOf(data, ["connected", "success", "completed", "done"]);
+            if (typeof value === "boolean") return value;
+            if (typeof value === "string") return /^(true|success|confirmed|connected|done)$/i.test(value);
+            var status = valueOf(data, ["status", "loginStatus", "scanStatus"]);
+            return typeof status === "string" && /^(confirmed|connected|success|done)$/i.test(status);
+        }
+
+        function isExpired(data) {
+            var status = String(valueOf(data, ["status", "loginStatus", "scanStatus"]) || "");
+            var message = String(valueOf(data, ["message", "msg", "desc"]) || "");
+            return /expired/i.test(status) || /过期/.test(message);
+        }
+
+        function valueOf(obj, keys) {
+            if (!obj || typeof obj !== "object") return null;
+            for (var i = 0; i < keys.length; i++) {
+                var value = read(obj, keys[i]);
+                if (value !== undefined && value !== null && value !== "") return value;
+            }
+            return null;
+        }
+
+        function read(obj, path) {
+            if (Object.prototype.hasOwnProperty.call(obj, path)) return obj[path];
+            var parts = String(path).split(".");
+            var current = obj;
+            for (var i = 0; i < parts.length; i++) {
+                if (current == null || !Object.prototype.hasOwnProperty.call(current, parts[i])) return undefined;
+                current = current[parts[i]];
+            }
+            return current;
+        }
+
+        function tryParseJson(text) {
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function errorMessage(error) {
+            if (!error) return "未知错误";
+            if (error.payload) {
+                var message = valueOf(error.payload, ["message", "msg", "error", "desc"]);
+                if (message) return message;
+            }
+            return error.message || String(error);
+        }
+
+        function escapeHtml(value) {
+            return String(value)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#39;");
+        }
+
+        function $(selector) {
+            return document.querySelector(selector);
+        }
+    })();
+</script>
+</body>
+</html>

@@ -21,6 +21,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -96,6 +97,22 @@ class WeixinChannelControllerTest {
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> controller.waitLogin(waitRequest));
 
         assertEquals("sessionKey 不能为空", exception.getMessage());
+    }
+
+    @Test
+    void generatesQrPngFromContent() {
+        WeixinAccountStoreService storeService = new WeixinAccountStoreService(new AgentWorkspaceService(tempDir.toString()));
+        WeixinLoginService loginService = new WeixinLoginService(new NoopWeixinApiGateway(), storeService, new WeixinProperties());
+        WeixinChannelController controller = new WeixinChannelController(loginService, storeService);
+
+        byte[] png = controller.generateQrPng("https://liteapp.weixin.qq.com/q/7GiQu1?qrcode=test");
+
+        assertNotNull(png);
+        assertTrue(png.length > 0);
+        assertEquals((byte) 0x89, png[0]);
+        assertEquals((byte) 0x50, png[1]);
+        assertEquals((byte) 0x4E, png[2]);
+        assertEquals((byte) 0x47, png[3]);
     }
 
     private static class NoopWeixinApiGateway implements WeixinApiGateway {

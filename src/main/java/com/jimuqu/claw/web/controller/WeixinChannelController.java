@@ -1,6 +1,8 @@
 package com.jimuqu.claw.web.controller;
 
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.extra.qrcode.QrCodeUtil;
+import cn.hutool.extra.qrcode.QrConfig;
 import com.jimuqu.claw.channel.weixin.model.WeixinAccount;
 import com.jimuqu.claw.channel.weixin.model.WeixinQrStartResult;
 import com.jimuqu.claw.channel.weixin.model.WeixinQrWaitResult;
@@ -14,7 +16,9 @@ import org.noear.solon.annotation.Controller;
 import org.noear.solon.annotation.Get;
 import org.noear.solon.annotation.Mapping;
 import org.noear.solon.annotation.Post;
+import org.noear.solon.core.handle.Context;
 
+import java.awt.Color;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -90,5 +94,32 @@ public class WeixinChannelController {
             throw new IllegalArgumentException("sessionKey 不能为空");
         }
         return weixinLoginService.waitForLogin(sessionKey);
+    }
+
+    /**
+     * 将任意微信登录链接渲染为二维码图片。
+     *
+     * @param content 需要编码进二维码的文本内容
+     * @param ctx 当前请求上下文
+     */
+    @Get
+    @Mapping("/login/qr-image")
+    public void renderQrImage(String content, Context ctx) {
+        String normalizedContent = StrUtil.trim(content);
+        if (StrUtil.isBlank(normalizedContent)) {
+            throw new IllegalArgumentException("content 不能为空");
+        }
+
+        ctx.contentType("image/png");
+        ctx.headerSet("Cache-Control", "no-store, no-cache, must-revalidate");
+        ctx.output(generateQrPng(normalizedContent));
+    }
+
+    public byte[] generateQrPng(String content) {
+        QrConfig config = new QrConfig(360, 360);
+        config.setMargin(1);
+        config.setForeColor(new Color(32, 36, 39));
+        config.setBackColor(Color.WHITE);
+        return QrCodeUtil.generatePng(content, config);
     }
 }
