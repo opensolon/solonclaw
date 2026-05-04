@@ -1,0 +1,166 @@
+// 黑白水墨 — Pure Ink
+// 纯黑白灰，无彩色
+// 支持 light / dark 双主题
+
+// ─── CSS Custom Properties ─────────────────────────────────────
+
+:root {
+  // Backgrounds
+  --bg-primary: #fafafa;
+  --bg-secondary: #f0f0f0;
+  --bg-sidebar: #f5f5f5;
+  --bg-card: #ffffff;
+  --bg-card-hover: #fafafa;
+  --bg-input: #ffffff;
+
+  // Borders
+  --border-color: #e0e0e0;
+  --border-light: #ebebeb;
+
+  // Accent
+  --accent-primary: #333333;
+  --accent-hover: #1a1a1a;
+  --accent-muted: #888888;
+
+  // Text
+  --text-primary: #1a1a1a;
+  --text-secondary: #666666;
+  --text-muted: #999999;
+
+  // Status
+  --success: #2e7d32;
+  --error: #c62828;
+  --warning: #f57f17;
+
+  // Message bubbles
+  --msg-user-bg: #f5f5f5;
+  --msg-assistant-bg: #f5f5f5;
+  --msg-system-border: #bdbdbd;
+
+  // Code
+  --code-bg: #f4f4f4;
+
+  // Utility
+  --text-on-accent: #ffffff;
+  --text-on-overlay: #ffffff;
+  --accent-info: #4a90d9;
+
+  // RGB components (for rgba() usage)
+  --accent-primary-rgb: 51, 51, 51;
+  --accent-hover-rgb: 26, 26, 26;
+  --text-primary-rgb: 26, 26, 26;
+  --text-muted-rgb: 153, 153, 153;
+  --success-rgb: 46, 125, 50;
+  --error-rgb: 198, 40, 40;
+  --warning-rgb: 245, 127, 23;
+  --accent-info-rgb: 74, 144, 217;
+}
+
+.dark {
+  // Backgrounds
+  --bg-primary: #1a1a1a;
+  --bg-secondary: #252525;
+  --bg-sidebar: #202020;
+  --bg-card: #333333;
+  --bg-card-hover: #333333;
+  --bg-input: #2a2a2a;
+
+  // Borders
+  --border-color: #3a3a3a;
+  --border-light: #333333;
+
+  // Accent
+  --accent-primary: #e0e0e0;
+  --accent-hover: #f5f5f5;
+  --accent-muted: #888888;
+
+  // Text
+  --text-primary: #f0f0f0;
+  --text-secondary: #c0c0c0;
+  --text-muted: #888888;
+
+  // Status
+  --success: #66bb6a;
+  --error: #ef5350;
+  --warning: #ffb74d;
+
+  // Message bubbles
+  --msg-user-bg: #252525;
+  --msg-assistant-bg: #252525;
+  --msg-system-border: #555555;
+
+  // Code
+  --code-bg: #1e1e1e;
+
+  // Utility
+  --text-on-accent: #1a1a1a;
+  --text-on-overlay: #ffffff;
+  --accent-info: #6ba3d6;
+
+  // RGB components
+  --accent-primary-rgb: 240, 240, 240;
+  --accent-hover-rgb: 245, 245, 245;
+  --text-primary-rgb: 240, 240, 240;
+  --text-muted-rgb: 136, 136, 136;
+  --success-rgb: 102, 187, 106;
+  --error-rgb: 239, 83, 80;
+  --warning-rgb: 255, 183, 77;
+  --accent-info-rgb: 107, 163, 214;
+}
+
+// ─── SCSS Variables (delegate to CSS custom properties) ────────
+
+// Backgrounds
+$bg-primary: var(--bg-primary);
+$bg-secondary: var(--bg-secondary);
+$bg-sidebar: var(--bg-sidebar);
+$bg-card: var(--bg-card);
+$bg-card-hover: var(--bg-card-hover);
+$bg-input: var(--bg-input);
+
+// Borders
+$border-color: var(--border-color);
+$border-light: var(--border-light);
+
+// Accent
+$accent-primary: var(--accent-primary);
+$accent-hover: var(--accent-hover);
+$accent-muted: var(--accent-muted);
+
+// Text
+$text-primary: var(--text-primary);
+$text-secondary: var(--text-secondary);
+$text-muted: var(--text-muted);
+
+// Status
+$success: var(--success);
+$error: var(--error);
+$warning: var(--warning);
+$info: $accent-primary;
+
+// Message bubbles
+$msg-user-bg: var(--msg-user-bg);
+$msg-assistant-bg: var(--msg-assistant-bg);
+$msg-system-border: var(--msg-system-border);
+
+// Code
+$code-bg: var(--code-bg);
+
+// Typography
+$font-ui: 'Inter', system-ui, -apple-system, sans-serif;
+$font-code: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+
+// Layout
+$sidebar-width: 240px;
+$sidebar-collapsed-width: 64px;
+$header-height: 60px;
+$breakpoint-mobile: 768px;
+
+// Radius
+$radius-sm: 6px;
+$radius-md: 10px;
+$radius-lg: 14px;
+
+// Transition
+$transition-fast: 0.15s ease;
+$transition-normal: 0.25s ease;

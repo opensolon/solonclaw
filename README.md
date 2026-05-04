@@ -1,561 +1,232 @@
-# SolonClaw
+# solon-claw
 
-[English](./README.en.md)
+[English](README_EN.md) | 简体中文
 
-> 置顶说明  
-> 本项目的基础架构思路学习和参考了开源项目 [HKUDS/nanobot](https://github.com/HKUDS/nanobot)。  
-> `SolonClaw` 不是对 nanobot 的直接移植，而是基于 `Solon + Solon AI + 文件工作区 + 多渠道适配` 的本地化实现。理解项目时，请以当前仓库代码与测试为准。
+solon-claw 是一个基于 Java、Solon 与 Solon AI 的单实例 Agent 服务。项目目标是以 Java / Solon 生态复刻 Hermes Agent 的核心行为与能力，重点覆盖 Agent 主循环、工具调用、会话/记忆、技能、定时任务、国内消息渠道接入，以及 Dashboard-first 的配置与诊断体验。
 
-`SolonClaw` 是一个基于 `Solon 3.9.5` 构建的轻量级 Agent 服务。它把模型调用、会话历史、子任务编排、工作区工具、定时任务、调试页和钉钉渠道统一到同一套运行时中。
+> 当前项目仍处于快速迭代阶段，接口和配置项可能继续调整。欢迎试用、反馈问题和参与贡献。
 
-适合用来做这些事情：
+## 特性
 
-- 🤖 构建一个可持续运行的个人/团队 AI 助手
-- 💬 同时接本地 Debug Web 与钉钉机器人
-- 🧠 让 Agent 基于工作区文件获得记忆、身份和行为约束
-- 🛠️ 让 Agent 通过工具读写工作区、通过 CLI 技能执行命令、管理任务
-- 🧩 把复杂问题拆成多个子任务并回流父会话
-- ⏰ 创建持久化定时任务，让 Agent 定期执行工作
+- **Agent 核心循环**：多轮会话、流式/非流式模型调用、工具调用、上下文压缩、重试、回滚与会话搜索。
+- **模型协议**：支持 `openai`、`openai-responses`、`ollama`、`gemini`、`anthropic` 等通用接入面。
+- **工具系统**：内置文件读写、搜索、补丁、Shell/Python/JavaScript 执行、Todo 任务规划、Memory、定时任务、Web search/fetch、消息发送等工具。
+- **国内消息渠道**：聚焦飞书、钉钉、企业微信、微信；优先 websocket / stream，微信保留 iLink long-poll。
+- **Dashboard-first**：提供状态查看、会话、配置、渠道诊断、运行配置、日志、技能等管理入口。
+- **持久化**：使用 SQLite 保存会话、策略、定时任务、渠道状态等运行数据。
+- **技能与记忆**：支持本地 Skills、Skills Hub 导入、长期记忆、用户画像和上下文文件协作。
+- **部署方式**：支持 `java -jar` 与 Docker / Docker Compose 单实例部署。
 
-## 核心特性
+## 技术栈
 
-- 🚀 统一运行时
-  所有消息都会先进入 `AgentRuntimeService`，统一完成去重、会话落盘、调度、模型执行与渠道回发。
-
-- 🔀 会话级并发
-  并发控制按 `sessionKey` 生效，而不是全局串行。当前默认单会话最大并发数为 `4`。
-
-- 🧵 子任务编排
-  Agent 可以通过 `spawn_task` 派生独立子任务；子任务完成后会回流父会话，并支持按 `batchKey` 聚合状态。
-
-- 🔔 主动通知
-  Agent 在一次运行中可以主动向当前外部会话发送通知，而不必等最终回复。
-
-- 🗂️ 工作区驱动提示词
-  `AGENTS.md / SOUL.md / IDENTITY.md / USER.md / TOOLS.md / HEARTBEAT.md / MEMORY.md / memory/YYYY-MM-DD.md` 会自动参与系统提示词拼装。
-
-- 🧰 内置工具与技能
-  支持文件读写、片段编辑、任务查询、定时任务管理，并可从 `workspace/skills` 挂载 CLI 技能池 `@skills`。
-
-- 🧪 本地调试友好
-  自带 Debug Web 页面，可直接查看 run 状态、流式事件、子任务列表与聚合摘要。
-
-- 📁 文件持久化
-  会话、运行、去重标记、路由状态和任务定义都可以直接在工作区中看到。
-
-## 当前架构
-
-```text
-Inbound Message
-  -> ChannelAdapter / Debug Web / System Job
-  -> AgentRuntimeService
-  -> RuntimeStoreService (dedup + conversation events + run events + reply target)
-  -> ConversationScheduler (per sessionKey concurrency)
-  -> SolonAiConversationAgent
-     -> ChatModel
-     -> Workspace Tools
-     -> Runtime Tools
-     -> Job Tools
-     -> CLI Skills (@skills)
-  -> OutboundEnvelope
-  -> ChannelRegistry
-  -> DingTalk / Debug Web
-```
-
-核心模块：
-
-- `agent/runtime`
-  统一运行时、调度器、心跳、子任务与通知能力。
-
-- `agent/store`
-  统一文件落盘与历史重建。
-
-- `agent/workspace`
-  工作区路径边界、模板初始化、提示词拼装。
-
-- `agent/tool`
-  工作区工具、运行时工具、定时任务工具。
-
-- `agent/job`
-  持久化定时任务与恢复机制。
-
-- `channel/dingtalk`
-  钉钉 Stream 入站与机器人 OpenAPI 出站。
-
-- `web`
-  Debug Web 页面与调试 API。
-
-## 目录与持久化
-
-默认工作区根目录为 `./workspace`。
-
-运行后常见文件结构如下：
-
-```text
-workspace/
-  AGENTS.md
-  SOUL.md
-  IDENTITY.md
-  USER.md
-  TOOLS.md
-  HEARTBEAT.md
-  MEMORY.md
-  memory/
-  skills/
-  jobs.json
-  runtime/
-    runs/
-    conversations/
-    dedup/
-    meta/
-    media/
-```
-
-其中：
-
-- `workspace/runtime/runs`
-  保存 run 明细与 run 事件。
-
-- `workspace/runtime/conversations`
-  保存会话事件和会话元数据。
-
-- `workspace/runtime/meta`
-  保存最近一次外部回复路由等状态。
-
-- `workspace/jobs.json`
-  保存定时任务定义。
-
-## 当前已实现的渠道
-
-### DingTalk
-
-当前钉钉接入方式：
-
-- 入站：`DingTalkStreamTopics.BOT_MESSAGE_TOPIC`
-- 出站：机器人 OpenAPI
-- 群聊：`orgGroupSend`
-- 私聊：`batchSendOTO`
-- 输出格式：markdown 文本
-
-当前行为边界：
-
-- 群聊与私聊会使用不同 `sessionKey`
-- 回复目标完全依赖 `ReplyTarget`
-- 附件暂时只做文本化降级
-- 白名单为空时默认允许；一旦配置白名单，则只允许命中项通过
-
-## Agent 当前能力
-
-当前 Agent 可以使用的核心工具包括：
-
-- `read_file`
-- `write_file`
-- `edit_file`
-- `notify_user`
-- `spawn_task`
-- `list_child_runs`
-- `get_run_status`
-- `get_child_summary`
-- `list_jobs`
-- `get_job`
-- `add_job`
-- `remove_job`
-- `start_job`
-- `stop_job`
-
-能力特点：
-
-- 文件读写受工作区边界保护
-- 命令执行走 CLI `TerminalSkill` 的 `bash` 能力
-- `TerminalSkill` 默认启用沙盒模式，可通过 `solonclaw.agent.tools.sandboxMode` 控制
-- 定时任务会绑定最近一次外部会话路由
-- 心跳检查会读取 `HEARTBEAT.md` 并触发静默内部运行
-
-`sandboxMode` 规则：
-
-- `true`：CLI 的 `bash` / `ls` / `read` / `grep` / `glob` 等能力只允许工作区相对路径、`~/` 和 `@skills` 逻辑路径
-- `true`：禁止绝对路径，禁止通过 `../` 等方式越出工作区
-- `true`：`@skills` 逻辑路径可读、可执行，但仍是只读挂载池
-- `false`：放开绝对路径访问，CLI 能力进入更开放模式
+- Java 源码兼容级别：1.8
+- 运行与构建：Maven、Node.js/npm（用于 Dashboard 前端构建）
+- Web 框架：Solon
+- AI 编排：Solon AI、Solon AI Agent、Solon AI Skills
+- JSON：Snack4
+- 工具库：Hutool
+- 数据库：SQLite
+- 前端：Vue / Vite
+- 容器：Docker、Docker Compose
 
 ## 快速开始
 
-### 1. 环境要求
+### 环境要求
 
-- JDK `8`
-- Maven `3.9+`
-- 推荐本地安装并启动 Ollama
+- JDK 8+（推荐 JDK 17）
+- Maven 3.9+
+- Node.js 20+ 与 npm
+- 可访问目标大模型服务的网络环境
 
-### 2. 配置模型
-
-开发环境可直接使用 [src/main/resources/app-dev.yml](./src/main/resources/app-dev.yml) 中的 Ollama 示例配置。
-
-生产或本地自定义配置建议参考：
-
-- [scripts/config.example.yml](./scripts/config.example.yml)
-
-可在项目根目录创建 `config.yml`，注入你的模型与钉钉配置。
-
-### 3. 编译与测试
+### 克隆与构建
 
 ```bash
-mvn -q -DskipTests compile
-mvn -q test
+git clone https://github.com/chengliang4810/solon-claw.git
+cd solon-claw
+mvn -DskipTests package
 ```
 
-说明：
-
-- `ChatModelConfigTest` 在本地 Ollama 不可达时会自动跳过真实调用测试。
-
-### 4. 启动应用
+Maven 默认会在 `generate-resources` 阶段执行 `web` 前端的 `npm install` 与 `npm run build`。如果你只想构建后端，可使用：
 
 ```bash
-java -jar target/solonclaw.jar
+mvn -DskipTests -Dskip.web.build=true package
 ```
 
-或开发模式：
+### 运行
 
 ```bash
-java -jar target/solonclaw.jar --env=dev
+java -jar target/solon-claw-0.0.1.jar
 ```
 
-默认端口：
+服务默认监听：
 
-- `12345`
-
-启动后可打开：
-
-- [http://localhost:12345](http://localhost:12345)
-
-### 5. 一键复制的启动命令
-
-如果你希望 README 里直接给出“先设置变量，再启动”的现成命令，可以直接使用下面这些示例。
-
-PowerShell：
-
-```powershell
-$env:APP_JAR="target/solonclaw.jar"
-$env:APP_ENV="dev"
-$env:APP_PORT="12345"
-$env:APP_WORKSPACE="./workspace"
-$env:APP_XMS="256m"
-$env:APP_XMX="512m"
-
-java `
-  "-Xms$env:APP_XMS" `
-  "-Xmx$env:APP_XMX" `
-  "-Dserver.port=$env:APP_PORT" `
-  "-Dsolonclaw.workspace=$env:APP_WORKSPACE" `
-  -jar $env:APP_JAR `
-  --env=$env:APP_ENV
+```text
+http://127.0.0.1:8080
 ```
 
-Bash：
+运行后会在当前目录创建 `runtime/`，用于保存配置、SQLite 数据库、缓存、日志、技能和上下文文件。运行态子目录由程序内置派生：`context/`、`skills/`、`cache/`、`logs/` 和 `data/state.db`。
+
+### Docker Compose
 
 ```bash
-export APP_JAR="target/solonclaw.jar"
-export APP_ENV="dev"
-export APP_PORT="12345"
-export APP_WORKSPACE="./workspace"
-export JAVA_OPTS="-Xms256m -Xmx512m"
-
-java ${JAVA_OPTS} \
-  -Dserver.port="${APP_PORT}" \
-  -Dsolonclaw.workspace="${APP_WORKSPACE}" \
-  -jar "${APP_JAR}" \
-  --env="${APP_ENV}"
+docker compose up -d
 ```
 
-生产环境示例：
+默认 Compose 会将本地 `./runtime` 挂载到容器内 `/app/runtime`，方便持久化运行数据。镜像内服务默认以非 root 用户 `solonclaw` 运行，UID/GID 为 `10000:10000`。如果从旧镜像或 root 容器迁移后看到 `/app/runtime is not writable`，先在服务器项目目录执行：
 
 ```bash
-export APP_JAR="target/solonclaw.jar"
-export APP_ENV="prod"
-export APP_PORT="12345"
-export APP_WORKSPACE="./workspace"
-export JAVA_OPTS="-Xms512m -Xmx1024m"
-
-java ${JAVA_OPTS} \
-  -Dserver.port="${APP_PORT}" \
-  -Dsolonclaw.workspace="${APP_WORKSPACE}" \
-  -jar "${APP_JAR}" \
-  --env="${APP_ENV}"
+sudo mkdir -p runtime
+sudo chown -R 10000:10000 runtime
+sudo chmod -R u+rwX runtime
+docker compose up -d
 ```
 
-## 配置说明
-
-主配置文件：
-
-- `src/main/resources/app.yml`
-
-当前关键项：
-
-- `solonclaw.workspace=./workspace`
-- `solonclaw.agent.scheduler.maxConcurrentPerConversation=4`
-- `solonclaw.agent.scheduler.ackWhenBusy=false`
-- `solonclaw.agent.tools.sandboxMode=true`
-- `solonclaw.agent.heartbeat.enabled=true`
-- `solonclaw.agent.heartbeat.intervalSeconds=1800`
-- `solonclaw.channels.dingtalk.*`
-
-注意：
-
-- 仓库内不提交生产密钥
-- `prod` 环境默认追加加载根目录 `./config.yml`
-
-## Docker 部署
-
-仓库现在已经提供：
-
-- [Dockerfile](./Dockerfile)
-- [docker-compose.yml](./docker-compose.yml)
-- [.dockerignore](./.dockerignore)
-
-### 1. 构建镜像
+如果你希望容器内用户匹配宿主机当前用户，也可以在启动前设置：
 
 ```bash
-docker build -t solonclaw:latest .
+export SOLONCLAW_UID="$(id -u)"
+export SOLONCLAW_GID="$(id -g)"
+docker compose up -d
 ```
 
-### 2. 准备宿主机文件
+## 配置
 
-建议在项目根目录准备：
+默认配置位于：
 
-- `config.yml`
-- `workspace/`
-
-其中：
-
-- `config.yml` 用来放生产环境密钥、模型配置、钉钉配置
-- `workspace/` 用来持久化运行时数据、记忆文件、技能和任务定义
-
-可先参考：
-
-- [scripts/config.example.yml](./scripts/config.example.yml)
-
-### 3. 直接用 `docker run` 启动
-
-```bash
-docker run -d \
-  --name solonclaw \
-  -p 12345:12345 \
-  -e JAVA_OPTS="-Xms256m -Xmx512m" \
-  -e APP_ARGS="--env=prod" \
-  -v "$(pwd)/workspace:/app/workspace" \
-  -v "$(pwd)/config.yml:/app/config.yml:ro" \
-  solonclaw:latest
+```text
+src/main/resources/app.yml
 ```
 
-Windows PowerShell：
+模型提供方的标准配置使用 `providers` 与 `model` 结构，建议通过 Dashboard 或 `runtime/config.yml` 维护。
 
-```powershell
-docker run -d `
-  --name solonclaw `
-  -p 12345:12345 `
-  -e JAVA_OPTS="-Xms256m -Xmx512m" `
-  -e APP_ARGS="--env=prod" `
-  -v "${PWD}/workspace:/app/workspace" `
-  -v "${PWD}/config.yml:/app/config.yml:ro" `
-  solonclaw:latest
+```text
+runtime/config.yml
 ```
 
-说明：
+`runtime/config.yml` 不配置运行目录本身；运行目录在启动级配置中决定，默认使用当前目录下的 `runtime/`。
 
-- 容器工作目录固定为 `/app`
-- `APP_ARGS="--env=prod"` 会启用 `app.yml` 中的 `prod` 段，并加载 `/app/config.yml`
-- `workspace` 目录挂载后，运行数据不会随容器删除而丢失
+完整示例可参考仓库根目录的 `config.example.yml`。
 
-### 4. 使用 Docker Compose 启动
-
-```bash
-docker compose up -d --build
-```
-
-停止：
-
-```bash
-docker compose down
-```
-
-查看日志：
-
-```bash
-docker compose logs -f solonclaw
-```
-
-当前 `docker-compose.yml` 默认会：
-
-- 暴露端口 `12345`
-- 挂载 `./workspace` 到 `/app/workspace`
-- 挂载 `./config.yml` 到 `/app/config.yml`
-- 以 `--env=prod` 启动应用
-
-### 5. Docker Compose 文件说明
-
-如果你需要自定义 JVM 参数或启动参数，可以直接修改 [docker-compose.yml](./docker-compose.yml) 里的环境变量：
-
-- `JAVA_OPTS`
-- `APP_ARGS`
-
-例如：
+最小 `runtime/config.yml` 示例：
 
 ```yaml
-environment:
-  JAVA_OPTS: "-Xms512m -Xmx1024m"
-  APP_ARGS: "--env=prod"
+providers:
+  default:
+    name: DefaultProvider
+    baseUrl: https://api.openai.com
+    apiKey: ""
+    defaultModel: gpt-5.4
+    dialect: openai
+model:
+  providerKey: default
+  default: "gpt-5.4"
+fallbackProviders: []
+solonclaw:
+  dashboard:
+    accessToken: "admin"
 ```
 
-### 6. 容器部署建议
+常用运行配置：
 
-- 生产环境务必挂载独立的 `workspace` 目录
-- 生产环境不要把真实密钥写进镜像
-- 如果使用本地 Ollama，请确保容器能访问你的模型服务地址
-- 如果要接钉钉，请在 `config.yml` 中补齐 `clientId`、`clientSecret`、`robotCode`
+| 配置项 | 默认值 | 说明 |
+| --- | --- | --- |
+| `server.port` | `8080` | HTTP 服务端口 |
+| `providers.<key>.baseUrl` | - | 模型服务基础地址 |
+| `providers.<key>.apiKey` | - | 模型服务 API Key |
+| `providers.<key>.defaultModel` | - | 该提供方默认模型 |
+| `providers.<key>.dialect` | `openai` | 协议方言 |
+| `model.providerKey` | `default` | 当前默认提供方 |
+| `model.default` | 空 | 全局默认模型覆盖；为空时使用 provider 的 `defaultModel` |
+| `solonclaw.llm.stream` | `true` | 是否启用流式输出 |
+| `solonclaw.llm.reasoningEffort` | `medium` | 默认推理强度 |
+| `solonclaw.scheduler.enabled` | `true` | 是否启用定时任务调度 |
 
-## 测试覆盖
+## 消息渠道
 
-当前测试已覆盖这些方向：
+当前保留并优先建设的渠道：
 
-- Solon 启动与 ChatModel 装配
-- 工作区模板初始化与提示词拼装
-- 工作区工具路径边界
-- 运行时文件落盘
-- 会话并发与忙时回执
-- 子任务派生、回流、聚合与按批次查询
-- 主动通知
-- 心跳静默执行
-- 钉钉入站转换与 markdown 发送参数
-- 定时任务持久化
+| 渠道 | 配置前缀 | 入站方式 | 状态 |
+| --- | --- | --- | --- |
+| 飞书 | `solonclaw.channels.feishu.*` | websocket / 平台能力 | 建设中 |
+| 钉钉 | `solonclaw.channels.dingtalk.*` | stream mode | 建设中 |
+| 企业微信 | `solonclaw.channels.wecom.*` | websocket / 平台能力 | 建设中 |
+| 微信 | `solonclaw.channels.weixin.*` | iLink long-poll | 建设中 |
+| QQBot | `solonclaw.channels.qqbot.*` | websocket / REST | 建设中 |
+| 腾讯元宝 | `solonclaw.channels.yuanbao.*` | websocket / REST | 建设中 |
 
-## 开发约束
+Dashboard 提供渠道状态与 doctor 入口，建议优先通过 Dashboard 完成接入、诊断和排错。默认渠道示例仅开启微信：
 
-- 新增渠道先抽象成 `ChannelAdapter`
-- 回复必须来自 `ReplyTarget`
-- 会话历史只能通过 `RuntimeStoreService` 维护
-- 长时资源优先接入 Solon 生命周期
-- 新增配置优先并入 `SolonClawProperties`
-- 调试能力优先复用现有 Debug Web
-- 不要把系统退回成全局串行队列
-- 实体类、DTO、事件载荷、结果对象、配置承载对象优先使用 Lombok 管理字段访问器；明确适合的类优先使用 `@Data`
-- 无参构造优先交给 Lombok 管理，这类数据类默认优先使用 `@NoArgsConstructor`
-- 需要持久化、序列化传输、缓存或作为稳定数据载体的类，应按需实现 `Serializable`
-- 尽量避免新增内部类；配置承载对象优先拆成独立类维护
-
-## PR 规范
-
-建议所有 Pull Request 默认包含这些内容：
-
-- `背景`
-- `改动内容`
-- `影响范围`
-- `验证方式`
-- `风险与回滚`
-
-推荐模板：
-
-```md
-## 背景
-- 为什么要做这次修改
-
-## 改动内容
-- 这次具体改了什么
-
-## 影响范围
-- 涉及哪些模块、接口、配置或部署方式
-
-## 验证方式
-- 执行了哪些测试
-- 做了哪些人工验证
-
-## 风险与回滚
-- 潜在风险是什么
-- 出现问题如何回滚
+```yaml
+solonclaw:
+  channels:
+    weixin:
+      enabled: true
 ```
 
-附加要求：
+## Slash Commands
 
-- 一个 PR 尽量只做一类改动
-- PR 标题与提交信息建议使用中英双语
-- 改动涉及配置或行为变化时，要同步更新文档
+常用对话内命令包括：
 
-## Commit 规范
+- `/new`：开启新会话
+- `/retry`：重试上一轮
+- `/undo`：撤销上一轮
+- `/branch`：基于当前会话分支
+- `/resume`：恢复会话
+- `/status`：查看运行状态
+- `/usage`：查看 token 使用量
+- `/model`：查看或切换模型
+- `/tools`：查看工具状态
+- `/skills`：管理技能
+- `/cron`：管理定时任务
+- `/pairing`：渠道用户绑定与审批
+- `/approve` / `/deny`：危险命令审批
 
-提交信息默认采用 Conventional Commits 风格：
+## 目录结构
 
 ```text
-<type>(<scope>): <subject>
+src/main/java/com/jimuqu/solon/claw/
+├── agent/          # Agent profile
+├── bootstrap/      # Solon 启动、Bean 装配、HTTP 控制器
+├── config/         # 配置文件加载、运行时覆盖、路径规范化
+├── context/        # AGENTS / MEMORY / USER / Skills 上下文
+├── core/           # 领域模型、仓储接口、服务接口
+├── engine/         # Agent 主循环、上下文压缩、委托
+├── gateway/        # 国内消息渠道、鉴权、投递和运行刷新
+├── llm/            # 模型协议适配与 Solon AI 接入
+├── scheduler/      # Cron 与 heartbeat 调度
+├── skillhub/       # Skills Hub、导入、校验与来源适配
+├── storage/        # SQLite 仓储实现
+├── support/        # 通用运行期支持类
+├── tool/           # 内置工具注册与实现
+└── web/            # Dashboard 后端服务与控制器
 ```
 
-说明：
+## 测试
 
-- 冒号 `:` 后必须有一个空格
-- `scope` 选填，表示 commit 的作用范围，可以写模块名、目录名，或 `runtime`、`workspace`、`web` 这类职责范围
-- `subject` 必填，用于简短描述本次提交内容，建议使用中英双语
+运行后端与前端绑定构建测试：
 
-`type` 必填，允许值如下：
-
-- `feat`：新功能 feature
-- `fix`：修复 bug
-- `docs`：文档注释
-- `style`：代码格式（不影响代码运行的变动）
-- `refactor`：重构、优化（既不增加新功能，也不是修复 bug）
-- `perf`：性能优化
-- `test`：增加测试
-- `chore`：构建过程或辅助工具的变动
-- `revert`：回退
-- `build`：打包
-
-推荐示例：
-
-```text
-feat(agent): 增加了子任务聚合能力 (Add child-run aggregation)
-docs(readme): 补充了提交信息格式说明 (Add commit message format notes)
-fix(runtime): 修复了 continuation 丢失问题 (Fix continuation dispatch issue)
+```bash
+mvn test
 ```
 
-额外约定：
+只做后端编译：
 
-- 默认按职责拆分 commit，优先拆成“提示词与上下文 / 运行时治理 / 配置默认值与注释 / 测试”这类最小修改单元
-- 尽量做到一个 commit 只解决一类问题，避免把无关改动混在一起
+```bash
+mvn -DskipTests -Dskip.web.build=true compile
+```
 
-## AI 辅助开发说明
+运行指定测试：
 
-本项目允许使用 AI 辅助编写代码和文档。
+```bash
+mvn "-Dtest=DashboardControllerHttpTest" test
+```
 
-但需要明确：
+> Windows PowerShell 中 `-Dtest=...` 建议加引号，避免逗号被 PowerShell 解析。
 
-- AI 可以参与实现，不可以替代开发者责任
-- 所有 AI 参与生成的代码，都必须由开发者人工阅读
-- 所有待合并改动，都必须经过开发者人工测试和验证
-- 不能因为使用了 AI，就跳过 Review、测试或关键链路回归
+## 贡献
 
-建议至少完成与风险等级匹配的人工验证：
+欢迎提交 issue 和 pull request。建议在贡献前先阅读现有 issue、运行相关测试，并在 PR 中说明变更动机、主要实现和验证范围。
 
-- 本地编译
-- 单元测试或集成测试
-- 关键功能手工验证
-- 配置与部署检查
+## 许可证
 
-结论很简单：
-
-- 允许使用 AI 写代码
-- 不允许未经开发者人工测试和验证直接合并
-
-更完整的仓库协作说明请阅读：
-
-- [AGENTS.md](./AGENTS.md)
-
-## 参考入口
-
-- [src/main/java/com/jimuqu/claw/SolonClawApp.java](./src/main/java/com/jimuqu/claw/SolonClawApp.java)
-- [src/main/java/com/jimuqu/claw/config/SolonClawConfig.java](./src/main/java/com/jimuqu/claw/config/SolonClawConfig.java)
-- [src/main/java/com/jimuqu/claw/agent/runtime/AgentRuntimeService.java](./src/main/java/com/jimuqu/claw/agent/runtime/AgentRuntimeService.java)
-- [src/main/java/com/jimuqu/claw/agent/store/RuntimeStoreService.java](./src/main/java/com/jimuqu/claw/agent/store/RuntimeStoreService.java)
-- [src/main/java/com/jimuqu/claw/agent/workspace/WorkspacePromptService.java](./src/main/java/com/jimuqu/claw/agent/workspace/WorkspacePromptService.java)
-- [src/main/java/com/jimuqu/claw/agent/job/WorkspaceJobService.java](./src/main/java/com/jimuqu/claw/agent/job/WorkspaceJobService.java)
-- [src/main/java/com/jimuqu/claw/channel/dingtalk/DingTalkChannelAdapter.java](./src/main/java/com/jimuqu/claw/channel/dingtalk/DingTalkChannelAdapter.java)
-- [src/main/resources/static/index.html](./src/main/resources/static/index.html)
-
-## License
-
-当前仓库未单独声明许可证时，请以仓库实际发布方式和作者说明为准。
+本项目使用 [MIT License](LICENSE)。

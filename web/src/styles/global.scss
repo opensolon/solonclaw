@@ -1,0 +1,150 @@
+@use 'variables' as *;
+@use 'code-block';
+
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --vh: 1vh;
+}
+
+// Fix mobile viewport height (address bar)
+@supports (height: 100dvh) {
+  :root {
+    --vh: 1dvh;
+  }
+}
+
+// Theme transition (applied programmatically on toggle, not on load)
+html.theme-transitioning,
+html.theme-transitioning *,
+html.theme-transitioning *::before,
+html.theme-transitioning *::after {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease,
+              box-shadow 0.3s ease, fill 0.3s ease, stroke 0.3s ease !important;
+}
+
+html, body, #app {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: $font-ui;
+  background-color: $bg-primary;
+  color: $text-primary;
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code, pre, .mono {
+  font-family: $font-code;
+}
+
+a {
+  color: $accent-primary;
+  text-decoration: none;
+
+  &:hover {
+    color: $accent-hover;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: $border-color;
+  border-radius: 3px;
+
+  &:hover {
+    background: $text-muted;
+  }
+}
+
+::selection {
+  background: rgba(var(--accent-primary-rgb), 0.3);
+}
+
+// Shared page header
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 21px 20px;
+  border-bottom: 1px solid $border-color;
+  flex-shrink: 0;
+}
+
+.header-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: $text-primary;
+}
+
+// Responsive utility classes for inline width replacement
+.input-sm { width: 90px; }
+.input-md { width: 200px; }
+.input-lg { width: 300px; }
+
+// Mobile drawer backdrop
+.mobile-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 999;
+}
+
+// Hamburger button (mobile only)
+.hamburger-btn {
+  display: none;
+  position: fixed;
+  top: 16px;
+  left: 12px;
+  z-index: 1001;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: $bg-card;
+  border-radius: $radius-sm;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+
+// Mobile responsive
+@media (max-width: $breakpoint-mobile) {
+  .mobile-backdrop {
+    display: block;
+  }
+
+  .hamburger-btn {
+    display: flex;
+  }
+
+  .page-header {
+    padding: 16px 12px 16px 52px;
+  }
+
+  .input-sm,
+  .input-md,
+  .input-lg {
+    width: 100%;
+  }
+}

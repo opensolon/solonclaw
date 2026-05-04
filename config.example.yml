@@ -1,0 +1,448 @@
+# Agent 请注意：这是只读参考模板，请不要修改本文件；需要变更运行配置时请修改同目录的 config.yml。
+# SolonClaw 运行配置示例。
+# 使用方式：复制为 runtime/config.yml，再按部署环境修改。
+
+# 模型提供方列表。键名是 providerKey，可在 model.providerKey 和 fallbackProviders 中引用。
+providers:
+  # 默认云端模型提供方。
+  default:
+    # 提供方显示名称。
+    name: DefaultProvider
+    # 模型接口基础地址。
+    baseUrl: https://api.openai.com
+    # 模型接口密钥。生产环境请替换为真实密钥，避免提交到代码仓库。
+    apiKey: ""
+    # 该提供方默认使用的模型。
+    defaultModel: gpt-5.4
+    # 协议类型，可选 openai、openai-responses、ollama、gemini、anthropic。
+    dialect: openai
+  # 本地 Ollama 示例提供方。
+  local-ollama:
+    # 提供方显示名称。
+    name: Local Ollama
+    # Ollama 本地服务地址。
+    baseUrl: http://127.0.0.1:11434
+    # Ollama 默认不需要密钥，留空即可。
+    apiKey: ""
+    # Ollama 默认模型名。
+    defaultModel: qwen3
+    # 协议类型。
+    dialect: ollama
+
+# 当前默认模型选择。
+model:
+  # 当前默认提供方键名，必须命中 providers 下的键。
+  providerKey: default
+  # 可选默认模型覆盖值；留空时使用 providers.<providerKey>.defaultModel。
+  default: ""
+
+# 模型故障转移列表。主提供方失败时按顺序尝试。
+fallbackProviders: []
+# 故障转移配置示例。
+# fallbackProviders:
+#   # 备用提供方键名，必须命中 providers。
+#   - provider: local-ollama
+#     # 备用模型名；留空时使用该提供方 defaultModel。
+#     model: qwen3
+
+# SolonClaw 运行时配置。
+solonclaw:
+  # Dashboard 与 API 访问配置。
+  dashboard:
+    # Dashboard 页面和 /api/* 请求共用的 Bearer Token。
+    accessToken: "admin"
+
+  # 默认 LLM 运行参数。
+  llm:
+    # 是否启用流式输出。
+    stream: true
+    # 推理强度，具体效果取决于模型协议与提供方支持。
+    reasoningEffort: medium
+    # 采样温度。
+    temperature: 0.2
+    # 单次回复最大输出 token 数。
+    maxTokens: 4096
+    # 模型上下文窗口 token 估算值。
+    contextWindowTokens: 128000
+
+  # 定时任务调度器配置。
+  scheduler:
+    # 是否启用定时任务调度。
+    enabled: true
+    # 调度器扫描间隔，单位秒。
+    tickSeconds: 60
+
+  # 上下文压缩配置。
+  compression:
+    # 是否启用上下文压缩。
+    enabled: true
+    # 触发压缩的上下文占用比例。
+    thresholdPercent: 0.5
+    # 可选压缩摘要模型；留空时使用当前默认模型。
+    summaryModel: ""
+    # 压缩时保护开头消息数量。
+    protectHeadMessages: 3
+    # 压缩时保留尾部消息比例。
+    tailRatio: 0.2
+
+  # 自动学习配置。
+  learning:
+    # 是否启用主回复后的自动技能/经验沉淀。
+    enabled: true
+    # 触发自动学习所需的最少工具调用数。
+    toolCallThreshold: 5
+
+  # 技能后台维护配置。
+  skills:
+    curator:
+      # 是否启用 Curator 后台巡检。
+      enabled: true
+      # 巡检周期，单位小时。
+      intervalHours: 168
+      # Agent 空闲多久后才允许运行，单位小时。
+      minIdleHours: 2
+      # 多久未触达后标记 stale。
+      staleAfterDays: 30
+      # 多久未触达后标记 archived；不会自动删除。
+      archiveAfterDays: 90
+
+  # checkpoint 回滚配置。
+  rollback:
+    # 是否启用 checkpoint 回滚。
+    enabled: true
+    # 每个来源保留的最大 checkpoint 数。
+    maxCheckpointsPerSource: 20
+
+  # 中间态显示配置。
+  display:
+    # 默认工具进度模式：off 不显示，new 仅显示新工具，all 显示每次调用，verbose 显示完整参数。
+    toolProgress: all
+    # 是否默认展示 reasoning/思考中间态。
+    showReasoning: false
+    # 工具参数预览最大长度。
+    toolPreviewLength: 80
+    # 中间态消息节流间隔，单位毫秒。
+    progressThrottleMs: 1500
+    # 最终 agent 回复 runtime metadata footer；默认关闭，避免污染普通聊天。
+    runtimeFooter:
+      # 是否追加 runtime footer。
+      enabled: false
+      # footer 字段，可选 model、provider、context_pct、cwd、tokens。
+      fields:
+        - model
+        - context_pct
+        - cwd
+    # 渠道级 footer 覆盖；未配置时继承全局开关。
+    platforms:
+      feishu:
+        runtimeFooter:
+          enabled: false
+      dingtalk:
+        runtimeFooter:
+          enabled: false
+      wecom:
+        runtimeFooter:
+          enabled: false
+      weixin:
+        runtimeFooter:
+          enabled: false
+      qqbot:
+        runtimeFooter:
+          enabled: false
+      yuanbao:
+        runtimeFooter:
+          enabled: false
+
+  # ReAct 推理控制配置。
+  react:
+    # 主代理单轮最大推理步数。
+    maxSteps: 12
+    # 主代理决策失败后的最大重试次数。
+    retryMax: 3
+    # 主代理决策重试基础延迟，单位毫秒。
+    retryDelayMs: 2000
+    # 子代理单轮最大推理步数。
+    delegateMaxSteps: 18
+    # 子代理决策失败后的最大重试次数。
+    delegateRetryMax: 4
+    # 子代理决策重试基础延迟，单位毫秒。
+    delegateRetryDelayMs: 2500
+    # 是否启用 ReAct 工作记忆摘要守卫。
+    summarizationEnabled: true
+    # ReAct 摘要守卫触发的消息数量阈值。
+    summarizationMaxMessages: 40
+    # ReAct 摘要守卫触发的 token 阈值。
+    summarizationMaxTokens: 32000
+
+  # Agent 行为配置。
+  agent:
+    # 心跳任务配置。
+    heartbeat:
+      # 心跳间隔，单位分钟；0 表示不启用自动心跳。
+      intervalMinutes: 15
+    # 预定义人格配置。
+    personalities:
+      # 默认友好人格。
+      helpful:
+        # 人格说明。
+        description: 友好、通用的默认助手
+        # 人格系统提示词。
+        systemPrompt: 你是一个友好、可靠的中文技术助手，优先给出准确、可执行的答案。
+      # 简洁人格。
+      concise:
+        # 人格说明。
+        description: 简洁直接，优先最短有效答案
+        # 人格系统提示词。
+        systemPrompt: 你是一个非常简洁的中文技术助手，只输出解决问题所需的最少内容。
+      # 工程技术人格。
+      technical:
+        # 人格说明。
+        description: 偏工程化，强调原因、边界与验证
+        # 人格系统提示词。
+        systemPrompt: 你是一个工程导向的中文技术助手，回答时强调约束、原因、风险和验证方式。
+        # 人格语气说明。
+        tone: 冷静、直接
+        # 人格表达风格说明。
+        style: 优先用清晰术语描述系统行为和实现边界
+
+  # 国内消息渠道配置。
+  channels:
+    # 飞书渠道配置。
+    feishu:
+      # 是否启用飞书渠道。
+      enabled: false
+      # 飞书应用 App ID。
+      appId: ""
+      # 飞书应用 App Secret。
+      appSecret: ""
+      # 飞书 websocket 入口地址；留空时使用默认接入逻辑。
+      websocketUrl: ""
+      # 飞书允许访问的用户 ID 列表。
+      allowedUsers: []
+      # 飞书是否允许所有用户访问。
+      allowAllUsers: false
+      # 未授权私聊用户的处理方式：pair 配对，ignore 忽略。
+      unauthorizedDmBehavior: pair
+      # 飞书私聊策略：open、allowlist、disabled、pairing。
+      dmPolicy: open
+      # 飞书群聊策略：open、allowlist、disabled。
+      groupPolicy: allowlist
+      # 飞书允许访问的群 ID 列表。
+      groupAllowedUsers: []
+      # 飞书机器人 open_id。
+      botOpenId: ""
+      # 飞书机器人 user_id。
+      botUserId: ""
+      # 飞书机器人名称。
+      botName: ""
+      # 飞书工具进度模式：off、new、all、verbose。
+      toolProgress: all
+      # 飞书文档评论智能回复；启用后会监听 drive.notice.comment_add_v1。
+      comment:
+        enabled: false
+        # 可选配对文件，JSON 形如 {"docx:file_token":["open_id"], "*":["open_id"]}。
+        pairingFile: runtime/feishu_comment_pairing.json
+
+    # 钉钉渠道配置。
+    dingtalk:
+      # 是否启用钉钉渠道。
+      enabled: false
+      # 钉钉应用 Client ID。
+      clientId: ""
+      # 钉钉应用 Client Secret。
+      clientSecret: ""
+      # 钉钉机器人编码。
+      robotCode: ""
+      # 钉钉酷应用编码，可选。
+      coolAppCode: ""
+      # 钉钉 stream mode 入口地址。
+      streamUrl: ""
+      # 钉钉允许访问的用户 ID 列表。
+      allowedUsers: []
+      # 钉钉是否允许所有用户访问。
+      allowAllUsers: false
+      # 未授权私聊用户的处理方式：pair 配对，ignore 忽略。
+      unauthorizedDmBehavior: pair
+      # 钉钉私聊策略：open、allowlist、disabled、pairing。
+      dmPolicy: open
+      # 钉钉群聊策略：open、allowlist、disabled。
+      groupPolicy: open
+      # 钉钉允许访问的群 ID 列表。
+      groupAllowedUsers: []
+      # 钉钉工具进度模式：off、new、all、verbose。
+      toolProgress: all
+      # 钉钉长任务进度卡片模板 ID；留空时使用文本消息。
+      progressCardTemplateId: ""
+      # AI Card 增量更新开关；关闭后 update 请求会回退为普通文本投递。
+      aiCardStreaming:
+        enabled: true
+
+    # 企业微信渠道配置。
+    wecom:
+      # 是否启用企业微信渠道。
+      enabled: false
+      # 企业微信 Bot ID。
+      botId: ""
+      # 企业微信 Bot Secret。
+      secret: ""
+      # 企业微信 websocket 入口地址。
+      websocketUrl: ""
+      # 企业微信允许访问的用户 ID 列表。
+      allowedUsers: []
+      # 企业微信是否允许所有用户访问。
+      allowAllUsers: false
+      # 未授权私聊用户的处理方式：pair 配对，ignore 忽略。
+      unauthorizedDmBehavior: pair
+      # 企业微信私聊策略：open、allowlist、disabled、pairing。
+      dmPolicy: open
+      # 企业微信群聊策略：open、allowlist、disabled。
+      groupPolicy: open
+      # 企业微信允许访问的群 ID 列表。
+      groupAllowedUsers: []
+      # 企业微信群成员级白名单配置。
+      groups:
+        # 示例群 ID。
+        example_group_id:
+          # 该群内允许触发机器人的成员 ID 列表。
+          allowFrom: []
+      # 企业微信工具进度模式：off、new、all、verbose。
+      toolProgress: all
+
+    # 微信渠道配置。
+    weixin:
+      # 是否启用微信渠道。
+      enabled: true
+      # 微信 iLink 登录令牌。
+      token: ""
+      # 微信账号 ID。
+      accountId: ""
+      # 微信 iLink API 基础地址。
+      baseUrl: https://ilinkai.weixin.qq.com
+      # 微信媒体 CDN 基础地址。
+      cdnBaseUrl: https://novac2c.cdn.weixin.qq.com/c2c
+      # 微信 long-poll 地址；留空时使用默认接口。
+      longPollUrl: ""
+      # 微信允许访问的用户 ID 列表。
+      allowedUsers: []
+      # 微信是否允许所有用户访问。
+      allowAllUsers: false
+      # 未授权私聊用户的处理方式：pair 配对，ignore 忽略。
+      unauthorizedDmBehavior: pair
+      # 微信私聊策略：open、allowlist、disabled、pairing。
+      dmPolicy: open
+      # 微信群聊策略：open、allowlist、disabled。
+      groupPolicy: disabled
+      # 微信允许访问的群 ID 列表。
+      groupAllowedUsers: []
+      # 是否按多行强制拆分微信文本消息。
+      splitMultilineMessages: false
+      # 微信分片发送间隔，单位秒。
+      sendChunkDelaySeconds: 0.35
+      # 微信分片发送失败后的重试次数。
+      sendChunkRetries: 2
+      # 微信分片重试间隔，单位秒。
+      sendChunkRetryDelaySeconds: 1.0
+      # 微信工具进度模式；默认 off，避免向微信频繁发送工具调用中间态。
+      toolProgress: off
+
+    # QQBot 渠道配置。
+    qqbot:
+      # 是否启用 QQBot 渠道。
+      enabled: false
+      # QQBot App ID。
+      appId: ""
+      # QQBot Client Secret。
+      clientSecret: ""
+      # QQBot REST API 域名。
+      apiDomain: https://api.sgroup.qq.com
+      # QQBot websocket 地址；留空时从 /gateway 获取。
+      websocketUrl: ""
+      # 是否使用 QQBot Markdown 消息。
+      markdownSupport: true
+      # QQBot 允许访问的用户 ID 列表。
+      allowedUsers: []
+      # QQBot 是否允许所有用户访问。
+      allowAllUsers: false
+      # 未授权私聊用户的处理方式：pair 配对，ignore 忽略。
+      unauthorizedDmBehavior: pair
+      # QQBot 私聊策略：open、allowlist、disabled、pairing。
+      dmPolicy: open
+      # QQBot 群聊策略：open、allowlist、disabled。
+      groupPolicy: open
+      # QQBot 允许访问的群 ID 列表。
+      groupAllowedUsers: []
+      # QQBot 工具进度模式：off、new、all、verbose。
+      toolProgress: all
+
+    # 腾讯元宝渠道配置。
+    yuanbao:
+      # 是否启用腾讯元宝渠道。
+      enabled: false
+      # 元宝 App ID。
+      appId: ""
+      # 元宝 App Secret。
+      appSecret: ""
+      # 元宝 Bot ID。
+      botId: ""
+      # 元宝 REST API 域名。
+      apiDomain: https://bot.yuanbao.tencent.com
+      # 元宝 websocket 地址。
+      websocketUrl: wss://bot-wss.yuanbao.tencent.com/wss/connection
+      # 元宝允许访问的用户 ID 列表。
+      allowedUsers: []
+      # 元宝是否允许所有用户访问。
+      allowAllUsers: false
+      # 未授权私聊用户的处理方式：pair 配对，ignore 忽略。
+      unauthorizedDmBehavior: pair
+      # 元宝私聊策略：open、allowlist、disabled、pairing。
+      dmPolicy: open
+      # 元宝群聊策略：open、allowlist、disabled。
+      groupPolicy: open
+      # 元宝允许访问的群 ID 列表。
+      groupAllowedUsers: []
+      # 元宝工具进度模式：off、new、all、verbose。
+      toolProgress: all
+
+  # 网关通用授权与注入配置。
+  gateway:
+    # 全局允许访问的用户 ID 列表。
+    allowedUsers: []
+    # 是否全局允许所有用户访问。
+    allowAllUsers: false
+    # 外部注入消息接口签名密钥；留空时禁用签名密钥校验。
+    injectionSecret: ""
+    # 外部注入消息最大请求体大小，单位字节。
+    injectionMaxBodyBytes: 65536
+    # 外部注入消息防重放窗口，单位秒。
+    injectionReplayWindowSeconds: 300
+
+  # 应用更新检查配置。
+  update:
+    # 代码仓库地址；留空时不覆盖默认来源。
+    repo: ""
+    # Release API 地址；留空时按 repo 推导。
+    releaseApiUrl: ""
+    # Tags API 地址；留空时按 repo 推导。
+    tagsApiUrl: ""
+    # 更新检查使用的 HTTP 代理。
+    httpProxy: ""
+
+  # 外部集成配置。
+  integrations:
+    # GitHub 集成配置。
+    github:
+      # GitHub Personal Access Token。
+      token: ""
+      # GitHub CLI 使用的 Token。
+      cliToken: ""
+      # GitHub App ID。
+      appId: ""
+      # GitHub App 私钥文件路径。
+      privateKeyPath: ""
+      # GitHub App installation ID。
+      installationId: ""
+
+  # PDF 相关配置。
+  pdf:
+    # PDF 渲染或生成使用的字体路径；留空时使用内置/系统默认字体。
+    fontPath: ""
