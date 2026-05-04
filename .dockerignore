@@ -1,8 +1,7 @@
 .git
-.idea
+.github
 target
-logs
-workspace
-*.iml
-README*.md
-docs
+runtime
+web/node_modules
+web/dist
+*.log

@@ -1,16 +1,12 @@
 services:
-  solonclaw:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: solonclaw:latest
-    container_name: solonclaw
+  solon-claw:
+    image: ghcr.io/chengliang4810/solon-claw:latest
+    container_name: solon-claw
     restart: unless-stopped
     ports:
-      - "12345:12345"
+      - "8080:8080"
     environment:
-      JAVA_OPTS: "-Xms256m -Xmx512m"
-      APP_ARGS: "--env=prod"
+      SOLONCLAW_UID: "${SOLONCLAW_UID:-10000}"
+      SOLONCLAW_GID: "${SOLONCLAW_GID:-10000}"
     volumes:
-      - ./workspace:/app/workspace
-      - ./config.yml:/app/config.yml:ro
+      - ./runtime:/app/runtime
